@@ -3857,3 +3857,42 @@ written to `docs/reports/2026-09-18.md` for the 08:30 desktop delivery task.
    the new 11:30 catch-up is what produced this report, verified live). A **second session** also committed a
    live fade change at 15:54Z and swept this run's source files into its commit - see 4d; suites green after.
 10. **Nothing is needed from the operator.** IB Gateway was down 03:45Z-12:37Z and came back on its own.
+
+## Repair 2026-09-18T21:26Z
+
+Incident `data/sentinel/incidents/2026-09-18T21-20-log-warn-engine-portfolio-read-failed-fo.md`
+(`[warn] [engine] portfolio read failed for 'polymarket-us' (GET /v1/orders/open?limit=500 -> 429: <!doctype
+html>`, x3). Outcome **NOT-A-DEFECT**: a transient Cloudflare edge 429 on the Polymarket US gateway, absorbed
+by the degraded-read path. No code changed, so nothing was built, tested, restarted or backed up, and no
+suppression was added.
+
+Three warns only - 21:14:40.143Z, 21:16:40.101Z, 21:18:39.895Z - and none in the six minutes of clean reads
+after (`grep -c "portfolio read failed" main.log` = 3 at 21:24:56Z; this signature had never appeared before
+in 231k lines). Each carries "serving last good snapshot from 65s ago", so at a ~60 s read cadence every
+second read was refused for four minutes and then it stopped. The body is a Cloudflare interstitial, not the
+gateway's JSON error envelope; the only precedent is 2026-09-12 05:11Z-07:41Z on `/v1/portfolio/activities`,
+which this app caused with an unpaced 20-page burst and which was fixed by `ACTIVITY_PAGE_PACE_MS`
+(`polymarketUs.ts:505-512`).
+
+This time the app's own load did not move: the paper lab (`index.ts:425-431`, 1 req/1.5 s, scan every 60 s)
+is the gateway's heaviest consumer and its scans 2878-2885 logged normally straight through the window. Only
+the portfolio lane was refused, intermittently - a per-IP edge counter, not a per-key budget. The one load
+change on this host in that window was a concurrent Claude session measuring full catalog walks against the
+same gateway, committed at 21:23:27Z as `1388cb7` ("80k+ open markets ... a 3,000-row walk saw 4% of it").
+Circumstantial: its requests are not in main.log.
+
+Impact was bounded because both guards worked. `http.ts:60-61,105-111` retries a GET 429 three times
+(300/900/2700 ms); `engine.ts:495-508` then serves the last good snapshot rather than rejecting the whole
+read - the guard added earlier today, which is also why the sentinel saw a "new" signature for an old class
+of failure. The snapshot feeds stake sizing only (`autoTrader.ts:1733`, `miniAuto.ts:653`); every order
+lifecycle path calls `adapter.getOpenOrders()` directly (`miniAuto.ts:985`, `quoter.ts:684,898`,
+`autoTrader.ts:3280,3475`) and none of them errored. Three cycles sized off a 65-second-old equity number.
+
+Two deliberate omissions. **No suppression:** `1388cb7` adds a background full-catalog walk of up to 2,000
+gateway GETs paced 120 ms (~500 req/min) every 30 min, to the gateway that just returned edge 429s at a small
+fraction of that rate. It is not running yet - the live electron started 19:53:25Z, `out/main/index.js` was
+rebuilt at 21:22:11Z, and main.log has zero "catalog walk" lines - so muting the signature now would blind
+the sentinel to the first sign that the walk is pushing the account's own reads off the edge counter. Logged
+as backlog 156 with a 2026-09-19 trigger. **No restart:** nothing of this session's needed deploying, and
+`Start-ScheduledTask OracleTrader-App` would have put that minutes-old, never-run-in-production walk live
+with no way to verify it here; that restart belongs to the session that owns `1388cb7`.

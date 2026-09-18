@@ -1,4 +1,5 @@
-import {appendFileSync,existsSync,readFileSync} from 'node:fs'
+import {appendFileSync,existsSync,mkdirSync,readFileSync} from 'node:fs'
+import {dirname,join} from 'node:path'
 import {randomUUID} from 'node:crypto'
 import {writeFileAtomic} from '../store/json'
 import type {TradingEngine} from '../engine/engine'
@@ -120,6 +121,11 @@ export class IbkrLab {
       if(batch.length){
         const quotes=await this.reader.quotes(batch.flatMap(m=>[m.yes.conId,m.no.conId]))
         for(const q of quotes)s.quotes[String(q.conId)]=q
+        // Append-only quote log for the Kalshi <-> ForecastEx same-event shadow (backlog 150): the lab keeps only the
+        // latest quote per contract, and a cross-venue read needs the history on both sides.
+        try{const dir=join(dirname(this.path),'ibkr-quotes');mkdirSync(dir,{recursive:true})
+          const at=new Date().toISOString(),lines=quotes.filter(q=>q.dataType==='live'&&!q.error).map(q=>JSON.stringify({at,conId:q.conId,ask:q.ask,askSize:q.askSize,bid:q.bid,bidSize:q.bidSize}))
+          if(lines.length)appendFileSync(join(dir,`${at.slice(0,10)}.jsonl`),lines.join('\n')+'\n')}catch{}
         const failures=quotes.filter(q=>q.error),fresh=quotes.filter(q=>freshAsk(q,Date.now())).length
         s.notes._quotes=`Latest batch: ${fresh}/${quotes.length} executable outcome quotes. ${failures.length?`${failures.length} unavailable: ${[...new Set(failures.map(q=>q.error))].join('; ')}`:'Missing prices or size are skipped.'}`
         appendFileSync(this.path+`.quotes-${day(Date.now())}.jsonl`,JSON.stringify({at:Date.now(),quotes})+'\n')

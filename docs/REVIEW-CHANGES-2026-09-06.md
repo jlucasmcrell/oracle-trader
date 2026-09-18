@@ -4160,3 +4160,23 @@ $0.01/contract and monthly incentive coupons on held value), an audit of every I
 and a ranked list. The two largest gaps on both non-Kalshi venues are the same: **no same-event cross-venue
 test** (Kalshi <-> ForecastEx on Fed/CPI/claims/elections/crypto strikes/temperature thresholds; Kalshi <->
 Polymarket US on games and races), and maker accounting that ignores what the venue pays.
+
+## §119 - 2026-09-18 21:40Z: Kalshi <-> ForecastEx temperature "arbitrage" measured and closed (read only)
+
+First same-event prototype (research program item 150), from the new weather books and the IBKR lab's live
+quotes, both under a minute old: ForecastEx "PHX high exceed 102 F on Sep 19" YES ask 0.35 + every Kalshi bracket
+at or below 102 at the ask 0.31 = **$0.66 for a $1 payoff**; "exceed 100" $0.85 with 65 contracts of depth. At a
+clean bracket edge that is a Dutch book across venues - if both settle on the same reading.
+
+**They do not.** ForecastEx publishes daily settlement CSVs (`data.forecastex.com/prices/daily_prices_*.csv`);
+its implied station high/low against Kalshi's winning bracket for the same station-day, 09-06 to 09-16:
+**22 station-days, 15 agree, 7 disagree (32%)**. PHX 09-10: ForecastEx 107 F, Kalshi 109-110. PHX 09-16: 93 vs
+95-96. LAX low 09-10: 76 vs 74-75; 09-12: 71 vs 69-70; 09-14: 69 vs 67-68. Weather Underground history versus
+the NWS station report differ by 1-2 F a third of the time, which is exactly the width of the Kalshi brackets.
+A basket at a bracket edge loses BOTH legs whenever the readings straddle the cut; at a 32% disagreement rate
+the 34c spread is a basis bet with a large tail, not an arbitrage. §50's caveat, now measured.
+
+Consequences: temperature is excluded from item 150; the item narrows to contracts both venues settle on one
+published number (Fed funds target, CPI, unemployment, initial claims, GDP, elections). The IBKR lab now appends
+every live ForecastEx quote batch to `ibkr-quotes/YYYY-MM-DD.jsonl` beside its ledger, so the econ-print shadow has
+both sides' history. The Polymarket US catalog index and the weather-books recorder both went live this evening.

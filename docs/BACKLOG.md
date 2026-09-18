@@ -1891,3 +1891,18 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 154. **Polymarket US consensus and sports-anchor paper arms (trigger: 148/1 has a week).** Both signals exist.
 155. **IBKR calibration slopes by category (trigger: 2026-09-22).** Replace the single 1.15 with the Becker per-
     category slopes; re-baseline `calibration` and `political-favorite`.
+156. **Watch the catalog walk's gateway load (trigger: 2026-09-19, one day after `1388cb7` first runs).** The
+    background full-catalog walk added 2026-09-18 (§118, `polymarketUs.ts` `refreshCatalog`) fires up to 2,000
+    gateway GETs paced 120 ms (~500 req/min) every 30 min. Hours before it was committed, that same gateway
+    returned Cloudflare edge 429s on `/v1/orders/open` at a small fraction of that rate (incident
+    2026-09-18T21-20, NOT-A-DEFECT: three refusals in four minutes, absorbed by the last-good-snapshot path).
+    The walk was not yet running then. Check after its first live day: `grep -c "catalog walk" main.log` for
+    walks that completed, and `portfolio read failed for 'polymarket-us'` plus `[reconciler] run failed` for
+    account reads it pushed off the edge counter. If account reads are being refused, the walk's page gap or
+    its 30-minute period is the knob — the portfolio and reconciler lanes must not pay for a market-data scan.
+    Deliberately NOT suppressed in `data/sentinel/suppressions.json` so the sentinel can see it happen.
+
+- **150 amended (21:40Z, §119):** temperature contracts EXCLUDED - the two venues settle on different readings 32% of
+  station-days (7/22), so an edge-of-bracket basket is a basis bet. Scope is now Fed funds / CPI / unemployment /
+  claims / GDP / elections only. ForecastEx quote history now logs to `%APPDATA%/oracle-trader/ibkr-quotes/`;
+  Kalshi books for the matching series still need a capture (extend `weather-books.mjs` to a series list).
