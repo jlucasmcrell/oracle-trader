@@ -1,4 +1,4 @@
-// Full-event weather book capture (backlog 148). PUBLIC DATA ONLY; trades nothing; no keys.
+// Full-event weather + economic-print book capture (backlog 148, 150). PUBLIC DATA ONLY; trades nothing; no keys.
 //
 // Why: every weather test we could run so far (§116) used the book rows the trading scan happened to log,
 // which are only the cheap brackets the fade arm looked at (mean ask 7c). Whether any forecast beats the
@@ -18,6 +18,9 @@ const OUT = process.env.WEATHER_BOOKS_DIR || 'G:/PROJECTS/oracle-trader/data/wea
 const CYCLE_MS = 30 * 60_000
 const ONCE = process.argv.includes('--once')
 const SERIES = /^KX(HIGHT|LOWT)[A-Z]+-/
+// Economic-print series that ForecastEx also lists (backlog 150): captured on the same cadence so the
+// Kalshi <-> ForecastEx same-event shadow has both books. Temperature stays for its own read.
+const ECON_SERIES = ['KXFED', 'KXFEDFUNDSYEAR', 'KXRATECUTCOUNT', 'KXJOBLESSCLAIMS', 'KXCPIYOY', 'KXCPICOREYOY', 'KXUSCPIYEAR', 'KXU3', 'KXUNRATE', 'KXPAYROLLS', 'KXNFP', 'KXGDP', 'KXNOMGDPGROWTH']
 
 mkdirSync(OUT, { recursive: true })
 const log = (s) => { const l = `[${new Date().toISOString()}] ${s}`; console.log(l); if (!ONCE) try { appendFileSync(join(OUT, 'recorder.log'), l + '\n') } catch {} }
@@ -28,7 +31,7 @@ async function get(path, tries = 3) {
   for (let i = 0; i < tries; i++) {
     try {
       const r = await fetch(`${K}${path}`, { headers: { 'User-Agent': 'oracle-trader-research/1.0' }, signal: AbortSignal.timeout(20_000) })
-      if (r.status === 429) { await sleep(2000 * (i + 1)); continue }
+      if (r.status === 429) { await sleep(3000 * (i + 1)); continue }
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return await r.json()
     } catch (e) {
@@ -36,6 +39,8 @@ async function get(path, tries = 3) {
       await sleep(1000 * (i + 1))
     }
   }
+  // Every try was a 429: say so instead of returning undefined into the caller's `.markets`.
+  throw new Error('rate limited')
 }
 
 /** Every open weather market with strike semantics: the Climate & Weather series list, then one open-markets call
@@ -50,13 +55,21 @@ async function openWeatherMarkets() {
     if (!cursor || !(d.series ?? []).length) break
   }
   const out = []
-  for (const st of series) {
-    const d = await get(`/markets?series_ticker=${encodeURIComponent(st)}&status=open&limit=50`).catch((e) => { log(`series ${st}: ${String(e).slice(0, 80)}`); return {} })
-    for (const m of d.markets ?? []) {
-      out.push({ ticker: m.ticker, series: st, strikeType: m.strike_type ?? null, floor: m.floor_strike ?? null, cap: m.cap_strike ?? null,
-        closeTime: m.close_time ?? null, listBid: num(m.yes_bid_dollars), listAsk: num(m.yes_ask_dollars), volume: num(m.volume_fp ?? m.volume) })
+  for (const st of [...series, ...ECON_SERIES]) {
+    // Paginate: KXFED alone has 100+ open markets across meetings; one page silently dropped the near ones.
+    let cur
+    for (let page = 0; page < 10; page++) {
+      const d = await get(`/markets?series_ticker=${encodeURIComponent(st)}&status=open&limit=100${cur ? `&cursor=${encodeURIComponent(cur)}` : ''}`).catch((e) => { log(`series ${st}: ${String(e).slice(0, 80)}`); return null })
+      if (!d) break
+      for (const m of d.markets ?? []) {
+        out.push({ ticker: m.ticker, series: st, strikeType: m.strike_type ?? null, floor: m.floor_strike ?? null, cap: m.cap_strike ?? null,
+          closeTime: m.close_time ?? null, listBid: num(m.yes_bid_dollars), listAsk: num(m.yes_ask_dollars), volume: num(m.volume_fp ?? m.volume) })
+      }
+      cur = d.cursor
+      if (!cur || !(d.markets ?? []).length) break
+      await sleep(150)
     }
-    await sleep(120)
+    await sleep(150)
   }
   log(`${series.length} weather series enumerated`)
   return out
