@@ -4180,3 +4180,32 @@ Consequences: temperature is excluded from item 150; the item narrows to contrac
 published number (Fed funds target, CPI, unemployment, initial claims, GDP, elections). The IBKR lab now appends
 every live ForecastEx quote batch to `ibkr-quotes/YYYY-MM-DD.jsonl` beside its ledger, so the econ-print shadow has
 both sides' history. The Polymarket US catalog index and the weather-books recorder both went live this evening.
+
+## §120 - 2026-09-18 21:45Z: the catalog index live; the econ cross-venue shadow's first read
+
+**Catalog walk, first live run:** 943 pages, **54,186 markets closing within 7 days**, 464 s. Cached rows are
+now trimmed to the 21 fields the mapper reads. The paper lab's next discovery reads from it.
+
+**Book recorder** (`weather-books.mjs`) now also captures the Kalshi economic series ForecastEx lists (KXFED,
+KXCPIYOY, KXU3, KXPAYROLLS, KXJOBLESSCLAIMS, KXGDP and the year-end series): 1,480 markets across 142 events per
+cycle, paginated per series (KXFED alone has 247 open markets; a single page silently dropped the October
+meeting). Two recorder defects fixed on the way: exhausted 429 retries returned `undefined` into the caller,
+and `limit=50` truncated every big series.
+
+**Kalshi <-> ForecastEx econ matcher** (`scripts/backtests/crossvenue_econ.py`). Mapping verified from Kalshi's
+rules text: KXFED settles on the **upper bound** of the target range at 25 bp strikes; ForecastEx FF strikes are
+range **midpoints**, so "mid > 3.875" <=> "upper > 4.00" (X -> T(X + 0.125)). CPI YoY, unemployment and payrolls
+pair one-to-one on the same published figure; initial claims differ by ">" vs ">=" at the strike; **RGDP is
+unpaired** because ForecastEx settles on a later estimate than Kalshi's advance-print market.
+
+First read (11 minutes of quote history, 7 pairs):
+
+| ForecastEx | Kalshi | FX bid/ask | Kalshi bid/ask | basket A |
+|---|---|---|---|---|
+| FF Oct 28 > 3.875 (mid) | KXFED-26OCT-T4.00 | 0.49 / 0.54 | 0.58 / 0.59 | **$0.96** (2 contracts deep) |
+| FF Dec 10 > 4.125 | KXFED-26DEC-T4.25 | 0.30 / 0.31 | 0.33 / 0.34 | $0.98 |
+
+The October pair is a same-figure Dutch book of 4c at two contracts of depth - structurally real, economically
+nothing yet. What the shadow has to establish over a week is how often the venues diverge, how deep, and which
+side moves first around the prints. IBKR is unfunded and the Kalshi account is $89; sizing, if it ever comes, is
+the operator's.

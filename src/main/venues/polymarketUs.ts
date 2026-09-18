@@ -56,6 +56,14 @@ export const CATALOG_HORIZON_MS = 7 * 24 * 3600_000
 export const CATALOG_MAX_ROWS = 200_000
 const CATALOG_PAGE_GAP_MS = 120
 
+/** Only the fields mapMarket/isUsFutures read: 54k cached rows with descriptions and images was needless memory. */
+const CATALOG_FIELDS = ['bestAskQuote', 'bestBidQuote', 'closed', 'endDate', 'ep3Status', 'feeCoefficient', 'gameStartTime', 'id', 'marketSides', 'minimumTradeQty', 'orderPriceMinTickSize', 'outcomePrices', 'outcomes', 'question', 'slug', 'status', 'title', 'volume', 'volume24hr', 'marketType', 'sportsMarketType'] as const
+function catalogRow(m: UsMarket): UsMarket {
+  const out: Record<string, unknown> = {}
+  for (const k of CATALOG_FIELDS) if ((m as Record<string, unknown>)[k] !== undefined) out[k] = (m as Record<string, unknown>)[k]
+  return out as UsMarket
+}
+
 export function isUsFutures(m: { marketType?: string; sportsMarketType?: string }): boolean {
   return m.marketType === 'futures' || m.sportsMarketType === 'futures'
 }
@@ -245,7 +253,7 @@ export class PolymarketUsAdapter implements VenueAdapter {
         for (const m of ms) {
           if (m.closed) continue
           const close = deriveUsCloseTime({ endMs: m.endDate ? Date.parse(m.endDate) : undefined, gameMs: m.gameStartTime ? Date.parse(m.gameStartTime) : undefined, resolved: m.status === 'MARKET_STATUS_RESOLVED', futures: isUsFutures(m) }, started)
-          if (close !== undefined && close > started && close - started <= CATALOG_HORIZON_MS) kept.push(m)
+          if (close !== undefined && close > started && close - started <= CATALOG_HORIZON_MS) kept.push(catalogRow(m))
         }
         if (ms.length < 100) break
         await new Promise((r) => setTimeout(r, CATALOG_PAGE_GAP_MS))

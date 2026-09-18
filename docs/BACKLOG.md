@@ -1906,3 +1906,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   station-days (7/22), so an edge-of-bracket basket is a basis bet. Scope is now Fed funds / CPI / unemployment /
   claims / GDP / elections only. ForecastEx quote history now logs to `%APPDATA%/oracle-trader/ibkr-quotes/`;
   Kalshi books for the matching series still need a capture (extend `weather-books.mjs` to a series list).
+
+- **150 running (21:45Z, §120).** Both feeds recording (ForecastEx quotes per scan, Kalshi econ books every 30 min);
+  matcher `scripts/backtests/crossvenue_econ.py`. First read at 2026-09-25 12:00Z: divergence distribution per pair,
+  depth at the divergent quotes, and lead/lag around the Sep 24 claims print and the Oct 2 jobs report.
+- **148 first read passed early:** catalog walk 943 pages / 54,186 markets / 464 s; recorder 1,480 rows a cycle, 0 missing.
