@@ -657,9 +657,15 @@ eq('stuck: the message carries both counts',
 // truncation can only ever cost the far end.
 const UW_NOW = 1_000_000
 const H_S = 3600
-eq('windows: 72h horizon slices near-dated first',
+// 2026-09-18 (incident 2026-09-18T23-20): the slices themselves must be narrow
+// enough never to truncate, because inside a slice the API returns its
+// NEAREST-dated rows last — the 26-page 48-72h slice dropped 617 rows closing at
+// the 48h edge, 190 of them in the scanner's universe. Six-hourly out to 72 h.
+eq('windows: 72h horizon slices near-dated first, six-hourly',
   universeWindows(UW_NOW, UW_NOW - H_S, UW_NOW + 72 * H_S).map(([lo, hi]) => [(lo - UW_NOW) / H_S, (hi - UW_NOW) / H_S]),
-  [[-1, 1], [1, 6], [6, 24], [24, 48], [48, 72]])
+  [[-1, 1], [1, 6], [6, 12], [12, 18], [18, 24], [24, 30], [30, 36], [36, 42], [42, 48], [48, 54], [54, 60], [60, 66], [66, 72]])
+eq('windows: no slice inside the 72h horizon is wider than 6h',
+  universeWindows(UW_NOW, UW_NOW - H_S, UW_NOW + 72 * H_S).every(([lo, hi]) => hi - lo <= 6 * H_S), true)
 eq('windows: the first slice always starts at the floor',
   universeWindows(UW_NOW, UW_NOW - H_S, UW_NOW + 72 * H_S)[0][0], UW_NOW - H_S)
 eq('windows: contiguous, no gap between slices',
@@ -670,8 +676,8 @@ eq('windows: a short horizon is one slice, not a ladder past it',
   universeWindows(UW_NOW, UW_NOW, UW_NOW + 2 * H_S).map(([lo, hi]) => [(lo - UW_NOW) / H_S, (hi - UW_NOW) / H_S]),
   [[0, 1], [1, 2]])
 eq('windows: a caller floor above an edge drops the edges below it',
-  universeWindows(UW_NOW, UW_NOW + 30 * H_S, UW_NOW + 72 * H_S).map(([lo, hi]) => [(lo - UW_NOW) / H_S, (hi - UW_NOW) / H_S]),
-  [[30, 48], [48, 72]])
+  universeWindows(UW_NOW, UW_NOW + 31 * H_S, UW_NOW + 72 * H_S).map(([lo, hi]) => [(lo - UW_NOW) / H_S, (hi - UW_NOW) / H_S]),
+  [[31, 36], [36, 42], [42, 48], [48, 54], [54, 60], [60, 66], [66, 72]])
 eq('windows: an empty horizon fetches nothing', universeWindows(UW_NOW, UW_NOW, UW_NOW), [])
 eq('windows: an inverted horizon fetches nothing', universeWindows(UW_NOW, UW_NOW + H_S, UW_NOW), [])
 
