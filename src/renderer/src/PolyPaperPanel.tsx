@@ -7,14 +7,14 @@ export function PolyPaperAccountCard(){
   const [data,setData]=useState<PolyPaperStatus>(),[error,setError]=useState('')
   useEffect(()=>{let active=true;const update=()=>void window.api.settings.polyPaperStatus().then(s=>{if(active){setData(s);setError('')}}).catch(e=>{if(active)setError(String(e))});update();const timer=setInterval(update,5000);return()=>{active=false;clearInterval(timer)}},[])
   if(!data)return <div className="muted">{error?`Paper lab unavailable: ${error}`:'Loading...'}</div>
-  const arms=data.strategies,start=1000*arms.length
+  const arms=data.strategies,start=data.startingCash*arms.length
   const cash=arms.reduce((a,s)=>a+s.cash,0),realized=arms.reduce((a,s)=>a+s.net,0),unrealized=arms.reduce((a,s)=>a+s.unrealized,0),unpriced=arms.reduce((a,s)=>a+s.unpriced,0)
   // Account value = cash + open positions at their mark. A fill takes entry+fee from cash and mark is the net of exiting
   // on the last quote, so entry+fee+mark is what the position would return now (one contract per entry).
   const value=cash+data.positions.reduce((a,p)=>a+p.entry+p.fee+(p.mark??0),0),net=value-start
   const signed=(v:number)=>`${v>=0?'+':'-'}$${Math.abs(v).toFixed(2)}`,tone=(v:number)=>v>=0?'bt-pos':'bt-neg'
   return <>
-    <div className="acct-mode acct-paper">PAPER · simulated · {arms.length} strategy accounts of {money(1000)}</div>
+    <div className="acct-mode acct-paper">PAPER · simulated · {arms.length} strategy accounts of {money(data.startingCash)}</div>
     <div className="acct-headline">
       <div><div className="stat-label">Account value</div><div className="big">${value.toFixed(2)} <span>USD</span></div><div className="muted">cash + open positions at current prices, all accounts</div></div>
       <div style={{textAlign:'right'}}><div className="stat-label">Net result</div><div className={`big ${tone(net)}`}>{signed(net)}</div><div className="muted">since {new Date(data.started).toLocaleDateString(undefined,{month:'short',day:'numeric'})}, after modelled fees</div></div>
@@ -41,9 +41,9 @@ export default function PolyPaperPanel(){
   const toggle=async()=>{if(!data)return;setWorking(true);try{setData(await window.api.settings.polyPaperEnabled(!data.enabled));setError('')}catch(e){setError(String(e))}finally{setWorking(false)}}
   return <section className="panel" style={{gridColumn:'1 / -1',minWidth:0}} aria-label="Polymarket US paper laboratory">
     <h2>Polymarket US · Paper strategy tests</h2>
-    <p>Eight independent $1,000 simulated accounts · One contract per entry · Live market data · No broker orders</p>
     {error&&<p role="alert">{error}</p>}
     {!data?<p>Loading paper tests…</p>:<>
+      <p>Eight independent {money(data.startingCash)} simulated accounts · One contract per entry · Live market data · No broker orders</p>
       <p><strong>{data.enabled?'Paper entries enabled':'Paper entries paused'}</strong> · {data.running?'Scanning…':`${data.scans} scans`} · {data.discovered} catalog candidates · {data.tracked} tracked · {data.fresh} fresh books</p>
       <p>{data.lastScan?`Last scan ${new Date(data.lastScan).toLocaleString()}`:'First scan is starting.'} · Running since {new Date(data.started).toLocaleString()}</p>
       <button disabled={working} onClick={()=>void toggle()}>{data.enabled?'Pause paper entries':'Resume paper entries'}</button>

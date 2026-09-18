@@ -445,6 +445,8 @@ export class TradingEngine {
    * calls before the panel could change.
    */
   /** Snapshot for the venue in the current execution mode, or in `mode` when the UI asks for the other ledger (a view, not a switch). */
+  private readonly lastLoggedBalance = new Map<VenueId, number>()
+
   async getPortfolio(venue: VenueId, mode: ExecutionMode = this.mode): Promise<PortfolioSnapshot> {
     const key = `${mode}:${venue}`
     const cached = this.portfolioCache.get(key)
@@ -487,6 +489,12 @@ export class TradingEngine {
     }
     try {
       const [acct, pos] = await Promise.all([adapter.getAccount(), adapter.getPositions()])
+      // Balance changes are rare events (deposits, settlements) worth a line in the log; the read itself is not.
+      const prevBalance = this.lastLoggedBalance.get(venue)
+      if (prevBalance === undefined || Math.abs(prevBalance - acct.balance) >= 0.005) {
+        console.log(`[engine] ${venue} live account balance $${acct.balance.toFixed(2)}${prevBalance === undefined ? '' : ` (was $${prevBalance.toFixed(2)})`}`)
+        this.lastLoggedBalance.set(venue, acct.balance)
+      }
       live = {
         account: acct,
         rawPositions: pos,

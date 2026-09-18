@@ -1936,3 +1936,7 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **IBKR funded $100 (2026-09-19).** No arm is `liveEligible`. Trigger: the 2026-09-24 lab read; any arm whose 95%
   lower bound turns positive is a candidate for `liveStrategies` at 1 contract, `maxLiveCost` 1.5 - the operator's
   call, reported with the read.
+- **Polymarket paper lab reset (2026-09-19 00:00Z, §126)** to $39.85 per account, the live cash. Trigger: the paper-lab
+  read on **2026-09-24** uses trades since 2026-09-18T23:54:42Z only; the archived ledger holds the prior 294 for
+  reference. Reset again with `scripts/poly-paper-reset.py --cash <live cash>` whenever the live balance moves
+  materially (deposit or withdrawal), not on P&L drift.

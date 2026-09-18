@@ -4309,3 +4309,21 @@ card; Kalshi's only "Paper" was the top-bar switch, which flips where real order
   mark (entry + fee + mark = what exiting on the last quote returns), net result, realized / open P&L, counts, and
   a per-account line. Same card shape as the live view. Verified in the stubbed harness (value and net reconcile),
   restarted 23:42:28Z. Kalshi's paper view stays the engine ledger, which its paper arms do trade.
+
+## §126 - 2026-09-19 00:00Z: Polymarket paper lab reset to the live account's cash
+
+Operator: "reset Poly paper, start it at the same amount Live has in real money; drop the old-rules line."
+
+- The live Polymarket US cash balance is not stored anywhere readable, so the engine now logs a venue's live
+  balance when it changes (`[engine] <venue> live account balance $X (was $Y)`; deposits and settlements are
+  events worth a line, the 60 s read is not). First lines: kalshi $59.60, polymarket-us **$39.85**.
+- `scripts/poly-paper-reset.py --cash 39.85` (app stopped): archived the old ledger
+  (`poly-paper.json.pre-reset-20260918-195442`: 294 closed, 9 open, 3 pending, $1,000 accounts since 09-16),
+  kept the market/quote caches, cleared orders/positions/trades/cooldowns, set every account to $39.85, stamped
+  `startingCash` and a new `started`. Restarted 23:54:42Z; ledger verified on disk after the restart.
+- `startingCash` now flows through `PolyPaperStatus` to the panel heading and the account card, so value and net
+  are read against $39.85 x 8, not $1,000 x 8. The "+N old rules" cohort line is conditional on legacy trades
+  and there are none after the reset; the code path stays (it is the correct display if rules change again
+  before the next reset). `POLY_PAPER_RULES_SINCE` is unchanged.
+- Cash-to-cash is the comparison: the lab accounts hold cash only, so they start at the live account's cash, not
+  its cash plus the two long-locked positions. The 09-24 paper-lab read now dates from this reset.

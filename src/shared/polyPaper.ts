@@ -17,6 +17,8 @@ export interface PolyPaperTrade extends PolyPaperPosition {exit:number;exitFee:n
 export interface PolyPaperQuote {at:number;bid:number;ask:number;bidSize:number;askSize:number;pressure:number}
 export interface PolyPaperState {
   version:1;started:number;enabled:boolean;scans:number;lastScan?:number;lastError?:string;discovered:number;discoveryAt:number
+  /** Cash each account started with at the last reset (scripts/poly-paper-reset.py); $1,000 before 2026-09-19. */
+  startingCash?:number
   markets:VenueMarket[];quotes:Record<string,PolyPaperQuote>;history:Record<string,{at:number;mid:number}[]>
   cash:Record<string,number>;orders:PolyPaperOrder[];positions:PolyPaperPosition[];trades:PolyPaperTrade[];cooldowns:Record<string,number>
 }
@@ -27,7 +29,7 @@ export interface PolyPaperState {
  */
 export const POLY_PAPER_RULES_SINCE=Date.parse('2026-09-18T21:41:34Z') // maker rebate modelled (round 121); the 07:31:43Z cohort held 2 trades
 export interface PolyPaperStatus {
-  enabled:boolean;running:boolean;started:number;scans:number;lastScan?:number;lastError?:string;discovered:number;tracked:number;fresh:number
+  enabled:boolean;running:boolean;started:number;startingCash:number;scans:number;lastScan?:number;lastError?:string;discovered:number;tracked:number;fresh:number
   strategies:{id:string;name:string;rule:string;cash:number;open:number;pending:number;closed:number;net:number;unrealized:number;unpriced:number;days:number;markets:number;lower?:number;upper?:number;assessment:string;legacyClosed:number;legacyNet:number}[]
   positions:PolyPaperPosition[];orders:PolyPaperOrder[];trades:PolyPaperTrade[]
 }

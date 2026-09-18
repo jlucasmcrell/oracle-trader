@@ -75,7 +75,7 @@ export class PolyPaperLab {
   setEnabled(enabled:boolean){if(typeof enabled!=='boolean')throw Error('Expected paper entry switch');this.state.enabled=enabled;if(!enabled)this.state.orders=[];this.save();return this.status()}
   status():PolyPaperStatus {
     const s=this.state,now=this.clock()
-    return {enabled:s.enabled,running:this.running,started:s.started,scans:s.scans,lastScan:s.lastScan,lastError:s.lastError,discovered:s.discovered,tracked:s.markets.length,fresh:Object.values(s.quotes).filter(q=>now-q.at<=2*MINUTE).length,
+    return {enabled:s.enabled,running:this.running,started:s.started,startingCash:s.startingCash??STARTING_CASH,scans:s.scans,lastScan:s.lastScan,lastError:s.lastError,discovered:s.discovered,tracked:s.markets.length,fresh:Object.values(s.quotes).filter(q=>now-q.at<=2*MINUTE).length,
       strategies:POLY_PAPER_STRATEGIES.map(def=>{
         const all=s.trades.filter(t=>t.strategy===def.id),trades=all.filter(t=>t.opened>=POLY_PAPER_RULES_SINCE),legacy=all.filter(t=>t.opened<POLY_PAPER_RULES_SINCE),positions=s.positions.filter(p=>p.strategy===def.id),byDay=new Map<string,number[]>()
         for(const t of trades){const day=new Date(t.closed).toISOString().slice(0,10);byDay.set(day,[...(byDay.get(day)??[]),t.net])}
