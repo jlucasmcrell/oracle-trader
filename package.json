@@ -1,0 +1,62 @@
+{
+  "name": "oracle-trader",
+  "version": "0.1.0",
+  "description": "Desktop auto-trader for prediction markets - Manifold-first with a swappable multi-venue adapter layer, paper-trading, event scanning, and copy-trading.",
+  "main": "out/main/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "smoke:manifold": "node scripts/smoke-manifold.mjs",
+    "intelligence:report": "node scripts/intelligence-report.mjs",
+    "test:settlement-accounting": "node scripts/settlement-accounting-regression.mjs",
+    "test:review": "node scripts/tests/run.cjs scripts/tests/review-fixes.test.ts",
+    "test:ladder": "node scripts/tests/run.cjs scripts/tests/ladder.test.ts",
+    "test:adversarial": "node scripts/tests/run.cjs scripts/tests/adversarial.test.ts",
+    "test:risk": "node scripts/tests/run.cjs scripts/tests/risk-controls.test.ts",
+    "test:ibkr": "node scripts/tests/run.cjs scripts/tests/ibkr.test.ts",
+    "test:ibkr-execution": "node scripts/tests/run.cjs scripts/tests/ibkr-execution.test.ts",
+    "test:ibkr-lab": "node scripts/tests/run.cjs scripts/tests/ibkr-lab.test.ts",
+    "test:remaining": "node scripts/tests/run.cjs scripts/tests/remaining-defects.test.ts",
+    "test:completion": "node scripts/tests/run.cjs scripts/tests/completion.test.ts",
+    "test:model-usage": "node scripts/tests/run.cjs scripts/tests/model-usage.test.ts",
+    "costs:report": "node scripts/tests/run.cjs scripts/model-cost-report.ts",
+    "execution:report": "node scripts/execution-quality-report.mjs",
+    "test:execution-quality": "node scripts/tests/execution-quality.test.mjs",
+    "test:collection": "node scripts/tests/collection-integrity.test.mjs",
+    "test:migration": "node scripts/tests/run.cjs scripts/tests/config-migration.test.ts",
+    "test:fee": "node scripts/tests/run.cjs scripts/tests/kalshi-fee.test.ts",
+    "test:paper-mc": "node scripts/tests/run.cjs scripts/tests/paper-mc.test.ts",
+    "test:poly-paper": "node scripts/tests/run.cjs scripts/tests/poly-paper.test.ts",
+    "gate:btc": "node scripts/btc-gate.mjs",
+    "quoter:gate": "node scripts/quoter-gate.mjs",
+    "quoter:shadow": "node scripts/quoter-shadow-gate.mjs",
+    "sgo:report": "node scripts/sgo-anchor-report.mjs"
+  },
+  "dependencies": {
+    "@stoqey/ib": "1.6.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

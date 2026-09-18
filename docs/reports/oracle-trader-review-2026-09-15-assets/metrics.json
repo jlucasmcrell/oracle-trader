@@ -1,0 +1,1974 @@
+{
+  "sources": {
+    "tmp\\kalshi-review-2026-09-15.json": "4e2696a46c9ad3c45e6bf975c781dbbbdcf52a20953da47d9eb89c50c10c681a",
+    "tmp\\polyus-review-2026-09-15.json": "c71094f17a2af3191c93aa210b2f615e0c014fa2f44a8e39e856c4523775b1fa"
+  },
+  "kalshi_at": "2026-09-15T07:29:05.635Z",
+  "polyus_at": "2026-09-15T07:29:20.329Z",
+  "kalshi": {
+    "n": 981,
+    "pnl": -39.80629999999998,
+    "fees": 64.29662,
+    "gross": 24.490320000000025,
+    "contracts": 6976.64,
+    "days": 15,
+    "cost": 3394.24968,
+    "wins": 514,
+    "net_cents_per_contract": -0.5705654871112739,
+    "day_bootstrap_95": [
+      -2.346481242758715,
+      1.0645167804208233
+    ]
+  },
+  "kalshi_post_redesign": {
+    "n": 794,
+    "pnl": 3.0836000000000188,
+    "fees": 59.97732,
+    "gross": 63.06092000000002,
+    "contracts": 5782.96,
+    "days": 10,
+    "cost": 2803.03908,
+    "wins": 452,
+    "net_cents_per_contract": 0.05332217411152799,
+    "day_bootstrap_95": [
+      -1.7908047990191782,
+      2.3501018877582434
+    ]
+  },
+  "kalshi_balance": {
+    "cash": 82.3753,
+    "position_market": 26.88,
+    "position_cost": 28.4773,
+    "open_positions": 28,
+    "resting": 6
+  },
+  "daily": {
+    "2026-08-28": {
+      "n": 1,
+      "pnl": -1.003,
+      "fees": 0.0,
+      "gross": -1.003,
+      "contracts": 1.18,
+      "days": 1,
+      "cost": 1.003,
+      "wins": 0,
+      "net_cents_per_contract": -84.99999999999999
+    },
+    "2026-09-02": {
+      "n": 9,
+      "pnl": -1.2603000000000009,
+      "fees": 0.0155,
+      "gross": -1.2448000000000008,
+      "contracts": 21.61,
+      "days": 1,
+      "cost": 18.5348,
+      "wins": 8,
+      "net_cents_per_contract": -5.832022211938921
+    },
+    "2026-09-03": {
+      "n": 29,
+      "pnl": -9.3508,
+      "fees": 0.0218,
+      "gross": -9.328999999999999,
+      "contracts": 256.45,
+      "days": 1,
+      "cost": 121.579,
+      "wins": 8,
+      "net_cents_per_contract": -3.64624683174108
+    },
+    "2026-09-04": {
+      "n": 38,
+      "pnl": -6.6447,
+      "fees": 0.0347,
+      "gross": -6.61,
+      "contracts": 218.0,
+      "days": 1,
+      "cost": 105.61,
+      "wins": 17,
+      "net_cents_per_contract": -3.04802752293578
+    },
+    "2026-09-05": {
+      "n": 54,
+      "pnl": -13.2181,
+      "fees": 0.0,
+      "gross": -13.2181,
+      "contracts": 336.75,
+      "days": 1,
+      "cost": 168.9681,
+      "wins": 12,
+      "net_cents_per_contract": -3.9251967334818114
+    },
+    "2026-09-06": {
+      "n": 60,
+      "pnl": -10.781399999999996,
+      "fees": 4.2473,
+      "gross": -6.534099999999996,
+      "contracts": 380.8,
+      "days": 1,
+      "cost": 195.9941,
+      "wins": 21,
+      "net_cents_per_contract": -2.831249999999999
+    },
+    "2026-09-07": {
+      "n": 47,
+      "pnl": 15.261400000000004,
+      "fees": 2.3051,
+      "gross": 17.566500000000005,
+      "contracts": 273.13,
+      "days": 1,
+      "cost": 112.6735,
+      "wins": 28,
+      "net_cents_per_contract": 5.587595650422877
+    },
+    "2026-09-08": {
+      "n": 40,
+      "pnl": -16.672099999999997,
+      "fees": 3.1336,
+      "gross": -13.538499999999997,
+      "contracts": 810.93,
+      "days": 1,
+      "cost": 375.4185,
+      "wins": 15,
+      "net_cents_per_contract": -2.055923445920116
+    },
+    "2026-09-09": {
+      "n": 57,
+      "pnl": 3.1740999999999997,
+      "fees": 3.1477,
+      "gross": 6.3218,
+      "contracts": 749.81,
+      "days": 1,
+      "cost": 367.9282,
+      "wins": 36,
+      "net_cents_per_contract": 0.42332057454555155
+    },
+    "2026-09-10": {
+      "n": 43,
+      "pnl": 5.664200000000002,
+      "fees": 0.9989,
+      "gross": 6.663100000000002,
+      "contracts": 100.13,
+      "days": 1,
+      "cost": 58.356899999999996,
+      "wins": 31,
+      "net_cents_per_contract": 5.656846100069911
+    },
+    "2026-09-11": {
+      "n": 66,
+      "pnl": 8.408500000000002,
+      "fees": 2.3018,
+      "gross": 10.710300000000002,
+      "contracts": 306.25,
+      "days": 1,
+      "cost": 158.2597,
+      "wins": 46,
+      "net_cents_per_contract": 2.7456326530612247
+    },
+    "2026-09-12": {
+      "n": 96,
+      "pnl": 33.3906,
+      "fees": 8.31512,
+      "gross": 41.70572,
+      "contracts": 635.32,
+      "days": 1,
+      "cost": 290.32428,
+      "wins": 62,
+      "net_cents_per_contract": 5.255713656110306
+    },
+    "2026-09-13": {
+      "n": 92,
+      "pnl": -22.872899999999994,
+      "fees": 10.8588,
+      "gross": -12.014099999999994,
+      "contracts": 806.78,
+      "days": 1,
+      "cost": 396.0041,
+      "wins": 51,
+      "net_cents_per_contract": -2.8350851533255654
+    },
+    "2026-09-14": {
+      "n": 327,
+      "pnl": -3.6860999999999997,
+      "fees": 27.2604,
+      "gross": 23.5743,
+      "contracts": 1971.5,
+      "days": 1,
+      "cost": 976.4757,
+      "wins": 167,
+      "net_cents_per_contract": -0.18696931270606135
+    },
+    "2026-09-15": {
+      "n": 22,
+      "pnl": -20.2157,
+      "fees": 1.6559,
+      "gross": -18.5598,
+      "contracts": 108.0,
+      "days": 1,
+      "cost": 47.1198,
+      "wins": 12,
+      "net_cents_per_contract": -18.71824074074074
+    }
+  },
+  "daily_leadlag": {
+    "2026-09-07": {
+      "n": 24,
+      "pnl": 4.970599999999999,
+      "fees": 0.481,
+      "gross": 5.451599999999999,
+      "contracts": 30.02,
+      "days": 1,
+      "cost": 15.5684,
+      "wins": 16,
+      "net_cents_per_contract": 16.557628247834774
+    },
+    "2026-09-08": {
+      "n": 9,
+      "pnl": 1.1832999999999998,
+      "fees": 0.1837,
+      "gross": 1.3669999999999998,
+      "contracts": 14.0,
+      "days": 1,
+      "cost": 4.633,
+      "wins": 5,
+      "net_cents_per_contract": 8.452142857142857
+    },
+    "2026-09-09": {
+      "n": 8,
+      "pnl": 1.1307000000000005,
+      "fees": 0.1409,
+      "gross": 1.2716000000000005,
+      "contracts": 10.0,
+      "days": 1,
+      "cost": 3.7284,
+      "wins": 4,
+      "net_cents_per_contract": 11.307000000000006
+    },
+    "2026-09-10": {
+      "n": 20,
+      "pnl": 11.0519,
+      "fees": 0.7561,
+      "gross": 11.808,
+      "contracts": 53.0,
+      "days": 1,
+      "cost": 23.192,
+      "wins": 13,
+      "net_cents_per_contract": 20.852641509433962
+    },
+    "2026-09-11": {
+      "n": 14,
+      "pnl": 9.1861,
+      "fees": 1.3479,
+      "gross": 10.533999999999999,
+      "contracts": 90.0,
+      "days": 1,
+      "cost": 35.466,
+      "wins": 8,
+      "net_cents_per_contract": 10.206777777777777
+    },
+    "2026-09-12": {
+      "n": 53,
+      "pnl": 36.2113,
+      "fees": 7.45372,
+      "gross": 43.66502,
+      "contracts": 516.0,
+      "days": 1,
+      "cost": 228.33498,
+      "wins": 31,
+      "net_cents_per_contract": 7.017693798449613
+    },
+    "2026-09-13": {
+      "n": 59,
+      "pnl": -15.0924,
+      "fees": 10.201600000000001,
+      "gross": -4.890799999999999,
+      "contracts": 677.0,
+      "days": 1,
+      "cost": 327.8908,
+      "wins": 31,
+      "net_cents_per_contract": -2.2293057607090105
+    },
+    "2026-09-14": {
+      "n": 284,
+      "pnl": 1.8566999999999971,
+      "fees": 26.0199,
+      "gross": 27.876599999999996,
+      "contracts": 1765.09,
+      "days": 1,
+      "cost": 863.1434,
+      "wins": 141,
+      "net_cents_per_contract": 0.10519010362077838
+    },
+    "2026-09-15": {
+      "n": 17,
+      "pnl": -20.5236,
+      "fees": 1.5596,
+      "gross": -18.964,
+      "contracts": 99.0,
+      "days": 1,
+      "cost": 41.964,
+      "wins": 8,
+      "net_cents_per_contract": -20.730909090909087
+    }
+  },
+  "by_strategy": {
+    "book-imbalance": {
+      "n": 30,
+      "pnl": -11.493500000000006,
+      "fees": 1.6341,
+      "gross": -9.859400000000006,
+      "contracts": 634.24,
+      "days": 4,
+      "cost": 326.9794,
+      "wins": 11,
+      "net_cents_per_contract": -1.8121688950555004
+    },
+    "consensus": {
+      "n": 14,
+      "pnl": -2.9699999999999984,
+      "fees": 0.974,
+      "gross": -1.9959999999999984,
+      "contracts": 80.56,
+      "days": 2,
+      "cost": 38.996,
+      "wins": 4,
+      "net_cents_per_contract": -3.686693147964248
+    },
+    "convergence": {
+      "n": 1,
+      "pnl": 0.046600000000000044,
+      "fees": 0.0034,
+      "gross": 0.050000000000000044,
+      "contracts": 1.0,
+      "days": 1,
+      "cost": 0.95,
+      "wins": 1,
+      "net_cents_per_contract": 4.660000000000005
+    },
+    "fade": {
+      "n": 89,
+      "pnl": 0.6870000000000026,
+      "fees": 0.0916,
+      "gross": 0.7786000000000026,
+      "contracts": 174.36,
+      "days": 12,
+      "cost": 165.0314,
+      "wins": 85,
+      "net_cents_per_contract": 0.394012388162424,
+      "day_bootstrap_95": [
+        -7.606281677161722,
+        4.122565091610419
+      ]
+    },
+    "flow-follow": {
+      "n": 12,
+      "pnl": -2.663399999999999,
+      "fees": 1.7448,
+      "gross": -0.918599999999999,
+      "contracts": 223.48,
+      "days": 5,
+      "cost": 97.6586,
+      "wins": 2,
+      "net_cents_per_contract": -1.191784499731519,
+      "day_bootstrap_95": [
+        -5.453389830508472,
+        1.2264526956156911
+      ]
+    },
+    "leadlag": {
+      "n": 488,
+      "pnl": 29.974599999999995,
+      "fees": 48.144420000000004,
+      "gross": 78.11902,
+      "contracts": 3254.11,
+      "days": 9,
+      "cost": 1543.92098,
+      "wins": 257,
+      "net_cents_per_contract": 0.921130508802714,
+      "day_bootstrap_95": [
+        -2.5260768678293215,
+        7.835265797156041
+      ]
+    },
+    "mean-reversion": {
+      "n": 9,
+      "pnl": -10.7303,
+      "fees": 0.8957999999999999,
+      "gross": -9.8345,
+      "contracts": 118.53,
+      "days": 4,
+      "cost": 21.0545,
+      "wins": 2,
+      "net_cents_per_contract": -9.052813633679238
+    },
+    "mixed": {
+      "n": 5,
+      "pnl": 20.475100000000012,
+      "fees": 1.44,
+      "gross": 21.915100000000013,
+      "contracts": 174.88,
+      "days": 4,
+      "cost": 78.6249,
+      "wins": 3,
+      "net_cents_per_contract": 11.708085544373292
+    },
+    "momentum": {
+      "n": 48,
+      "pnl": -15.536499999999995,
+      "fees": 5.725499999999999,
+      "gross": -9.810999999999996,
+      "contracts": 422.31,
+      "days": 4,
+      "cost": 202.74099999999999,
+      "wins": 27,
+      "net_cents_per_contract": -3.6789325377092643
+    },
+    "news": {
+      "n": 1,
+      "pnl": -0.102,
+      "fees": 0.102,
+      "gross": 0.0,
+      "contracts": 50.0,
+      "days": 1,
+      "cost": 25.0,
+      "wins": 0,
+      "net_cents_per_contract": -0.204
+    },
+    "settlement": {
+      "n": 2,
+      "pnl": -2.5525,
+      "fees": 0.17609999999999998,
+      "gross": -2.3764000000000003,
+      "contracts": 63.09,
+      "days": 2,
+      "cost": 5.4664,
+      "wins": 1,
+      "net_cents_per_contract": -4.0458075764780475
+    },
+    "sports-anchor": {
+      "n": 7,
+      "pnl": -4.7079,
+      "fees": 0.9418,
+      "gross": -3.7661000000000007,
+      "contracts": 84.6,
+      "days": 3,
+      "cost": 46.0661,
+      "wins": 1,
+      "net_cents_per_contract": -5.564893617021277
+    },
+    "unattributed": {
+      "n": 245,
+      "pnl": -37.019299999999994,
+      "fees": 0.2625,
+      "gross": -36.75679999999999,
+      "contracts": 1010.09,
+      "days": 12,
+      "cost": 514.6768,
+      "wins": 107,
+      "net_cents_per_contract": -3.664950647962062,
+      "day_bootstrap_95": [
+        -5.558020787434229,
+        -2.489596719906982
+      ]
+    },
+    "volume-spike": {
+      "n": 30,
+      "pnl": -3.2141999999999955,
+      "fees": 2.1606,
+      "gross": -1.0535999999999954,
+      "contracts": 685.39,
+      "days": 6,
+      "cost": 327.0836,
+      "wins": 13,
+      "net_cents_per_contract": -0.4689592786588651,
+      "day_bootstrap_95": [
+        -1.1012594458438238,
+        0.3021395348837209
+      ]
+    }
+  },
+  "post_by_strategy": {
+    "book-imbalance": {
+      "n": 29,
+      "pnl": -11.585500000000005,
+      "fees": 1.6186,
+      "gross": -9.966900000000004,
+      "contracts": 629.94,
+      "days": 3,
+      "cost": 324.9369,
+      "wins": 10,
+      "net_cents_per_contract": -1.8391434104835387
+    },
+    "consensus": {
+      "n": 14,
+      "pnl": -2.9699999999999984,
+      "fees": 0.974,
+      "gross": -1.9959999999999984,
+      "contracts": 80.56,
+      "days": 2,
+      "cost": 38.996,
+      "wins": 4,
+      "net_cents_per_contract": -3.686693147964248
+    },
+    "convergence": {
+      "n": 1,
+      "pnl": 0.046600000000000044,
+      "fees": 0.0034,
+      "gross": 0.050000000000000044,
+      "contracts": 1.0,
+      "days": 1,
+      "cost": 0.95,
+      "wins": 1,
+      "net_cents_per_contract": 4.660000000000005
+    },
+    "fade": {
+      "n": 80,
+      "pnl": 5.479300000000003,
+      "fees": 0.0916,
+      "gross": 5.570900000000003,
+      "contracts": 152.85,
+      "days": 10,
+      "cost": 145.0991,
+      "wins": 78,
+      "net_cents_per_contract": 3.5847562970232274,
+      "day_bootstrap_95": [
+        1.612584053794433,
+        4.873605391239239
+      ]
+    },
+    "flow-follow": {
+      "n": 12,
+      "pnl": -2.663399999999999,
+      "fees": 1.7448,
+      "gross": -0.918599999999999,
+      "contracts": 223.48,
+      "days": 5,
+      "cost": 97.6586,
+      "wins": 2,
+      "net_cents_per_contract": -1.191784499731519,
+      "day_bootstrap_95": [
+        -5.453389830508472,
+        1.2264526956156911
+      ]
+    },
+    "leadlag": {
+      "n": 488,
+      "pnl": 29.974599999999995,
+      "fees": 48.144420000000004,
+      "gross": 78.11902,
+      "contracts": 3254.11,
+      "days": 9,
+      "cost": 1543.92098,
+      "wins": 257,
+      "net_cents_per_contract": 0.921130508802714,
+      "day_bootstrap_95": [
+        -2.5260768678293215,
+        7.835265797156041
+      ]
+    },
+    "mean-reversion": {
+      "n": 9,
+      "pnl": -10.7303,
+      "fees": 0.8957999999999999,
+      "gross": -9.8345,
+      "contracts": 118.53,
+      "days": 4,
+      "cost": 21.0545,
+      "wins": 2,
+      "net_cents_per_contract": -9.052813633679238
+    },
+    "mixed": {
+      "n": 5,
+      "pnl": 20.475100000000012,
+      "fees": 1.44,
+      "gross": 21.915100000000013,
+      "contracts": 174.88,
+      "days": 4,
+      "cost": 78.6249,
+      "wins": 3,
+      "net_cents_per_contract": 11.708085544373292
+    },
+    "momentum": {
+      "n": 43,
+      "pnl": -10.312299999999999,
+      "fees": 1.4782,
+      "gross": -8.8341,
+      "contracts": 147.63,
+      "days": 3,
+      "cost": 64.4241,
+      "wins": 25,
+      "net_cents_per_contract": -6.985233353654405
+    },
+    "news": {
+      "n": 1,
+      "pnl": -0.102,
+      "fees": 0.102,
+      "gross": 0.0,
+      "contracts": 50.0,
+      "days": 1,
+      "cost": 25.0,
+      "wins": 0,
+      "net_cents_per_contract": -0.204
+    },
+    "settlement": {
+      "n": 2,
+      "pnl": -2.5525,
+      "fees": 0.17609999999999998,
+      "gross": -2.3764000000000003,
+      "contracts": 63.09,
+      "days": 2,
+      "cost": 5.4664,
+      "wins": 1,
+      "net_cents_per_contract": -4.0458075764780475
+    },
+    "sports-anchor": {
+      "n": 7,
+      "pnl": -4.7079,
+      "fees": 0.9418,
+      "gross": -3.7661000000000007,
+      "contracts": 84.6,
+      "days": 3,
+      "cost": 46.0661,
+      "wins": 1,
+      "net_cents_per_contract": -5.564893617021277
+    },
+    "unattributed": {
+      "n": 73,
+      "pnl": -4.053899999999996,
+      "fees": 0.20600000000000002,
+      "gross": -3.847899999999996,
+      "contracts": 116.9,
+      "days": 7,
+      "cost": 83.75789999999999,
+      "wins": 55,
+      "net_cents_per_contract": -3.46783575705731,
+      "day_bootstrap_95": [
+        -8.915694444444442,
+        2.075019165480238
+      ]
+    },
+    "volume-spike": {
+      "n": 30,
+      "pnl": -3.2141999999999955,
+      "fees": 2.1606,
+      "gross": -1.0535999999999954,
+      "contracts": 685.39,
+      "days": 6,
+      "cost": 327.0836,
+      "wins": 13,
+      "net_cents_per_contract": -0.4689592786588651,
+      "day_bootstrap_95": [
+        -1.1012594458438238,
+        0.3021395348837209
+      ]
+    }
+  },
+  "coins": {
+    "BNB": {
+      "n": 48,
+      "pnl": 12.107800000000003,
+      "fees": 3.5555,
+      "gross": 15.663300000000003,
+      "contracts": 262.26,
+      "days": 3,
+      "cost": 121.5967,
+      "wins": 27,
+      "net_cents_per_contract": 4.616716235796539
+    },
+    "BTC": {
+      "n": 143,
+      "pnl": 19.244399999999995,
+      "fees": 18.6454,
+      "gross": 37.889799999999994,
+      "contracts": 1254.04,
+      "days": 9,
+      "cost": 598.1502,
+      "wins": 85,
+      "net_cents_per_contract": 1.534592198016012,
+      "day_bootstrap_95": [
+        -4.344727295471603,
+        10.443178604613582
+      ]
+    },
+    "DOGE": {
+      "n": 45,
+      "pnl": -22.5162,
+      "fees": 2.6262,
+      "gross": -19.89,
+      "contracts": 177.0,
+      "days": 3,
+      "cost": 85.89,
+      "wins": 15,
+      "net_cents_per_contract": -12.721016949152544
+    },
+    "ETH": {
+      "n": 112,
+      "pnl": 23.433799999999994,
+      "fees": 14.27002,
+      "gross": 37.70381999999999,
+      "contracts": 939.0,
+      "days": 9,
+      "cost": 451.29618,
+      "wins": 61,
+      "net_cents_per_contract": 2.495612353567625,
+      "day_bootstrap_95": [
+        -8.675355648535565,
+        5.837362637362637
+      ]
+    },
+    "HYPE": {
+      "n": 48,
+      "pnl": -7.427999999999999,
+      "fees": 2.6848,
+      "gross": -4.743199999999999,
+      "contracts": 185.0,
+      "days": 3,
+      "cost": 79.7432,
+      "wins": 18,
+      "net_cents_per_contract": -4.015135135135135
+    },
+    "SOL": {
+      "n": 42,
+      "pnl": 14.1951,
+      "fees": 2.9789,
+      "gross": 17.174,
+      "contracts": 206.0,
+      "days": 3,
+      "cost": 104.826,
+      "wins": 25,
+      "net_cents_per_contract": 6.890825242718447
+    },
+    "XRP": {
+      "n": 50,
+      "pnl": -9.062299999999999,
+      "fees": 3.3836,
+      "gross": -5.678699999999999,
+      "contracts": 230.81,
+      "days": 3,
+      "cost": 102.4187,
+      "wins": 26,
+      "net_cents_per_contract": -3.926303019799835
+    }
+  },
+  "leadlag_regimes": {
+    "before_redesign": {
+      "n": 0,
+      "pnl": 0,
+      "fees": 0,
+      "contracts": 0,
+      "days": 0
+    },
+    "redesign_to_7coins": {
+      "n": 322,
+      "pnl": 66.8568,
+      "fees": 14.64962,
+      "gross": 81.50642,
+      "contracts": 980.02,
+      "days": 7,
+      "cost": 434.51358,
+      "wins": 180,
+      "net_cents_per_contract": 6.821983224832147,
+      "day_bootstrap_95": [
+        3.305819502074689,
+        15.545889830508477
+      ]
+    },
+    "7coins_before_micro": {
+      "n": 64,
+      "pnl": -18.215300000000003,
+      "fees": 5.9153,
+      "gross": -12.300000000000002,
+      "contracts": 410.0,
+      "days": 1,
+      "cost": 204.3,
+      "wins": 29,
+      "net_cents_per_contract": -4.442756097560976
+    },
+    "micro_before_direction_cap": {
+      "n": 0,
+      "pnl": 0,
+      "fees": 0,
+      "contracts": 0,
+      "days": 0
+    },
+    "after_direction_cap": {
+      "n": 616,
+      "pnl": -18.666899999999995,
+      "fees": 27.5795,
+      "gross": 8.912600000000005,
+      "contracts": 1864.09,
+      "days": 2,
+      "cost": 905.1074,
+      "wins": 299,
+      "net_cents_per_contract": -1.0013947824407616
+    }
+  },
+  "leadlag_post_cap_coins": {
+    "BNB": {
+      "n": 103,
+      "pnl": 7.800800000000001,
+      "fees": 2.3325,
+      "gross": 10.1333,
+      "contracts": 166.26,
+      "days": 2,
+      "cost": 71.1267,
+      "wins": 51,
+      "net_cents_per_contract": 4.691928305064358
+    },
+    "BTC": {
+      "n": 95,
+      "pnl": -36.4392,
+      "fees": 7.6242,
+      "gross": -28.814999999999998,
+      "contracts": 505.02,
+      "days": 2,
+      "cost": 269.835,
+      "wins": 51,
+      "net_cents_per_contract": -7.215397410003565
+    },
+    "DOGE": {
+      "n": 84,
+      "pnl": -23.3819,
+      "fees": 2.0119000000000002,
+      "gross": -21.37,
+      "contracts": 135.0,
+      "days": 2,
+      "cost": 63.37,
+      "wins": 25,
+      "net_cents_per_contract": -17.319925925925926
+    },
+    "ETH": {
+      "n": 87,
+      "pnl": 11.338500000000002,
+      "fees": 9.4037,
+      "gross": 20.742200000000004,
+      "contracts": 620.0,
+      "days": 2,
+      "cost": 307.2578,
+      "wins": 46,
+      "net_cents_per_contract": 1.8287903225806454
+    },
+    "HYPE": {
+      "n": 82,
+      "pnl": -3.8047999999999993,
+      "fees": 2.0416,
+      "gross": -1.7631999999999994,
+      "contracts": 145.0,
+      "days": 2,
+      "cost": 60.7632,
+      "wins": 32,
+      "net_cents_per_contract": -2.623999999999999
+    },
+    "SOL": {
+      "n": 74,
+      "pnl": 17.84,
+      "fees": 1.904,
+      "gross": 19.744,
+      "contracts": 134.0,
+      "days": 2,
+      "cost": 62.256,
+      "wins": 44,
+      "net_cents_per_contract": 13.313432835820896
+    },
+    "XRP": {
+      "n": 91,
+      "pnl": 7.979700000000002,
+      "fees": 2.2616,
+      "gross": 10.241300000000003,
+      "contracts": 158.81,
+      "days": 2,
+      "cost": 70.4987,
+      "wins": 50,
+      "net_cents_per_contract": 5.02468358415717
+    }
+  },
+  "leadlag_side": {
+    "no": {
+      "n": 476,
+      "pnl": 57.9083,
+      "fees": 25.0405,
+      "gross": 82.9488,
+      "contracts": 1687.31,
+      "days": 9,
+      "cost": 799.2912,
+      "wins": 254,
+      "net_cents_per_contract": 3.431989379544956,
+      "day_bootstrap_95": [
+        -1.6840009092545059,
+        14.0890570719603
+      ]
+    },
+    "yes": {
+      "n": 526,
+      "pnl": -27.933699999999998,
+      "fees": 23.10392,
+      "gross": -4.8297799999999995,
+      "contracts": 1566.8,
+      "days": 9,
+      "cost": 744.62978,
+      "wins": 254,
+      "net_cents_per_contract": -1.7828503957110033,
+      "day_bootstrap_95": [
+        -12.940120469696458,
+        4.377781473210751
+      ]
+    }
+  },
+  "drawdown": {
+    "max_drawdown": -63.52249999999999,
+    "peak_at": 1789296308.447623,
+    "trough_at": 1789454708.474126,
+    "end_cumulative": -39.80630000000001
+  },
+  "leadlag_drawdown": {
+    "max_drawdown": -59.073599999999985,
+    "peak_at": 1789296308.447623,
+    "trough_at": 1789454708.474126,
+    "end_cumulative": 29.974600000000006
+  },
+  "worst_windows": [
+    {
+      "n": 16,
+      "pnl": -20.3789,
+      "fees": 1.5189,
+      "gross": -18.860000000000003,
+      "contracts": 104.0,
+      "days": 1,
+      "cost": 58.86,
+      "wins": 6,
+      "net_cents_per_contract": -19.595096153846153,
+      "ts": 1789296300,
+      "day": "2026-09-13",
+      "coins": [
+        "BNB",
+        "BTC",
+        "DOGE",
+        "ETH",
+        "SOL",
+        "XRP"
+      ],
+      "yes_contracts": 88.0,
+      "no_contracts": 16.0
+    },
+    {
+      "n": 15,
+      "pnl": -18.6529,
+      "fees": 1.2629,
+      "gross": -17.39,
+      "contracts": 88.0,
+      "days": 1,
+      "cost": 33.39,
+      "wins": 2,
+      "net_cents_per_contract": -21.19647727272727,
+      "ts": 1789298100,
+      "day": "2026-09-13",
+      "coins": [
+        "BNB",
+        "BTC",
+        "ETH",
+        "HYPE",
+        "SOL",
+        "XRP"
+      ],
+      "yes_contracts": 16.0,
+      "no_contracts": 72.0
+    },
+    {
+      "n": 23,
+      "pnl": -17.592299999999998,
+      "fees": 0.8281000000000001,
+      "gross": -16.7642,
+      "contracts": 56.0,
+      "days": 1,
+      "cost": 20.7642,
+      "wins": 1,
+      "net_cents_per_contract": -31.414821428571425,
+      "ts": 1789218900,
+      "day": "2026-09-12",
+      "coins": [
+        "BTC",
+        "ETH"
+      ],
+      "yes_contracts": 52.0,
+      "no_contracts": 4.0
+    },
+    {
+      "n": 11,
+      "pnl": -12.520100000000001,
+      "fees": 0.3621,
+      "gross": -12.158000000000001,
+      "contracts": 25.0,
+      "days": 1,
+      "cost": 12.158,
+      "wins": 0,
+      "net_cents_per_contract": -50.08040000000001,
+      "ts": 1789390800,
+      "day": "2026-09-14",
+      "coins": [
+        "BNB",
+        "BTC",
+        "HYPE"
+      ],
+      "yes_contracts": 9.0,
+      "no_contracts": 16.0
+    },
+    {
+      "n": 7,
+      "pnl": -12.4201,
+      "fees": 0.5201,
+      "gross": -11.9,
+      "contracts": 31.0,
+      "days": 1,
+      "cost": 14.9,
+      "wins": 2,
+      "net_cents_per_contract": -40.06483870967742,
+      "ts": 1789430400,
+      "day": "2026-09-15",
+      "coins": [
+        "BNB",
+        "BTC",
+        "ETH",
+        "HYPE"
+      ],
+      "yes_contracts": 24.0,
+      "no_contracts": 7.0
+    },
+    {
+      "n": 3,
+      "pnl": -11.8553,
+      "fees": 0.4153,
+      "gross": -11.44,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 11.44,
+      "wins": 0,
+      "net_cents_per_contract": -49.397083333333335,
+      "ts": 1789262100,
+      "day": "2026-09-13",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 24.0,
+      "no_contracts": 0
+    },
+    {
+      "n": 2,
+      "pnl": -10.967600000000001,
+      "fees": 0.2476,
+      "gross": -10.72,
+      "contracts": 16.0,
+      "days": 1,
+      "cost": 10.72,
+      "wins": 0,
+      "net_cents_per_contract": -68.5475,
+      "ts": 1789244100,
+      "day": "2026-09-12",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 0,
+      "no_contracts": 16.0
+    },
+    {
+      "n": 7,
+      "pnl": -10.8897,
+      "fees": 0.36970000000000003,
+      "gross": -10.52,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 14.52,
+      "wins": 2,
+      "net_cents_per_contract": -45.37375,
+      "ts": 1789405200,
+      "day": "2026-09-14",
+      "coins": [
+        "ETH",
+        "HYPE",
+        "SOL"
+      ],
+      "yes_contracts": 4.0,
+      "no_contracts": 20.0
+    },
+    {
+      "n": 5,
+      "pnl": -10.6941,
+      "fees": 0.2939,
+      "gross": -10.4002,
+      "contracts": 20.0,
+      "days": 1,
+      "cost": 12.4002,
+      "wins": 2,
+      "net_cents_per_contract": -53.4705,
+      "ts": 1789348500,
+      "day": "2026-09-14",
+      "coins": [
+        "BTC",
+        "DOGE",
+        "HYPE"
+      ],
+      "yes_contracts": 2.0,
+      "no_contracts": 18.0
+    },
+    {
+      "n": 7,
+      "pnl": -9.379999999999999,
+      "fees": 0.278,
+      "gross": -9.101999999999999,
+      "contracts": 20.0,
+      "days": 1,
+      "cost": 11.102,
+      "wins": 1,
+      "net_cents_per_contract": -46.89999999999999,
+      "ts": 1789401600,
+      "day": "2026-09-14",
+      "coins": [
+        "DOGE",
+        "ETH",
+        "HYPE",
+        "SOL"
+      ],
+      "yes_contracts": 10.0,
+      "no_contracts": 10.0
+    },
+    {
+      "n": 7,
+      "pnl": -8.915600000000001,
+      "fees": 0.4656,
+      "gross": -8.450000000000001,
+      "contracts": 30.0,
+      "days": 1,
+      "cost": 12.450000000000001,
+      "wins": 2,
+      "net_cents_per_contract": -29.71866666666667,
+      "ts": 1789353000,
+      "day": "2026-09-14",
+      "coins": [
+        "BTC",
+        "DOGE",
+        "XRP"
+      ],
+      "yes_contracts": 26.0,
+      "no_contracts": 4.0
+    },
+    {
+      "n": 2,
+      "pnl": -8.758,
+      "fees": 0.278,
+      "gross": -8.479999999999999,
+      "contracts": 16.0,
+      "days": 1,
+      "cost": 8.48,
+      "wins": 0,
+      "net_cents_per_contract": -54.7375,
+      "ts": 1789261200,
+      "day": "2026-09-13",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 0,
+      "no_contracts": 16.0
+    }
+  ],
+  "best_windows": [
+    {
+      "n": 6,
+      "pnl": 16.7044,
+      "fees": 0.3356,
+      "gross": 17.04,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 6.96,
+      "wins": 6,
+      "net_cents_per_contract": 69.60166666666667,
+      "ts": 1789189200,
+      "day": "2026-09-12",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 24.0,
+      "no_contracts": 0
+    },
+    {
+      "n": 7,
+      "pnl": 15.8647,
+      "fees": 0.3353,
+      "gross": 16.2,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 7.800000000000001,
+      "wins": 7,
+      "net_cents_per_contract": 66.10291666666666,
+      "ts": 1789218000,
+      "day": "2026-09-12",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 0,
+      "no_contracts": 24.0
+    },
+    {
+      "n": 3,
+      "pnl": 11.2926,
+      "fees": 0.3874,
+      "gross": 11.68,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 12.32,
+      "wins": 3,
+      "net_cents_per_contract": 47.0525,
+      "ts": 1789299000,
+      "day": "2026-09-13",
+      "coins": [
+        "DOGE",
+        "HYPE",
+        "XRP"
+      ],
+      "yes_contracts": 24.0,
+      "no_contracts": 0
+    },
+    {
+      "n": 8,
+      "pnl": 11.0738,
+      "fees": 0.5262,
+      "gross": 11.6,
+      "contracts": 32.0,
+      "days": 1,
+      "cost": 14.4,
+      "wins": 4,
+      "net_cents_per_contract": 34.605625,
+      "ts": 1789358400,
+      "day": "2026-09-14",
+      "coins": [
+        "DOGE",
+        "ETH",
+        "SOL"
+      ],
+      "yes_contracts": 4.0,
+      "no_contracts": 28.0
+    },
+    {
+      "n": 6,
+      "pnl": 10.7004,
+      "fees": 0.3076,
+      "gross": 11.008000000000001,
+      "contracts": 28.78,
+      "days": 1,
+      "cost": 13.772,
+      "wins": 4,
+      "net_cents_per_contract": 37.17998610145934,
+      "ts": 1789412400,
+      "day": "2026-09-14",
+      "coins": [
+        "BNB",
+        "BTC",
+        "ETH",
+        "HYPE"
+      ],
+      "yes_contracts": 20.0,
+      "no_contracts": 8.78
+    },
+    {
+      "n": 6,
+      "pnl": 9.8957,
+      "fees": 0.1923,
+      "gross": 10.088,
+      "contracts": 16.0,
+      "days": 1,
+      "cost": 5.912,
+      "wins": 6,
+      "net_cents_per_contract": 61.848124999999996,
+      "ts": 1789205400,
+      "day": "2026-09-12",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 0,
+      "no_contracts": 16.0
+    },
+    {
+      "n": 5,
+      "pnl": 9.7715,
+      "fees": 0.4685,
+      "gross": 10.24,
+      "contracts": 32.0,
+      "days": 1,
+      "cost": 21.76,
+      "wins": 5,
+      "net_cents_per_contract": 30.5359375,
+      "ts": 1789294500,
+      "day": "2026-09-13",
+      "coins": [
+        "BNB",
+        "SOL"
+      ],
+      "yes_contracts": 0,
+      "no_contracts": 32.0
+    },
+    {
+      "n": 7,
+      "pnl": 9.715,
+      "fees": 0.119,
+      "gross": 9.834,
+      "contracts": 14.0,
+      "days": 1,
+      "cost": 2.166,
+      "wins": 6,
+      "net_cents_per_contract": 69.39285714285714,
+      "ts": 1789095600,
+      "day": "2026-09-11",
+      "coins": [
+        "BTC"
+      ],
+      "yes_contracts": 12.0,
+      "no_contracts": 2.0
+    },
+    {
+      "n": 7,
+      "pnl": 9.622300000000001,
+      "fees": 0.3977,
+      "gross": 10.020000000000001,
+      "contracts": 24.0,
+      "days": 1,
+      "cost": 9.98,
+      "wins": 5,
+      "net_cents_per_contract": 40.092916666666675,
+      "ts": 1789347600,
+      "day": "2026-09-14",
+      "coins": [
+        "ETH",
+        "HYPE",
+        "XRP"
+      ],
+      "yes_contracts": 4.0,
+      "no_contracts": 20.0
+    },
+    {
+      "n": 5,
+      "pnl": 9.3458,
+      "fees": 0.4542,
+      "gross": 9.8,
+      "contracts": 28.0,
+      "days": 1,
+      "cost": 14.200000000000001,
+      "wins": 3,
+      "net_cents_per_contract": 33.377857142857145,
+      "ts": 1789410600,
+      "day": "2026-09-14",
+      "coins": [
+        "DOGE",
+        "ETH",
+        "HYPE"
+      ],
+      "yes_contracts": 24.0,
+      "no_contracts": 4.0
+    },
+    {
+      "n": 5,
+      "pnl": 8.783100000000001,
+      "fees": 0.2529,
+      "gross": 9.036000000000001,
+      "contracts": 22.0,
+      "days": 1,
+      "cost": 8.964,
+      "wins": 3,
+      "net_cents_per_contract": 39.923181818181824,
+      "ts": 1789389000,
+      "day": "2026-09-14",
+      "coins": [
+        "BNB",
+        "BTC",
+        "DOGE",
+        "SOL"
+      ],
+      "yes_contracts": 4.0,
+      "no_contracts": 18.0
+    },
+    {
+      "n": 5,
+      "pnl": 8.738299999999999,
+      "fees": 0.44170000000000004,
+      "gross": 9.18,
+      "contracts": 28.0,
+      "days": 1,
+      "cost": 14.82,
+      "wins": 3,
+      "net_cents_per_contract": 31.208214285714284,
+      "ts": 1789422300,
+      "day": "2026-09-14",
+      "coins": [
+        "BNB",
+        "BTC",
+        "ETH"
+      ],
+      "yes_contracts": 4.0,
+      "no_contracts": 24.0
+    }
+  ],
+  "window_runs": [
+    {
+      "sign": "winning",
+      "n": 8,
+      "pnl": 19.887900000000002,
+      "start": 1789199100,
+      "end": 1789210800
+    },
+    {
+      "sign": "winning",
+      "n": 6,
+      "pnl": 5.1491,
+      "start": 1788755400,
+      "end": 1788768900
+    },
+    {
+      "sign": "winning",
+      "n": 6,
+      "pnl": 24.7592,
+      "start": 1789249500,
+      "end": 1789259400
+    },
+    {
+      "sign": "winning",
+      "n": 5,
+      "pnl": 21.8838,
+      "start": 1789355700,
+      "end": 1789359300
+    },
+    {
+      "sign": "losing",
+      "n": 5,
+      "pnl": -25.5989,
+      "start": 1789362000,
+      "end": 1789365600
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 2.1215,
+      "start": 1788771600,
+      "end": 1788786900
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 2.4194,
+      "start": 1788826500,
+      "end": 1788865200
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 15.456600000000002,
+      "start": 1789266600,
+      "end": 1789269300
+    },
+    {
+      "sign": "losing",
+      "n": 4,
+      "pnl": -47.8393,
+      "start": 1789295400,
+      "end": 1789298100
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 13.385000000000002,
+      "start": 1789344900,
+      "end": 1789347600
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 10.5852,
+      "start": 1789372800,
+      "end": 1789375500
+    },
+    {
+      "sign": "winning",
+      "n": 4,
+      "pnl": 3.3826000000000005,
+      "start": 1789380000,
+      "end": 1789382700
+    }
+  ],
+  "window_drawdown": {
+    "max_drawdown": -55.2136,
+    "peak_at": 1789294500,
+    "trough_at": 1789453800,
+    "end_cumulative": 29.974599999999967
+  },
+  "fill_reconciliation": {
+    "matched_markets": 981,
+    "total_markets": 981,
+    "bad": [],
+    "orders_complete": false,
+    "fills_complete": true
+  },
+  "scan_latency": {
+    "n": 678,
+    "median_ms": 103082.0,
+    "p95_ms": 202726
+  },
+  "polyus": {
+    "balance": 39.84935,
+    "credits": [
+      {
+        "type": "ACTIVITY_TYPE_TRANSFER",
+        "amount": 10.0
+      },
+      {
+        "type": "ACTIVITY_TYPE_TRANSFER",
+        "amount": 5.71
+      },
+      {
+        "type": "ACTIVITY_TYPE_REFERRAL_BONUS",
+        "amount": 20.0
+      },
+      {
+        "type": "ACTIVITY_TYPE_ACCOUNT_DEPOSIT",
+        "amount": 25.0
+      }
+    ],
+    "net_after_credits": -20.86065,
+    "resolutions": 182,
+    "resolution_realized": -4.041900000000001,
+    "fees": 6.69,
+    "raw_trade_realized": 135.96,
+    "fills": 432,
+    "maker_fills": 345,
+    "rebate_fills": 1,
+    "positions_count": 0,
+    "open": {
+      "orders": []
+    }
+  },
+  "snapshot": {
+    "captured_at": "2026-09-15T07:51:51.529258+00:00",
+    "auto_perf": {
+      "fade": {
+        "trades": 173,
+        "wins": 164,
+        "losses": 9,
+        "realizedPnl": 8.726646788968067,
+        "clvSum": -163.5000000000002,
+        "clvN": 129,
+        "markoutSum": -114,
+        "markoutN": 129,
+        "clvSq": 50045.25,
+        "markoutSq": 1628,
+        "clvSqN": 129,
+        "markoutSqN": 129
+      },
+      "book-imbalance": {
+        "trades": 37,
+        "wins": 11,
+        "losses": 26,
+        "realizedPnl": -12.418182999999999,
+        "clvSum": -155.5,
+        "clvN": 37,
+        "markoutSum": -30,
+        "markoutN": 23,
+        "clvSq": 5146.75,
+        "markoutSq": 296,
+        "clvSqN": 37,
+        "markoutSqN": 23
+      },
+      "momentum": {
+        "trades": 54,
+        "wins": 32,
+        "losses": 22,
+        "realizedPnl": -10.628657999999998,
+        "clvSum": -157.00000000000003,
+        "clvN": 54,
+        "markoutSum": 29,
+        "markoutN": 40,
+        "clvSq": 46059,
+        "clvSqN": 54,
+        "markoutSq": 3476,
+        "markoutSqN": 40
+      },
+      "sports-anchor": {
+        "trades": 10,
+        "wins": 1,
+        "losses": 9,
+        "realizedPnl": -5.360851,
+        "clvSum": 15.999999999999986,
+        "clvN": 8,
+        "markoutSum": -17.5,
+        "markoutN": 5,
+        "clvSq": 792.4999999999997,
+        "markoutSq": 175.25,
+        "clvSqN": 8,
+        "markoutSqN": 5
+      },
+      "volume-spike": {
+        "trades": 40,
+        "wins": 19,
+        "losses": 21,
+        "realizedPnl": -4.818753274362818,
+        "clvSum": 10.499999999999996,
+        "clvN": 40,
+        "markoutSum": -17.5,
+        "markoutN": 26,
+        "clvSq": 1882.7499999999998,
+        "markoutSq": 152.75,
+        "clvSqN": 40,
+        "markoutSqN": 26,
+        "markoutMissingN": 5
+      },
+      "mean-reversion": {
+        "trades": 11,
+        "wins": 6,
+        "losses": 5,
+        "realizedPnl": 18.3344,
+        "clvSum": 90,
+        "clvN": 10,
+        "markoutSum": -11,
+        "markoutN": 10,
+        "clvSq": 18340,
+        "markoutSq": 1590,
+        "clvSqN": 10,
+        "markoutSqN": 10
+      },
+      "flow-follow": {
+        "trades": 14,
+        "wins": 2,
+        "losses": 12,
+        "realizedPnl": -3.199914000000002,
+        "clvSum": -106,
+        "clvN": 13,
+        "markoutSum": 2,
+        "markoutN": 6,
+        "clvSq": 3332,
+        "markoutSq": 99.5,
+        "clvSqN": 13,
+        "markoutSqN": 6,
+        "markoutMissingN": 3
+      },
+      "settlement": {
+        "trades": 2,
+        "wins": 1,
+        "losses": 1,
+        "realizedPnl": -2.5583999999999976,
+        "clvSum": 5.8299999999999965,
+        "clvN": 2,
+        "markoutSum": 0.32999999999999996,
+        "markoutN": 2,
+        "clvSq": 91.04889999999995,
+        "markoutSq": 0.9389,
+        "clvSqN": 2,
+        "markoutSqN": 2
+      },
+      "mean-reversion:pre-v3": {
+        "trades": 2,
+        "wins": 0,
+        "losses": 2,
+        "realizedPnl": -5.482199999999999,
+        "clvSum": -43,
+        "clvN": 2,
+        "markoutSum": -31,
+        "markoutN": 2,
+        "clvSq": 1262.5,
+        "clvSqN": 2,
+        "markoutSq": 1202.5,
+        "markoutSqN": 2
+      },
+      "news": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "realizedPnl": -0.11,
+        "clvSum": 3,
+        "clvN": 1,
+        "clvSq": 9,
+        "markoutSum": 0,
+        "markoutN": 1,
+        "markoutSq": 0
+      },
+      "sports-anchor:pre-20260911-0105": {
+        "trades": 1,
+        "wins": 1,
+        "losses": 0,
+        "realizedPnl": 0.2088029999999999,
+        "clvSum": 8.999999999999996,
+        "clvN": 1,
+        "clvSq": 80.99999999999994
+      },
+      "book-imbalance:pre-20260911-1310": {
+        "trades": 1,
+        "wins": 1,
+        "losses": 0,
+        "realizedPnl": 0.04007099999999992,
+        "clvSum": 4.999999999999993,
+        "clvN": 1,
+        "clvSq": 24.99999999999993,
+        "markoutSum": -0.5,
+        "markoutN": 1,
+        "markoutSq": 0.25,
+        "clvSqN": 1,
+        "markoutSqN": 1
+      },
+      "momentum:pre-20260913-0339": {
+        "trades": 6,
+        "wins": 2,
+        "losses": 4,
+        "realizedPnl": -3.7864999999999993,
+        "clvSum": -159,
+        "clvN": 6,
+        "clvSq": 9662,
+        "clvSqN": 6,
+        "markoutSum": -38,
+        "markoutN": 6,
+        "markoutSq": 1238,
+        "markoutSqN": 6
+      },
+      "consensus": {
+        "trades": 13,
+        "wins": 4,
+        "losses": 9,
+        "realizedPnl": -1.9177959999999998,
+        "clvSum": 117,
+        "clvN": 13,
+        "clvSq": 3570.5,
+        "clvSqN": 13,
+        "markoutSum": 17.5,
+        "markoutN": 6,
+        "markoutSq": 119.25,
+        "markoutSqN": 6,
+        "markoutMissingN": 7
+      }
+    },
+    "daily": {
+      "date": "2026-09-15",
+      "realized": 0.25726999999999983,
+      "tripped": false
+    },
+    "venueDay": {
+      "date": "2026-09-15",
+      "realized": -20.22,
+      "legacyRealized": 0,
+      "settlements": 22,
+      "fetchedAt": 1789458632194
+    },
+    "ladder": {
+      "quoter": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1788943056449,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1796101200000,
+        "lastVerdict": "switched off in the panel (operator hold); shadow: allowed cohort 23 settled fills / 13 events, CI lower -17.68c (need 30/40, lower > 0)"
+      },
+      "convergence": {
+        "stage": "tiny-live",
+        "notch": null,
+        "since": 1788695771059,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "tiny-live: 1 settled since stage start, net $0.05; next checkpoint at 20"
+      },
+      "settlement": {
+        "stage": "paper",
+        "notch": 1,
+        "since": 1788912762998,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1796101200000,
+        "lastVerdict": "switched off in the panel (operator hold); paper: 2 graded, CI lower -8.05c (need 40 and > 0)"
+      },
+      "polyus-micro-maker": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1789016464709,
+        "lastCheckpoint": 3,
+        "operatorHold": true,
+        "cooldownUntil": 1789016382546,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down or the operator"
+      },
+      "kalshi-fade": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1788871707605,
+        "lastCheckpoint": 4,
+        "operatorHold": null,
+        "cooldownUntil": 1788869097933,
+        "lastVerdict": "tiny-live: checkpoint 120 trades, net $2.59, mean 0.67c/contract (80% band -2.15..3.48): 100+ trades and net positive, but the 5-min markout band (-1.14..-0.63 over 129) is wholly negative - held at this size"
+      },
+      "kalshi-momentum": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1789270777267,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": 1790480377269,
+        "lastVerdict": "cool-down until 2026-09-27 after 2 stop(s); disabled: waiting for the cool-down"
+      },
+      "kalshi-book-imbalance": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1789132249354,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": 1790341849357,
+        "lastVerdict": "cool-down until 2026-09-25 after 2 stop(s); disabled: waiting for the cool-down"
+      },
+      "kalshi-volume-spike": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1789251167550,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": 1789249189303,
+        "lastVerdict": "tiny-live: 14 settled since stage start, net $-1.10; next checkpoint at 20"
+      },
+      "kalshi-cross-venue": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1788723775950,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "tiny-live: 0 settled since stage start, net $0.00; next checkpoint at 20"
+      },
+      "kalshi-news": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1788728026318,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "tiny-live: 1 settled since stage start, net $-0.11; next checkpoint at 20"
+      },
+      "kalshi-dutch": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1788731982523,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "tiny-live: 0 settled since stage start, net $0.00; next checkpoint at 20"
+      },
+      "kalshi-leadlag": {
+        "stage": "live",
+        "notch": 4,
+        "since": 1789128635393,
+        "lastCheckpoint": 9,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "live x4: 183 settled since stage start, net $11.87; next checkpoint at 200"
+      },
+      "polyus-fade": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1788749982544,
+        "lastCheckpoint": 2,
+        "operatorHold": true,
+        "cooldownUntil": null,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down"
+      },
+      "polyus-book-imbalance": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1788837898802,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1796101200000,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down"
+      },
+      "kalshi-sports-anchor": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1789351074435,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": 1789347934845,
+        "lastVerdict": "tiny-live: 2 settled since stage start, net $-0.22; next checkpoint at 20"
+      },
+      "polyus-weather-fair": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1788943056449,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1796101200000,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down"
+      },
+      "kalshi-flow-follow": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1789197382836,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1789197330940,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down"
+      },
+      "kalshi-mean-reversion": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1788945782070,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": 1788869097933,
+        "lastVerdict": "tiny-live: 5 settled since stage start, net $-3.49; next checkpoint at 20"
+      },
+      "kalshi-weather-morning": {
+        "stage": "disabled",
+        "notch": 1,
+        "since": 1788943056449,
+        "lastCheckpoint": 0,
+        "operatorHold": true,
+        "cooldownUntil": 1796101200000,
+        "lastVerdict": "switched off in the panel (operator hold); disabled: waiting for the cool-down"
+      },
+      "kalshi-consensus": {
+        "stage": "tiny-live",
+        "notch": 1,
+        "since": 1789384724711,
+        "lastCheckpoint": 0,
+        "operatorHold": null,
+        "cooldownUntil": null,
+        "lastVerdict": "tiny-live: 13 settled since stage start, net $-1.92; next checkpoint at 20"
+      }
+    },
+    "open_by_strategy": {
+      "consensus": {
+        "n": 6,
+        "pnl": 0,
+        "fees": 0,
+        "gross": 0,
+        "contracts": 0,
+        "days": 2,
+        "cost": 5.1933,
+        "wins": 0,
+        "net_cents_per_contract": null
+      },
+      "fade": {
+        "n": 25,
+        "pnl": 0,
+        "fees": 0,
+        "gross": 0,
+        "contracts": 0,
+        "days": 2,
+        "cost": 25.60129090909091,
+        "wins": 0,
+        "net_cents_per_contract": null
+      }
+    },
+    "mini_perf": {
+      "trades": 237,
+      "wins": 117,
+      "losses": 106,
+      "realizedPnl": -16.24783523955281
+    },
+    "mini_state_keys": [
+      "openTrades",
+      "pendingOrders",
+      "daily",
+      "perf",
+      "stats",
+      "lastScanMs",
+      "perfByStrategy",
+      "dailyPnl"
+    ]
+  }
+}

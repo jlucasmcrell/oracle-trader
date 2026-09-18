@@ -1,0 +1,81 @@
+# ============================================================
+# Oracle Trader - ignore rules
+# Created 2026-09-18 ahead of the first git commit.
+#
+# PURPOSE: source + docs only. Everything that is runtime state,
+# build output, or credential-bearing is excluded.
+#
+# See docs/GIT-SETUP-2026-09-18.md for why each rule exists.
+# ============================================================
+
+# ---- dependencies / build output ----
+node_modules/
+out/
+dist/
+build/
+release/
+*.tsbuildinfo
+.vite/
+
+# ---- live runtime state ----
+# data/ holds real balances, fills, settlement history and a
+# polymarket-consensus wallet address list. 1.9 GB.
+data/
+# tmp/ holds 365 MB of scratch, including Chromium UI profiles
+# (ibkr-ui-smoke-profile, poly-ui-profile) that carry cookies and
+# session tokens.
+tmp/
+scratchpad/
+logs/
+*.log
+
+# ---- credential-bearing snapshot dirs ----
+# backups/ contains config.json and kalshi-auto.json whose
+# kalshiPrivateKey / kalshiApiKeyId / polymarketUsPrivateKey fields
+# are safeStorage-encrypted blobs (enc:...). They are decryptable on
+# this machine, so they must never enter version control.
+backups/
+# .audit/ contains electron-data/Local State, which holds the
+# os_crypt.encrypted_key that unlocks Electron's saved cookies and
+# passwords, plus kalshi_snapshot.json with real balances/positions.
+.audit/
+
+# ---- secrets (defensive - none should exist in the tree) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+config.json
+*credential*
+*secret*
+.npmrc
+.netrc
+id_rsa
+id_ed25519
+
+# ---- local backups / working clutter ----
+*.bak
+*.bak_*
+*.orig
+*.corrupt-*
+# UI screenshots of the live account (may show balances)
+_ui_verify*.png
+_ui_verify*.jpg
+
+# ---- editor / OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# ---- python dev-script caches ----
+__pycache__/
+*.pyc
+*.pyo

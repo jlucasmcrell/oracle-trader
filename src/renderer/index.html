@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Note: a strict Content-Security-Policy will be applied via the main
+      process (session.webRequest) before distribution. A meta CSP here would
+      break Vite's dev-mode HMR (inline preamble + WebSocket), so it is omitted.
+    -->
+    <title>Oracle Trader</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

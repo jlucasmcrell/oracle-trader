@@ -1,0 +1,4689 @@
+[
+  {
+    "n": 3,
+    "pnl": -0.7438,
+    "fees": 0.0138,
+    "gross": -0.73,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.73,
+    "wins": 0,
+    "net_cents_per_contract": -74.38,
+    "ts": 1788739200,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.5871999999999999,
+    "fees": 0.0172,
+    "gross": -0.57,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.57,
+    "wins": 0,
+    "net_cents_per_contract": -58.71999999999999,
+    "ts": 1788741900,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.4725,
+    "fees": 0.0175,
+    "gross": 0.49,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.51,
+    "wins": 1,
+    "net_cents_per_contract": 47.25,
+    "ts": 1788744600,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.7824,
+    "fees": 0.0124,
+    "gross": -0.77,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.77,
+    "wins": 0,
+    "net_cents_per_contract": -78.24,
+    "ts": 1788750000,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 7,
+    "pnl": 2.6713999999999998,
+    "fees": 0.0844,
+    "gross": 2.7558,
+    "contracts": 5.02,
+    "days": 1,
+    "cost": 2.2642,
+    "wins": 7,
+    "net_cents_per_contract": 53.21513944223108,
+    "ts": 1788755400,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 5.02,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.6035,
+    "fees": 0.0165,
+    "gross": 0.62,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.38,
+    "wins": 1,
+    "net_cents_per_contract": 60.35,
+    "ts": 1788756300,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": 0.6947,
+    "fees": 0.0511,
+    "gross": 0.7458,
+    "contracts": 3.0,
+    "days": 1,
+    "cost": 1.2542,
+    "wins": 3,
+    "net_cents_per_contract": 23.156666666666666,
+    "ts": 1788757200,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.3635,
+    "fees": 0.0165,
+    "gross": 0.38,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.62,
+    "wins": 1,
+    "net_cents_per_contract": 36.35,
+    "ts": 1788759000,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.3635,
+    "fees": 0.0165,
+    "gross": 0.38,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.62,
+    "wins": 1,
+    "net_cents_per_contract": 36.35,
+    "ts": 1788761700,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.45249999999999996,
+    "fees": 0.0175,
+    "gross": 0.47,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.53,
+    "wins": 1,
+    "net_cents_per_contract": 45.24999999999999,
+    "ts": 1788768900,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 2,
+    "pnl": -0.2919,
+    "fees": 0.0319,
+    "gross": -0.26,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.26,
+    "wins": 1,
+    "net_cents_per_contract": -14.594999999999999,
+    "ts": 1788770700,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.41280000000000006,
+    "fees": 0.0172,
+    "gross": 0.43000000000000005,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.57,
+    "wins": 1,
+    "net_cents_per_contract": 41.28000000000001,
+    "ts": 1788771600,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.634,
+    "fees": 0.016,
+    "gross": 0.65,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.35,
+    "wins": 1,
+    "net_cents_per_contract": 63.4,
+    "ts": 1788777900,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7992,
+    "fees": 0.0108,
+    "gross": 0.81,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.19,
+    "wins": 1,
+    "net_cents_per_contract": 79.92,
+    "ts": 1788782400,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.2755,
+    "fees": 0.0145,
+    "gross": 0.29000000000000004,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.71,
+    "wins": 1,
+    "net_cents_per_contract": 27.55,
+    "ts": 1788786900,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 3,
+    "pnl": -0.7727999999999999,
+    "fees": 0.0128,
+    "gross": -0.7599999999999999,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.76,
+    "wins": 0,
+    "net_cents_per_contract": -77.27999999999999,
+    "ts": 1788794100,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -0.5773,
+    "fees": 0.0173,
+    "gross": -0.56,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.56,
+    "wins": 0,
+    "net_cents_per_contract": -57.730000000000004,
+    "ts": 1788795900,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.4925,
+    "fees": 0.0175,
+    "gross": 0.51,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.49,
+    "wins": 1,
+    "net_cents_per_contract": 49.25,
+    "ts": 1788799500,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -0.5574,
+    "fees": 0.0174,
+    "gross": -0.54,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.54,
+    "wins": 0,
+    "net_cents_per_contract": -55.74,
+    "ts": 1788804000,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7992,
+    "fees": 0.0108,
+    "gross": 0.81,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.19,
+    "wins": 1,
+    "net_cents_per_contract": 79.92,
+    "ts": 1788805800,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.38320000000000004,
+    "fees": 0.0168,
+    "gross": 0.4,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.6,
+    "wins": 1,
+    "net_cents_per_contract": 38.32000000000001,
+    "ts": 1788812100,
+    "day": "2026-09-07",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.5375,
+    "fees": 0.0175,
+    "gross": -0.52,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.52,
+    "wins": 0,
+    "net_cents_per_contract": -53.75,
+    "ts": 1788814800,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.40290000000000004,
+    "fees": 0.0171,
+    "gross": 0.42000000000000004,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.58,
+    "wins": 1,
+    "net_cents_per_contract": 40.290000000000006,
+    "ts": 1788820200,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 5,
+    "pnl": -0.823,
+    "fees": 0.043,
+    "gross": -0.7799999999999999,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 0.78,
+    "wins": 0,
+    "net_cents_per_contract": -20.575,
+    "ts": 1788824700,
+    "day": "2026-09-07",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 2,
+    "pnl": -0.2474,
+    "fees": 0.0144,
+    "gross": -0.233,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.23299999999999998,
+    "wins": 0,
+    "net_cents_per_contract": -12.370000000000001,
+    "ts": 1788825600,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7265,
+    "fees": 0.0135,
+    "gross": 0.74,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.26,
+    "wins": 1,
+    "net_cents_per_contract": 72.65,
+    "ts": 1788826500,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.5427000000000001,
+    "fees": 0.0173,
+    "gross": 0.56,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.44,
+    "wins": 1,
+    "net_cents_per_contract": 54.27000000000001,
+    "ts": 1788827400,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.30469999999999997,
+    "fees": 0.0153,
+    "gross": 0.31999999999999995,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.68,
+    "wins": 1,
+    "net_cents_per_contract": 30.47,
+    "ts": 1788834600,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 2,
+    "pnl": 0.8454999999999999,
+    "fees": 0.0345,
+    "gross": 0.8799999999999999,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.12,
+    "wins": 2,
+    "net_cents_per_contract": 42.275,
+    "ts": 1788865200,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.34550000000000003,
+    "fees": 0.0155,
+    "gross": -0.33,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.33,
+    "wins": 0,
+    "net_cents_per_contract": -34.550000000000004,
+    "ts": 1788871500,
+    "day": "2026-09-08",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7472,
+    "fees": 0.0128,
+    "gross": 0.76,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.24,
+    "wins": 1,
+    "net_cents_per_contract": 74.72,
+    "ts": 1788889500,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.5674,
+    "fees": 0.0174,
+    "gross": -0.55,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.55,
+    "wins": 0,
+    "net_cents_per_contract": -56.74,
+    "ts": 1788902100,
+    "day": "2026-09-08",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -0.705,
+    "fees": 0.015,
+    "gross": -0.69,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.69,
+    "wins": 0,
+    "net_cents_per_contract": -70.5,
+    "ts": 1788913800,
+    "day": "2026-09-09",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.25279999999999997,
+    "fees": 0.0128,
+    "gross": -0.23999999999999996,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.24,
+    "wins": 0,
+    "net_cents_per_contract": -25.279999999999998,
+    "ts": 1788914700,
+    "day": "2026-09-09",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 3,
+    "pnl": 1.381,
+    "fees": 0.028999999999999998,
+    "gross": 1.41,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.5900000000000001,
+    "wins": 3,
+    "net_cents_per_contract": 69.05,
+    "ts": 1788915600,
+    "day": "2026-09-09",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7576,
+    "fees": 0.0124,
+    "gross": 0.77,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.23,
+    "wins": 1,
+    "net_cents_per_contract": 75.76,
+    "ts": 1788916500,
+    "day": "2026-09-09",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.5226000000000001,
+    "fees": 0.0174,
+    "gross": 0.54,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.46,
+    "wins": 1,
+    "net_cents_per_contract": 52.260000000000005,
+    "ts": 1788938100,
+    "day": "2026-09-09",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -0.5875999999999999,
+    "fees": 0.0172,
+    "gross": -0.5703999999999999,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.5703999999999999,
+    "wins": 0,
+    "net_cents_per_contract": -58.75999999999999,
+    "ts": 1788942600,
+    "day": "2026-09-09",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -0.4676,
+    "fees": 0.0196,
+    "gross": -0.448,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.44799999999999995,
+    "wins": 0,
+    "net_cents_per_contract": -23.380000000000003,
+    "ts": 1788980400,
+    "day": "2026-09-09",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.4825,
+    "fees": 0.0175,
+    "gross": 0.5,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.5,
+    "wins": 1,
+    "net_cents_per_contract": 48.25,
+    "ts": 1788988500,
+    "day": "2026-09-09",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -0.3436,
+    "fees": 0.0176,
+    "gross": -0.326,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.326,
+    "wins": 0,
+    "net_cents_per_contract": -17.18,
+    "ts": 1788998400,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 8,
+    "pnl": 5.8033,
+    "fees": 0.1067,
+    "gross": 5.91,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.09,
+    "wins": 8,
+    "net_cents_per_contract": 72.54125,
+    "ts": 1788999300,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 3,
+    "pnl": 1.6283,
+    "fees": 0.051699999999999996,
+    "gross": 1.6800000000000002,
+    "contracts": 3.0,
+    "days": 1,
+    "cost": 1.32,
+    "wins": 3,
+    "net_cents_per_contract": 54.27666666666667,
+    "ts": 1789001100,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 3.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -0.7632,
+    "fees": 0.0132,
+    "gross": -0.75,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.75,
+    "wins": 0,
+    "net_cents_per_contract": -76.32,
+    "ts": 1789011900,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.3438,
+    "fees": 0.0162,
+    "gross": 0.36,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.64,
+    "wins": 1,
+    "net_cents_per_contract": 34.38,
+    "ts": 1789012800,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.4825,
+    "fees": 0.0175,
+    "gross": 0.5,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.5,
+    "wins": 1,
+    "net_cents_per_contract": 48.25,
+    "ts": 1789015500,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 1.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": 1.6177000000000001,
+    "fees": 0.0623,
+    "gross": 1.6800000000000002,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.32,
+    "wins": 4,
+    "net_cents_per_contract": 40.4425,
+    "ts": 1789018200,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 6,
+    "pnl": -2.7783,
+    "fees": 0.0983,
+    "gross": -2.68,
+    "contracts": 6.0,
+    "days": 1,
+    "cost": 2.68,
+    "wins": 0,
+    "net_cents_per_contract": -46.30500000000001,
+    "ts": 1789019100,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 2,
+    "pnl": 1.5361000000000002,
+    "fees": 0.023899999999999998,
+    "gross": 1.5600000000000003,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.44,
+    "wins": 2,
+    "net_cents_per_contract": 76.805,
+    "ts": 1789021800,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.3864,
+    "fees": 0.0164,
+    "gross": -0.37,
+    "contracts": 1.0,
+    "days": 1,
+    "cost": 0.37,
+    "wins": 0,
+    "net_cents_per_contract": -38.64,
+    "ts": 1789022700,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 1.0
+  },
+  {
+    "n": 1,
+    "pnl": -0.8742,
+    "fees": 0.0342,
+    "gross": -0.84,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.84,
+    "wins": 0,
+    "net_cents_per_contract": -43.71,
+    "ts": 1789039800,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7466,
+    "fees": 0.0334,
+    "gross": 0.78,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.22,
+    "wins": 1,
+    "net_cents_per_contract": 37.330000000000005,
+    "ts": 1789055100,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7466,
+    "fees": 0.0334,
+    "gross": 0.78,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.22,
+    "wins": 1,
+    "net_cents_per_contract": 37.330000000000005,
+    "ts": 1789074900,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.9050999999999999,
+    "fees": 0.0349,
+    "gross": 0.94,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.06,
+    "wins": 1,
+    "net_cents_per_contract": 45.254999999999995,
+    "ts": 1789075800,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 2,
+    "pnl": -0.7695,
+    "fees": 0.0335,
+    "gross": -0.736,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 0.736,
+    "wins": 0,
+    "net_cents_per_contract": -19.2375,
+    "ts": 1789076700,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": 2.7302,
+    "fees": 0.049800000000000004,
+    "gross": 2.78,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.22,
+    "wins": 2,
+    "net_cents_per_contract": 68.255,
+    "ts": 1789077600,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": -1.4488999999999999,
+    "fees": 0.0289,
+    "gross": -1.42,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.42,
+    "wins": 0,
+    "net_cents_per_contract": -72.445,
+    "ts": 1789078500,
+    "day": "2026-09-10",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7664000000000001,
+    "fees": 0.0336,
+    "gross": 0.8,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.2,
+    "wins": 1,
+    "net_cents_per_contract": 38.32000000000001,
+    "ts": 1789079400,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 2,
+    "pnl": 1.1094,
+    "fees": 0.050600000000000006,
+    "gross": 1.16,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.84,
+    "wins": 2,
+    "net_cents_per_contract": 27.735,
+    "ts": 1789082100,
+    "day": "2026-09-10",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -1.5847,
+    "fees": 0.06470000000000001,
+    "gross": -1.52,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.52,
+    "wins": 0,
+    "net_cents_per_contract": -39.6175,
+    "ts": 1789089300,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 1.2477,
+    "fees": 0.0323,
+    "gross": 1.28,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.72,
+    "wins": 1,
+    "net_cents_per_contract": 62.385000000000005,
+    "ts": 1789092000,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -1.9386,
+    "fees": 0.0586,
+    "gross": -1.8800000000000001,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.8800000000000001,
+    "wins": 0,
+    "net_cents_per_contract": -48.465,
+    "ts": 1789094700,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 7,
+    "pnl": 9.715,
+    "fees": 0.119,
+    "gross": 9.834,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 2.166,
+    "wins": 6,
+    "net_cents_per_contract": 69.39285714285714,
+    "ts": 1789095600,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 5,
+    "pnl": -2.6377,
+    "fees": 0.1177,
+    "gross": -2.52,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.52,
+    "wins": 0,
+    "net_cents_per_contract": -32.971250000000005,
+    "ts": 1789097400,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 10,
+    "pnl": 6.5993,
+    "fees": 0.2007,
+    "gross": 6.800000000000001,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.2,
+    "wins": 10,
+    "net_cents_per_contract": 54.99416666666667,
+    "ts": 1789098300,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.7466,
+    "fees": 0.0334,
+    "gross": 0.78,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.22,
+    "wins": 1,
+    "net_cents_per_contract": 37.330000000000005,
+    "ts": 1789110900,
+    "day": "2026-09-11",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -1.3515000000000001,
+    "fees": 0.0315,
+    "gross": -1.32,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.32,
+    "wins": 0,
+    "net_cents_per_contract": -67.575,
+    "ts": 1789123500,
+    "day": "2026-09-11",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.6485,
+    "fees": 0.0315,
+    "gross": 0.6799999999999999,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.32,
+    "wins": 1,
+    "net_cents_per_contract": 32.425,
+    "ts": 1789124400,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 2,
+    "pnl": 1.0248,
+    "fees": 0.0552,
+    "gross": 1.0799999999999998,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.92,
+    "wins": 2,
+    "net_cents_per_contract": 25.619999999999997,
+    "ts": 1789127100,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 8,
+    "pnl": -8.129900000000001,
+    "fees": 0.32989999999999997,
+    "gross": -7.800000000000001,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 7.8,
+    "wins": 0,
+    "net_cents_per_contract": -40.6495,
+    "ts": 1789166700,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 20.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 7,
+    "pnl": 6.836500000000001,
+    "fees": 0.20350000000000001,
+    "gross": 7.040000000000001,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 4.96,
+    "wins": 7,
+    "net_cents_per_contract": 56.97083333333334,
+    "ts": 1789167600,
+    "day": "2026-09-11",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 1,
+    "pnl": -1.9899,
+    "fees": 0.0699,
+    "gross": -1.92,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.92,
+    "wins": 0,
+    "net_cents_per_contract": -49.7475,
+    "ts": 1789168500,
+    "day": "2026-09-11",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 3,
+    "pnl": 7.5051000000000005,
+    "fees": 0.1749,
+    "gross": 7.680000000000001,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 4.32,
+    "wins": 3,
+    "net_cents_per_contract": 62.54250000000001,
+    "ts": 1789172100,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.3754,
+    "fees": 0.0646,
+    "gross": 1.44,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.56,
+    "wins": 1,
+    "net_cents_per_contract": 34.385,
+    "ts": 1789173000,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -2.5853,
+    "fees": 0.0653,
+    "gross": -2.52,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.52,
+    "wins": 0,
+    "net_cents_per_contract": -64.63250000000001,
+    "ts": 1789174800,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 3,
+    "pnl": -3.5180000000000007,
+    "fees": 0.198,
+    "gross": -3.3200000000000007,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 7.32,
+    "wins": 1,
+    "net_cents_per_contract": -29.316666666666674,
+    "ts": 1789175700,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.5328000000000002,
+    "fees": 0.0672,
+    "gross": 1.6,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.4,
+    "wins": 1,
+    "net_cents_per_contract": 38.32000000000001,
+    "ts": 1789179300,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.2189999999999999,
+    "fees": 0.061,
+    "gross": 1.2799999999999998,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.72,
+    "wins": 1,
+    "net_cents_per_contract": 30.474999999999998,
+    "ts": 1789180200,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.0635000000000001,
+    "fees": 0.0565,
+    "gross": 1.12,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.88,
+    "wins": 1,
+    "net_cents_per_contract": 26.587500000000002,
+    "ts": 1789185600,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": -0.9845999999999998,
+    "fees": 0.1646,
+    "gross": -0.8199999999999998,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 4.82,
+    "wins": 1,
+    "net_cents_per_contract": -6.153749999999999,
+    "ts": 1789187400,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 1,
+    "pnl": -1.9899,
+    "fees": 0.0699,
+    "gross": -1.92,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.92,
+    "wins": 0,
+    "net_cents_per_contract": -49.7475,
+    "ts": 1789188300,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 6,
+    "pnl": 16.7044,
+    "fees": 0.3356,
+    "gross": 17.04,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 6.96,
+    "wins": 6,
+    "net_cents_per_contract": 69.60166666666667,
+    "ts": 1789189200,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 24.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -2.07,
+    "fees": 0.07,
+    "gross": -1.9999999999999998,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.0,
+    "wins": 0,
+    "net_cents_per_contract": -51.74999999999999,
+    "ts": 1789190100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 5,
+    "pnl": 2.2537000000000003,
+    "fees": 0.0703,
+    "gross": 2.3240000000000003,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 1.676,
+    "wins": 1,
+    "net_cents_per_contract": 28.171250000000004,
+    "ts": 1789191900,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.1023,
+    "fees": 0.0577,
+    "gross": 1.1600000000000001,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.84,
+    "wins": 1,
+    "net_cents_per_contract": 27.5575,
+    "ts": 1789193700,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -1.1765,
+    "fees": 0.0565,
+    "gross": -1.12,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.12,
+    "wins": 0,
+    "net_cents_per_contract": -29.4125,
+    "ts": 1789196400,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 2.9475,
+    "fees": 0.0525,
+    "gross": 3.0,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.0,
+    "wins": 1,
+    "net_cents_per_contract": 73.6875,
+    "ts": 1789199100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.454,
+    "fees": 0.066,
+    "gross": 1.52,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.48,
+    "wins": 1,
+    "net_cents_per_contract": 36.35,
+    "ts": 1789204500,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 6,
+    "pnl": 9.8957,
+    "fees": 0.1923,
+    "gross": 10.088,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 5.912,
+    "wins": 6,
+    "net_cents_per_contract": 61.848124999999996,
+    "ts": 1789205400,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 1,
+    "pnl": 2.0101,
+    "fees": 0.0699,
+    "gross": 2.08,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.92,
+    "wins": 1,
+    "net_cents_per_contract": 50.2525,
+    "ts": 1789206300,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 0.4124999999999999,
+    "fees": 0.0275,
+    "gross": 0.43999999999999995,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 3.56,
+    "wins": 1,
+    "net_cents_per_contract": 10.312499999999998,
+    "ts": 1789207200,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": 1.6909999999999998,
+    "fees": 0.069,
+    "gross": 1.7599999999999998,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.24,
+    "wins": 4,
+    "net_cents_per_contract": 42.275,
+    "ts": 1789208100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.1023,
+    "fees": 0.0577,
+    "gross": 1.1600000000000001,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.84,
+    "wins": 1,
+    "net_cents_per_contract": 27.5575,
+    "ts": 1789209000,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 0.3747999999999999,
+    "fees": 0.0252,
+    "gross": 0.3999999999999999,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 3.6,
+    "wins": 1,
+    "net_cents_per_contract": 9.369999999999997,
+    "ts": 1789210800,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": -1.9899,
+    "fees": 0.0699,
+    "gross": -1.92,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 1.92,
+    "wins": 0,
+    "net_cents_per_contract": -49.7475,
+    "ts": 1789214400,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -0.3555,
+    "fees": 0.021519999999999997,
+    "gross": -0.33398,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 0.33398,
+    "wins": 0,
+    "net_cents_per_contract": -8.8875,
+    "ts": 1789215300,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 10,
+    "pnl": -7.2073,
+    "fees": 0.3673,
+    "gross": -6.84,
+    "contracts": 36.0,
+    "days": 1,
+    "cost": 6.84,
+    "wins": 0,
+    "net_cents_per_contract": -20.02027777777778,
+    "ts": 1789217100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 36.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 7,
+    "pnl": 15.8647,
+    "fees": 0.3353,
+    "gross": 16.2,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 7.800000000000001,
+    "wins": 7,
+    "net_cents_per_contract": 66.10291666666666,
+    "ts": 1789218000,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 24.0
+  },
+  {
+    "n": 23,
+    "pnl": -17.592299999999998,
+    "fees": 0.8281000000000001,
+    "gross": -16.7642,
+    "contracts": 56.0,
+    "days": 1,
+    "cost": 20.7642,
+    "wins": 1,
+    "net_cents_per_contract": -31.414821428571425,
+    "ts": 1789218900,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 52.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 3,
+    "pnl": 4.5723,
+    "fees": 0.1877,
+    "gross": 4.760000000000001,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 7.24,
+    "wins": 3,
+    "net_cents_per_contract": 38.1025,
+    "ts": 1789219800,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 1,
+    "pnl": -2.546,
+    "fees": 0.066,
+    "gross": -2.48,
+    "contracts": 4.0,
+    "days": 1,
+    "cost": 2.48,
+    "wins": 0,
+    "net_cents_per_contract": -63.65,
+    "ts": 1789220700,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 1,
+    "pnl": 3.3027,
+    "fees": 0.1373,
+    "gross": 3.4400000000000004,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.56,
+    "wins": 1,
+    "net_cents_per_contract": 41.283750000000005,
+    "ts": 1789222500,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -5.281700000000001,
+    "fees": 0.2417,
+    "gross": -5.040000000000001,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 5.04,
+    "wins": 0,
+    "net_cents_per_contract": -33.010625000000005,
+    "ts": 1789223400,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 5,
+    "pnl": 2.6835,
+    "fees": 0.1277,
+    "gross": 2.8112,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 5.1888000000000005,
+    "wins": 5,
+    "net_cents_per_contract": 33.54375,
+    "ts": 1789224300,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": -1.1875,
+    "fees": 0.0675,
+    "gross": -1.12,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 1.12,
+    "wins": 0,
+    "net_cents_per_contract": -14.84375,
+    "ts": 1789225200,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": -2.1363,
+    "fees": 0.3763,
+    "gross": -1.7599999999999998,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 9.76,
+    "wins": 1,
+    "net_cents_per_contract": -8.90125,
+    "ts": 1789226100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 6,
+    "pnl": 3.3819999999999992,
+    "fees": 0.138,
+    "gross": 3.519999999999999,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.48,
+    "wins": 6,
+    "net_cents_per_contract": 42.27499999999999,
+    "ts": 1789227000,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": -3.0906,
+    "fees": 0.1306,
+    "gross": -2.96,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.96,
+    "wins": 0,
+    "net_cents_per_contract": -38.6325,
+    "ts": 1789231500,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": 6.583,
+    "fees": 0.21700000000000003,
+    "gross": 6.8,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 9.2,
+    "wins": 2,
+    "net_cents_per_contract": 41.143750000000004,
+    "ts": 1789236000,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 2,
+    "pnl": 2.3157,
+    "fees": 0.24430000000000002,
+    "gross": 2.56,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 5.4399999999999995,
+    "wins": 1,
+    "net_cents_per_contract": 14.473125000000001,
+    "ts": 1789236900,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -4.3795,
+    "fees": 0.1395,
+    "gross": -4.24,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.24,
+    "wins": 0,
+    "net_cents_per_contract": -54.743750000000006,
+    "ts": 1789239600,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 2.9867,
+    "fees": 0.1333,
+    "gross": 3.12,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.88,
+    "wins": 1,
+    "net_cents_per_contract": 37.33375,
+    "ts": 1789242300,
+    "day": "2026-09-12",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": -10.967600000000001,
+    "fees": 0.2476,
+    "gross": -10.72,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 10.72,
+    "wins": 0,
+    "net_cents_per_contract": -68.5475,
+    "ts": 1789244100,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 2,
+    "pnl": 4.5676,
+    "fees": 0.2324,
+    "gross": 4.8,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 11.2,
+    "wins": 2,
+    "net_cents_per_contract": 28.5475,
+    "ts": 1789245000,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 1,
+    "pnl": -5.7954,
+    "fees": 0.1154,
+    "gross": -5.68,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 5.68,
+    "wins": 0,
+    "net_cents_per_contract": -72.4425,
+    "ts": 1789246800,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": 7.8013,
+    "fees": 0.2787,
+    "gross": 8.08,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.92,
+    "wins": 2,
+    "net_cents_per_contract": 48.758125,
+    "ts": 1789249500,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 4,
+    "pnl": 0.5815999999999999,
+    "fees": 0.5384,
+    "gross": 1.1199999999999999,
+    "contracts": 32.0,
+    "days": 1,
+    "cost": 14.88,
+    "wins": 2,
+    "net_cents_per_contract": 1.8174999999999997,
+    "ts": 1789254900,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 24.0
+  },
+  {
+    "n": 1,
+    "pnl": 3.78,
+    "fees": 0.14,
+    "gross": 3.92,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.08,
+    "wins": 1,
+    "net_cents_per_contract": 47.25,
+    "ts": 1789255800,
+    "day": "2026-09-12",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": 7.082199999999999,
+    "fees": 0.27780000000000005,
+    "gross": 7.359999999999999,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.64,
+    "wins": 2,
+    "net_cents_per_contract": 44.263749999999995,
+    "ts": 1789257600,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 2,
+    "pnl": 0.6047000000000002,
+    "fees": 0.2753,
+    "gross": 0.8800000000000002,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.119999999999999,
+    "wins": 1,
+    "net_cents_per_contract": 3.7793750000000017,
+    "ts": 1789258500,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 2,
+    "pnl": 4.9094,
+    "fees": 0.1306,
+    "gross": 5.04,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.96,
+    "wins": 2,
+    "net_cents_per_contract": 61.3675,
+    "ts": 1789259400,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": -8.758,
+    "fees": 0.278,
+    "gross": -8.479999999999999,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.48,
+    "wins": 0,
+    "net_cents_per_contract": -54.7375,
+    "ts": 1789261200,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 3,
+    "pnl": -11.8553,
+    "fees": 0.4153,
+    "gross": -11.44,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 11.44,
+    "wins": 0,
+    "net_cents_per_contract": -49.397083333333335,
+    "ts": 1789262100,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 24.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -4.618,
+    "fees": 0.138,
+    "gross": -4.48,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.48,
+    "wins": 0,
+    "net_cents_per_contract": -57.725,
+    "ts": 1789263000,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": 1.8243999999999994,
+    "fees": 0.2556,
+    "gross": 2.079999999999999,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 5.92,
+    "wins": 1,
+    "net_cents_per_contract": 11.402499999999996,
+    "ts": 1789263900,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 2.9867,
+    "fees": 0.1333,
+    "gross": 3.12,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.88,
+    "wins": 1,
+    "net_cents_per_contract": 37.33375,
+    "ts": 1789264800,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": -4.14,
+    "fees": 0.14,
+    "gross": -3.9999999999999996,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.0,
+    "wins": 0,
+    "net_cents_per_contract": -51.74999999999999,
+    "ts": 1789265700,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 2,
+    "pnl": 4.849600000000001,
+    "fees": 0.1316,
+    "gross": 4.9812,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 3.0187999999999997,
+    "wins": 2,
+    "net_cents_per_contract": 60.620000000000005,
+    "ts": 1789266600,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 3,
+    "pnl": 0.44289999999999985,
+    "fees": 0.2771,
+    "gross": 0.7199999999999999,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.279999999999999,
+    "wins": 2,
+    "net_cents_per_contract": 2.768124999999999,
+    "ts": 1789267500,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 6.1439,
+    "fees": 0.0961,
+    "gross": 6.24,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 1.76,
+    "wins": 1,
+    "net_cents_per_contract": 76.79875,
+    "ts": 1789268400,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 4.0202,
+    "fees": 0.1398,
+    "gross": 4.16,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 3.84,
+    "wins": 1,
+    "net_cents_per_contract": 50.2525,
+    "ts": 1789269300,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": -3.3344,
+    "fees": 0.1344,
+    "gross": -3.2,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 3.2,
+    "wins": 0,
+    "net_cents_per_contract": -41.68,
+    "ts": 1789272000,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": -1.6317,
+    "fees": 0.2717,
+    "gross": -1.3599999999999999,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 9.36,
+    "wins": 1,
+    "net_cents_per_contract": -10.198125,
+    "ts": 1789274700,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": 1.2088000000000003,
+    "fees": 0.0512,
+    "gross": 1.2600000000000002,
+    "contracts": 3.0,
+    "days": 1,
+    "cost": 1.7399999999999998,
+    "wins": 1,
+    "net_cents_per_contract": 40.293333333333344,
+    "ts": 1789275600,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 3.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -3.2533000000000003,
+    "fees": 0.1333,
+    "gross": -3.12,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 3.12,
+    "wins": 0,
+    "net_cents_per_contract": -40.666250000000005,
+    "ts": 1789276500,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.895,
+    "fees": 0.105,
+    "gross": 2.0,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 6.0,
+    "wins": 1,
+    "net_cents_per_contract": 23.6875,
+    "ts": 1789279200,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": 2.8737,
+    "fees": 0.1343,
+    "gross": 3.008,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 4.992,
+    "wins": 1,
+    "net_cents_per_contract": 17.960625,
+    "ts": 1789280100,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": -0.19930000000000003,
+    "fees": 0.2793,
+    "gross": 0.07999999999999996,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.92,
+    "wins": 1,
+    "net_cents_per_contract": -1.2456250000000002,
+    "ts": 1789284600,
+    "day": "2026-09-13",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 3,
+    "pnl": -0.19379999999999886,
+    "fees": 0.2738,
+    "gross": 0.08000000000000113,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.92,
+    "wins": 2,
+    "net_cents_per_contract": -1.2112499999999928,
+    "ts": 1789285500,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 1,
+    "pnl": 3.6205,
+    "fees": 0.1395,
+    "gross": 3.76,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.24,
+    "wins": 1,
+    "net_cents_per_contract": 45.256249999999994,
+    "ts": 1789289100,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 1,
+    "pnl": -1.3553,
+    "fees": 0.0753,
+    "gross": -1.28,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 1.28,
+    "wins": 0,
+    "net_cents_per_contract": -16.94125,
+    "ts": 1789291800,
+    "day": "2026-09-13",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 5,
+    "pnl": 8.559899999999999,
+    "fees": 0.4801,
+    "gross": 9.04,
+    "contracts": 40.0,
+    "days": 1,
+    "cost": 14.96,
+    "wins": 3,
+    "net_cents_per_contract": 21.399749999999997,
+    "ts": 1789293600,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 32.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 5,
+    "pnl": 9.7715,
+    "fees": 0.4685,
+    "gross": 10.24,
+    "contracts": 32.0,
+    "days": 1,
+    "cost": 21.76,
+    "wins": 5,
+    "net_cents_per_contract": 30.5359375,
+    "ts": 1789294500,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "SOL"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 32.0
+  },
+  {
+    "n": 10,
+    "pnl": -7.854700000000001,
+    "fees": 0.8947,
+    "gross": -6.960000000000001,
+    "contracts": 56.0,
+    "days": 1,
+    "cost": 30.96,
+    "wins": 6,
+    "net_cents_per_contract": -14.026250000000003,
+    "ts": 1789295400,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "ETH",
+      "HYPE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 32.0,
+    "no_contracts": 24.0
+  },
+  {
+    "n": 16,
+    "pnl": -20.3789,
+    "fees": 1.5189,
+    "gross": -18.860000000000003,
+    "contracts": 104.0,
+    "days": 1,
+    "cost": 58.86,
+    "wins": 6,
+    "net_cents_per_contract": -19.595096153846153,
+    "ts": 1789296300,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 88.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 10,
+    "pnl": -0.9528,
+    "fees": 0.9028,
+    "gross": -0.04999999999999993,
+    "contracts": 66.0,
+    "days": 1,
+    "cost": 32.05,
+    "wins": 4,
+    "net_cents_per_contract": -1.4436363636363636,
+    "ts": 1789297200,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 40.0,
+    "no_contracts": 26.0
+  },
+  {
+    "n": 15,
+    "pnl": -18.6529,
+    "fees": 1.2629,
+    "gross": -17.39,
+    "contracts": 88.0,
+    "days": 1,
+    "cost": 33.39,
+    "wins": 2,
+    "net_cents_per_contract": -21.19647727272727,
+    "ts": 1789298100,
+    "day": "2026-09-13",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH",
+      "HYPE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 72.0
+  },
+  {
+    "n": 3,
+    "pnl": 11.2926,
+    "fees": 0.3874,
+    "gross": 11.68,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 12.32,
+    "wins": 3,
+    "net_cents_per_contract": 47.0525,
+    "ts": 1789299000,
+    "day": "2026-09-13",
+    "coins": [
+      "DOGE",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 24.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 5,
+    "pnl": -0.9434999999999996,
+    "fees": 0.41350000000000003,
+    "gross": -0.5299999999999996,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 10.53,
+    "wins": 2,
+    "net_cents_per_contract": -3.628846153846152,
+    "ts": 1789344000,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 7,
+    "pnl": 3.1834000000000007,
+    "fees": 0.2766,
+    "gross": 3.460000000000001,
+    "contracts": 17.0,
+    "days": 1,
+    "cost": 8.54,
+    "wins": 3,
+    "net_cents_per_contract": 18.72588235294118,
+    "ts": 1789344900,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "ETH"
+    ],
+    "yes_contracts": 5.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 2,
+    "pnl": 0.2821,
+    "fees": 0.0179,
+    "gross": 0.30000000000000004,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 1.7,
+    "wins": 2,
+    "net_cents_per_contract": 14.105,
+    "ts": 1789345800,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 7,
+    "pnl": 0.29719999999999985,
+    "fees": 0.2053,
+    "gross": 0.5024999999999998,
+    "contracts": 12.07,
+    "days": 1,
+    "cost": 5.4975000000000005,
+    "wins": 3,
+    "net_cents_per_contract": 2.462303231151614,
+    "ts": 1789346700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 10.07
+  },
+  {
+    "n": 7,
+    "pnl": 9.622300000000001,
+    "fees": 0.3977,
+    "gross": 10.020000000000001,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 9.98,
+    "wins": 5,
+    "net_cents_per_contract": 40.092916666666675,
+    "ts": 1789347600,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 20.0
+  },
+  {
+    "n": 5,
+    "pnl": -10.6941,
+    "fees": 0.2939,
+    "gross": -10.4002,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 12.4002,
+    "wins": 2,
+    "net_cents_per_contract": -53.4705,
+    "ts": 1789348500,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 8,
+    "pnl": -1.0829999999999997,
+    "fees": 0.2018,
+    "gross": -0.8811999999999998,
+    "contracts": 17.74,
+    "days": 1,
+    "cost": 12.6212,
+    "wins": 4,
+    "net_cents_per_contract": -6.1048478015783525,
+    "ts": 1789349400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "XRP"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 11.74
+  },
+  {
+    "n": 3,
+    "pnl": 5.7898,
+    "fees": 0.31020000000000003,
+    "gross": 6.1,
+    "contracts": 18.0,
+    "days": 1,
+    "cost": 9.9,
+    "wins": 2,
+    "net_cents_per_contract": 32.16555555555556,
+    "ts": 1789350300,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 5,
+    "pnl": 1.8790999999999998,
+    "fees": 0.2609,
+    "gross": 2.1399999999999997,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 9.86,
+    "wins": 3,
+    "net_cents_per_contract": 11.744374999999998,
+    "ts": 1789352100,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 7,
+    "pnl": -8.915600000000001,
+    "fees": 0.4656,
+    "gross": -8.450000000000001,
+    "contracts": 30.0,
+    "days": 1,
+    "cost": 12.450000000000001,
+    "wins": 2,
+    "net_cents_per_contract": -29.71866666666667,
+    "ts": 1789353000,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "XRP"
+    ],
+    "yes_contracts": 26.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 3,
+    "pnl": 1.2871000000000001,
+    "fees": 0.07289999999999999,
+    "gross": 1.36,
+    "contracts": 6.0,
+    "days": 1,
+    "cost": 4.64,
+    "wins": 3,
+    "net_cents_per_contract": 21.451666666666668,
+    "ts": 1789353900,
+    "day": "2026-09-14",
+    "coins": [
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 8,
+    "pnl": -1.536799999999999,
+    "fees": 0.327,
+    "gross": -1.209799999999999,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 11.2098,
+    "wins": 5,
+    "net_cents_per_contract": -7.683999999999995,
+    "ts": 1789354800,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 6,
+    "pnl": 1.2564,
+    "fees": 0.2036,
+    "gross": 1.46,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 6.54,
+    "wins": 4,
+    "net_cents_per_contract": 10.47,
+    "ts": 1789355700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": 0.7961,
+    "fees": 0.0391,
+    "gross": 0.8352,
+    "contracts": 2.7199999999999998,
+    "days": 1,
+    "cost": 1.8848,
+    "wins": 2,
+    "net_cents_per_contract": 29.268382352941178,
+    "ts": 1789356600,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 2.7199999999999998
+  },
+  {
+    "n": 7,
+    "pnl": 7.1777,
+    "fees": 0.3785,
+    "gross": 7.5562,
+    "contracts": 23.0,
+    "days": 1,
+    "cost": 13.4438,
+    "wins": 6,
+    "net_cents_per_contract": 31.207391304347826,
+    "ts": 1789357500,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 19.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 8,
+    "pnl": 11.0738,
+    "fees": 0.5262,
+    "gross": 11.6,
+    "contracts": 32.0,
+    "days": 1,
+    "cost": 14.4,
+    "wins": 4,
+    "net_cents_per_contract": 34.605625,
+    "ts": 1789358400,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 28.0
+  },
+  {
+    "n": 7,
+    "pnl": 1.5798000000000003,
+    "fees": 0.227,
+    "gross": 1.8068000000000004,
+    "contracts": 21.02,
+    "days": 1,
+    "cost": 7.2132,
+    "wins": 4,
+    "net_cents_per_contract": 7.5156993339676506,
+    "ts": 1789359300,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 11.02,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 7,
+    "pnl": -8.4483,
+    "fees": 0.4283,
+    "gross": -8.02,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 14.02,
+    "wins": 3,
+    "net_cents_per_contract": -32.49346153846154,
+    "ts": 1789360200,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 20.0
+  },
+  {
+    "n": 8,
+    "pnl": 3.4957,
+    "fees": 0.3743,
+    "gross": 3.8699999999999997,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 14.129999999999999,
+    "wins": 5,
+    "net_cents_per_contract": 14.565416666666666,
+    "ts": 1789361100,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 20.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 7,
+    "pnl": -7.9818999999999996,
+    "fees": 0.4119,
+    "gross": -7.569999999999999,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 11.57,
+    "wins": 2,
+    "net_cents_per_contract": -33.25791666666667,
+    "ts": 1789362000,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 20.0
+  },
+  {
+    "n": 4,
+    "pnl": -0.9005000000000001,
+    "fees": 0.1005,
+    "gross": -0.8,
+    "contracts": 6.0,
+    "days": 1,
+    "cost": 2.8000000000000003,
+    "wins": 1,
+    "net_cents_per_contract": -15.008333333333335,
+    "ts": 1789362900,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 7,
+    "pnl": -8.1122,
+    "fees": 0.5122,
+    "gross": -7.6,
+    "contracts": 34.0,
+    "days": 1,
+    "cost": 13.6,
+    "wins": 3,
+    "net_cents_per_contract": -23.85941176470588,
+    "ts": 1789363800,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH",
+      "HYPE"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 28.0
+  },
+  {
+    "n": 7,
+    "pnl": -4.4569,
+    "fees": 0.27690000000000003,
+    "gross": -4.18,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.18,
+    "wins": 2,
+    "net_cents_per_contract": -27.855625,
+    "ts": 1789364700,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 2,
+    "pnl": -4.147399999999999,
+    "fees": 0.1674,
+    "gross": -3.9799999999999995,
+    "contracts": 10.0,
+    "days": 1,
+    "cost": 3.9799999999999995,
+    "wins": 0,
+    "net_cents_per_contract": -41.474,
+    "ts": 1789365600,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 6,
+    "pnl": 3.3105,
+    "fees": 0.4095,
+    "gross": 3.72,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 12.280000000000001,
+    "wins": 2,
+    "net_cents_per_contract": 13.793750000000001,
+    "ts": 1789366500,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 8,
+    "pnl": 4.8015,
+    "fees": 0.1395,
+    "gross": 4.941,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.059,
+    "wins": 7,
+    "net_cents_per_contract": 40.012499999999996,
+    "ts": 1789367400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 9,
+    "pnl": 4.458699999999999,
+    "fees": 0.2713,
+    "gross": 4.7299999999999995,
+    "contracts": 18.4,
+    "days": 1,
+    "cost": 11.67,
+    "wins": 7,
+    "net_cents_per_contract": 24.232065217391302,
+    "ts": 1789368300,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 10.4
+  },
+  {
+    "n": 9,
+    "pnl": -0.5827000000000002,
+    "fees": 0.1971,
+    "gross": -0.3856000000000002,
+    "contracts": 13.76,
+    "days": 1,
+    "cost": 8.1456,
+    "wins": 6,
+    "net_cents_per_contract": -4.234738372093025,
+    "ts": 1789369200,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 7.76,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 6,
+    "pnl": 1.4000000000000001,
+    "fees": 0.2291,
+    "gross": 1.6291000000000002,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.3709,
+    "wins": 2,
+    "net_cents_per_contract": 8.75,
+    "ts": 1789370100,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 7,
+    "pnl": 1.0091,
+    "fees": 0.0949,
+    "gross": 1.104,
+    "contracts": 9.0,
+    "days": 1,
+    "cost": 1.896,
+    "wins": 2,
+    "net_cents_per_contract": 11.212222222222223,
+    "ts": 1789371000,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 3.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 4,
+    "pnl": -2.2818000000000005,
+    "fees": 0.2218,
+    "gross": -2.0600000000000005,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 8.06,
+    "wins": 3,
+    "net_cents_per_contract": -16.29857142857143,
+    "ts": 1789371900,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "HYPE"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 9,
+    "pnl": 2.658599999999999,
+    "fees": 0.2874,
+    "gross": 2.945999999999999,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 13.054,
+    "wins": 3,
+    "net_cents_per_contract": 11.077499999999995,
+    "ts": 1789372800,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "SOL"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 6,
+    "pnl": 0.21789999999999998,
+    "fees": 0.18209999999999998,
+    "gross": 0.39999999999999997,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.6,
+    "wins": 3,
+    "net_cents_per_contract": 1.8158333333333332,
+    "ts": 1789373700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 7,
+    "pnl": 3.69,
+    "fees": 0.43,
+    "gross": 4.12,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 13.88,
+    "wins": 6,
+    "net_cents_per_contract": 14.192307692307692,
+    "ts": 1789374600,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 14.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 5,
+    "pnl": 4.0187,
+    "fees": 0.1813,
+    "gross": 4.2,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 9.8,
+    "wins": 5,
+    "net_cents_per_contract": 28.705000000000002,
+    "ts": 1789375500,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 11,
+    "pnl": -2.4159999999999995,
+    "fees": 0.386,
+    "gross": -2.0299999999999994,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 12.03,
+    "wins": 6,
+    "net_cents_per_contract": -10.066666666666665,
+    "ts": 1789376400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 14.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 9,
+    "pnl": -4.038499999999999,
+    "fees": 0.3285,
+    "gross": -3.709999999999999,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 11.71,
+    "wins": 5,
+    "net_cents_per_contract": -20.192499999999995,
+    "ts": 1789377300,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 3,
+    "pnl": 2.3940999999999995,
+    "fees": 0.2259,
+    "gross": 2.619999999999999,
+    "contracts": 18.0,
+    "days": 1,
+    "cost": 13.38,
+    "wins": 2,
+    "net_cents_per_contract": 13.300555555555553,
+    "ts": 1789378200,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 2,
+    "pnl": -3.3498,
+    "fees": 0.14980000000000002,
+    "gross": -3.2,
+    "contracts": 10.0,
+    "days": 1,
+    "cost": 3.1999999999999997,
+    "wins": 0,
+    "net_cents_per_contract": -33.498000000000005,
+    "ts": 1789379100,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 8,
+    "pnl": 1.1958000000000002,
+    "fees": 0.3742,
+    "gross": 1.5700000000000003,
+    "contracts": 23.0,
+    "days": 1,
+    "cost": 11.43,
+    "wins": 5,
+    "net_cents_per_contract": 5.199130434782609,
+    "ts": 1789380000,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 13.0
+  },
+  {
+    "n": 6,
+    "pnl": 0.6322000000000003,
+    "fees": 0.2278,
+    "gross": 0.8600000000000003,
+    "contracts": 18.0,
+    "days": 1,
+    "cost": 9.14,
+    "wins": 2,
+    "net_cents_per_contract": 3.512222222222224,
+    "ts": 1789380900,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 7,
+    "pnl": 0.8213999999999999,
+    "fees": 0.1586,
+    "gross": 0.9799999999999999,
+    "contracts": 10.0,
+    "days": 1,
+    "cost": 5.02,
+    "wins": 4,
+    "net_cents_per_contract": 8.213999999999999,
+    "ts": 1789381800,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 7,
+    "pnl": 0.7332000000000002,
+    "fees": 0.1768,
+    "gross": 0.9100000000000001,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.09,
+    "wins": 4,
+    "net_cents_per_contract": 6.110000000000002,
+    "ts": 1789382700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 8,
+    "pnl": -1.5844000000000005,
+    "fees": 0.3444,
+    "gross": -1.2400000000000004,
+    "contracts": 22.0,
+    "days": 1,
+    "cost": 9.24,
+    "wins": 1,
+    "net_cents_per_contract": -7.201818181818184,
+    "ts": 1789383600,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "XRP"
+    ],
+    "yes_contracts": 14.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 9,
+    "pnl": 5.6402,
+    "fees": 0.39840000000000003,
+    "gross": 6.0386,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 11.9614,
+    "wins": 4,
+    "net_cents_per_contract": 21.693076923076923,
+    "ts": 1789384500,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "HYPE"
+    ],
+    "yes_contracts": 18.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 2,
+    "pnl": -0.8866999999999998,
+    "fees": 0.16670000000000001,
+    "gross": -0.7199999999999998,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.72,
+    "wins": 1,
+    "net_cents_per_contract": -5.541874999999999,
+    "ts": 1789385400,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 4,
+    "pnl": -3.0564,
+    "fees": 0.19640000000000002,
+    "gross": -2.86,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 4.86,
+    "wins": 1,
+    "net_cents_per_contract": -25.47,
+    "ts": 1789386300,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 6,
+    "pnl": 1.4238999999999997,
+    "fees": 0.2561,
+    "gross": 1.6799999999999997,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.32,
+    "wins": 2,
+    "net_cents_per_contract": 8.899375,
+    "ts": 1789387200,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "HYPE"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 7,
+    "pnl": -2.4245,
+    "fees": 0.3245,
+    "gross": -2.1,
+    "contracts": 25.0,
+    "days": 1,
+    "cost": 9.1,
+    "wins": 4,
+    "net_cents_per_contract": -9.698,
+    "ts": 1789388100,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 7.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 5,
+    "pnl": 8.783100000000001,
+    "fees": 0.2529,
+    "gross": 9.036000000000001,
+    "contracts": 22.0,
+    "days": 1,
+    "cost": 8.964,
+    "wins": 3,
+    "net_cents_per_contract": 39.923181818181824,
+    "ts": 1789389000,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 3,
+    "pnl": 1.4897000000000005,
+    "fees": 0.1703,
+    "gross": 1.6600000000000006,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 8.34,
+    "wins": 2,
+    "net_cents_per_contract": 12.414166666666672,
+    "ts": 1789389900,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 11,
+    "pnl": -12.520100000000001,
+    "fees": 0.3621,
+    "gross": -12.158000000000001,
+    "contracts": 25.0,
+    "days": 1,
+    "cost": 12.158,
+    "wins": 0,
+    "net_cents_per_contract": -50.08040000000001,
+    "ts": 1789390800,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "HYPE"
+    ],
+    "yes_contracts": 9.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 10,
+    "pnl": 5.6685,
+    "fees": 0.4315,
+    "gross": 6.1,
+    "contracts": 32.0,
+    "days": 1,
+    "cost": 13.9,
+    "wins": 4,
+    "net_cents_per_contract": 17.7140625,
+    "ts": 1789391700,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 20.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 5,
+    "pnl": -5.954400000000001,
+    "fees": 0.2944,
+    "gross": -5.66,
+    "contracts": 22.0,
+    "days": 1,
+    "cost": 9.66,
+    "wins": 2,
+    "net_cents_per_contract": -27.065454545454546,
+    "ts": 1789392600,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 8,
+    "pnl": 8.32,
+    "fees": 0.33999999999999997,
+    "gross": 8.66,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 7.34,
+    "wins": 6,
+    "net_cents_per_contract": 34.666666666666664,
+    "ts": 1789393500,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 14.0
+  },
+  {
+    "n": 12,
+    "pnl": 4.2985,
+    "fees": 0.35150000000000003,
+    "gross": 4.6499999999999995,
+    "contracts": 23.0,
+    "days": 1,
+    "cost": 11.35,
+    "wins": 8,
+    "net_cents_per_contract": 18.68913043478261,
+    "ts": 1789394400,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 7.0
+  },
+  {
+    "n": 6,
+    "pnl": 3.4083000000000006,
+    "fees": 0.4517,
+    "gross": 3.8600000000000003,
+    "contracts": 28.0,
+    "days": 1,
+    "cost": 12.139999999999999,
+    "wins": 3,
+    "net_cents_per_contract": 12.172500000000001,
+    "ts": 1789395300,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 5,
+    "pnl": -3.8392,
+    "fees": 0.2592,
+    "gross": -3.58,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 9.58,
+    "wins": 3,
+    "net_cents_per_contract": -23.995,
+    "ts": 1789396200,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 7,
+    "pnl": 1.0216000000000005,
+    "fees": 0.15839999999999999,
+    "gross": 1.1800000000000006,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 8.82,
+    "wins": 2,
+    "net_cents_per_contract": 6.385000000000003,
+    "ts": 1789397100,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 6,
+    "pnl": 0.7458999999999999,
+    "fees": 0.1941,
+    "gross": 0.94,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 7.0600000000000005,
+    "wins": 3,
+    "net_cents_per_contract": 5.327857142857142,
+    "ts": 1789398000,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 5,
+    "pnl": 1.2489999999999992,
+    "fees": 0.471,
+    "gross": 1.7199999999999993,
+    "contracts": 28.0,
+    "days": 1,
+    "cost": 14.280000000000001,
+    "wins": 2,
+    "net_cents_per_contract": 4.460714285714283,
+    "ts": 1789398900,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 9,
+    "pnl": -5.1731,
+    "fees": 0.3381,
+    "gross": -4.835,
+    "contracts": 32.0,
+    "days": 1,
+    "cost": 8.834999999999999,
+    "wins": 3,
+    "net_cents_per_contract": -16.1659375,
+    "ts": 1789399800,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 28.0
+  },
+  {
+    "n": 5,
+    "pnl": -0.30979999999999985,
+    "fees": 0.0998,
+    "gross": -0.20999999999999985,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 4.21,
+    "wins": 3,
+    "net_cents_per_contract": -3.8724999999999983,
+    "ts": 1789400700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 7,
+    "pnl": -9.379999999999999,
+    "fees": 0.278,
+    "gross": -9.101999999999999,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 11.102,
+    "wins": 1,
+    "net_cents_per_contract": -46.89999999999999,
+    "ts": 1789401600,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 5,
+    "pnl": 3.3278,
+    "fees": 0.19219999999999998,
+    "gross": 3.52,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 12.48,
+    "wins": 5,
+    "net_cents_per_contract": 20.79875,
+    "ts": 1789402500,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 16.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 11,
+    "pnl": -6.793699999999999,
+    "fees": 0.5137,
+    "gross": -6.279999999999999,
+    "contracts": 30.0,
+    "days": 1,
+    "cost": 14.28,
+    "wins": 5,
+    "net_cents_per_contract": -22.645666666666664,
+    "ts": 1789403400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 18.0
+  },
+  {
+    "n": 4,
+    "pnl": 2.1903,
+    "fees": 0.17570000000000002,
+    "gross": 2.366,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 3.634,
+    "wins": 3,
+    "net_cents_per_contract": 15.645,
+    "ts": 1789404300,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "HYPE"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 14.0
+  },
+  {
+    "n": 7,
+    "pnl": -10.8897,
+    "fees": 0.36970000000000003,
+    "gross": -10.52,
+    "contracts": 24.0,
+    "days": 1,
+    "cost": 14.52,
+    "wins": 2,
+    "net_cents_per_contract": -45.37375,
+    "ts": 1789405200,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 20.0
+  },
+  {
+    "n": 6,
+    "pnl": -7.2766,
+    "fees": 0.4766,
+    "gross": -6.8,
+    "contracts": 30.0,
+    "days": 1,
+    "cost": 14.8,
+    "wins": 1,
+    "net_cents_per_contract": -24.255333333333333,
+    "ts": 1789406100,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 24.0
+  },
+  {
+    "n": 9,
+    "pnl": 0.35719999999999974,
+    "fees": 0.2428,
+    "gross": 0.5999999999999998,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 7.4,
+    "wins": 5,
+    "net_cents_per_contract": 2.232499999999998,
+    "ts": 1789407000,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "HYPE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 5,
+    "pnl": -0.6357,
+    "fees": 0.1657,
+    "gross": -0.4700000000000001,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 4.47,
+    "wins": 3,
+    "net_cents_per_contract": -4.540714285714286,
+    "ts": 1789407900,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 9,
+    "pnl": 6.7293,
+    "fees": 0.3277,
+    "gross": 7.057,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 10.943,
+    "wins": 8,
+    "net_cents_per_contract": 33.6465,
+    "ts": 1789408800,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 6,
+    "pnl": 0.2969000000000009,
+    "fees": 0.3731,
+    "gross": 0.6700000000000008,
+    "contracts": 22.0,
+    "days": 1,
+    "cost": 9.33,
+    "wins": 2,
+    "net_cents_per_contract": 1.3495454545454586,
+    "ts": 1789409700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "ETH"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 5,
+    "pnl": 9.3458,
+    "fees": 0.4542,
+    "gross": 9.8,
+    "contracts": 28.0,
+    "days": 1,
+    "cost": 14.200000000000001,
+    "wins": 3,
+    "net_cents_per_contract": 33.377857142857145,
+    "ts": 1789410600,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "HYPE"
+    ],
+    "yes_contracts": 24.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 9,
+    "pnl": -6.7603,
+    "fees": 0.6183,
+    "gross": -6.142,
+    "contracts": 44.0,
+    "days": 1,
+    "cost": 14.142,
+    "wins": 2,
+    "net_cents_per_contract": -15.36431818181818,
+    "ts": 1789411500,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "ETH"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 32.0
+  },
+  {
+    "n": 6,
+    "pnl": 10.7004,
+    "fees": 0.3076,
+    "gross": 11.008000000000001,
+    "contracts": 28.78,
+    "days": 1,
+    "cost": 13.772,
+    "wins": 4,
+    "net_cents_per_contract": 37.17998610145934,
+    "ts": 1789412400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH",
+      "HYPE"
+    ],
+    "yes_contracts": 20.0,
+    "no_contracts": 8.78
+  },
+  {
+    "n": 4,
+    "pnl": -3.6348,
+    "fees": 0.1948,
+    "gross": -3.44,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.4399999999999995,
+    "wins": 2,
+    "net_cents_per_contract": -30.289999999999996,
+    "ts": 1789413300,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "XRP"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 9,
+    "pnl": -4.907900000000001,
+    "fees": 0.48790000000000006,
+    "gross": -4.420000000000001,
+    "contracts": 28.0,
+    "days": 1,
+    "cost": 14.42,
+    "wins": 2,
+    "net_cents_per_contract": -17.528214285714288,
+    "ts": 1789414200,
+    "day": "2026-09-14",
+    "coins": [
+      "BTC",
+      "DOGE",
+      "ETH"
+    ],
+    "yes_contracts": 18.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 7,
+    "pnl": -4.9106000000000005,
+    "fees": 0.4306,
+    "gross": -4.48,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 14.48,
+    "wins": 5,
+    "net_cents_per_contract": -18.88692307692308,
+    "ts": 1789415100,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "ETH",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 20.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 4,
+    "pnl": 1.5839000000000003,
+    "fees": 0.21610000000000001,
+    "gross": 1.8000000000000003,
+    "contracts": 14.0,
+    "days": 1,
+    "cost": 8.2,
+    "wins": 2,
+    "net_cents_per_contract": 11.313571428571432,
+    "ts": 1789416000,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "HYPE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 4,
+    "pnl": -0.5723999999999999,
+    "fees": 0.1124,
+    "gross": -0.4599999999999999,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.46,
+    "wins": 1,
+    "net_cents_per_contract": -7.1549999999999985,
+    "ts": 1789416900,
+    "day": "2026-09-14",
+    "coins": [
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 3,
+    "pnl": -2.1837,
+    "fees": 0.0717,
+    "gross": -2.112,
+    "contracts": 4.6,
+    "days": 1,
+    "cost": 2.712,
+    "wins": 1,
+    "net_cents_per_contract": -47.471739130434784,
+    "ts": 1789417800,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 0.6
+  },
+  {
+    "n": 2,
+    "pnl": -0.6089,
+    "fees": 0.028900000000000002,
+    "gross": -0.58,
+    "contracts": 2.0,
+    "days": 1,
+    "cost": 0.58,
+    "wins": 0,
+    "net_cents_per_contract": -30.445,
+    "ts": 1789418700,
+    "day": "2026-09-14",
+    "coins": [
+      "HYPE"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 0
+  },
+  {
+    "n": 4,
+    "pnl": -0.5977,
+    "fees": 0.0777,
+    "gross": -0.52,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 2.52,
+    "wins": 1,
+    "net_cents_per_contract": -7.47125,
+    "ts": 1789419600,
+    "day": "2026-09-14",
+    "coins": [
+      "HYPE",
+      "SOL"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 9,
+    "pnl": 7.335,
+    "fees": 0.245,
+    "gross": 7.58,
+    "contracts": 16.0,
+    "days": 1,
+    "cost": 6.42,
+    "wins": 8,
+    "net_cents_per_contract": 45.84375,
+    "ts": 1789420500,
+    "day": "2026-09-14",
+    "coins": [
+      "HYPE",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 4,
+    "pnl": -1.795100000000001,
+    "fees": 0.3151,
+    "gross": -1.480000000000001,
+    "contracts": 20.0,
+    "days": 1,
+    "cost": 11.48,
+    "wins": 2,
+    "net_cents_per_contract": -8.975500000000006,
+    "ts": 1789421400,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "SOL"
+    ],
+    "yes_contracts": 10.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 5,
+    "pnl": 8.738299999999999,
+    "fees": 0.44170000000000004,
+    "gross": 9.18,
+    "contracts": 28.0,
+    "days": 1,
+    "cost": 14.82,
+    "wins": 3,
+    "net_cents_per_contract": 31.208214285714284,
+    "ts": 1789422300,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 24.0
+  },
+  {
+    "n": 8,
+    "pnl": 0.4616999999999999,
+    "fees": 0.37829999999999997,
+    "gross": 0.8399999999999999,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 13.16,
+    "wins": 5,
+    "net_cents_per_contract": 1.7757692307692303,
+    "ts": 1789423200,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE"
+    ],
+    "yes_contracts": 14.0,
+    "no_contracts": 12.0
+  },
+  {
+    "n": 1,
+    "pnl": 1.5869999999999997,
+    "fees": 0.093,
+    "gross": 1.6799999999999997,
+    "contracts": 8.0,
+    "days": 1,
+    "cost": 6.32,
+    "wins": 1,
+    "net_cents_per_contract": 19.8375,
+    "ts": 1789424100,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH"
+    ],
+    "yes_contracts": 0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 7,
+    "pnl": -2.1863,
+    "fees": 0.3663,
+    "gross": -1.82,
+    "contracts": 23.0,
+    "days": 1,
+    "cost": 11.82,
+    "wins": 2,
+    "net_cents_per_contract": -9.505652173913045,
+    "ts": 1789425000,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "ETH"
+    ],
+    "yes_contracts": 7.0,
+    "no_contracts": 16.0
+  },
+  {
+    "n": 9,
+    "pnl": 0.9888000000000002,
+    "fees": 0.2372,
+    "gross": 1.2260000000000002,
+    "contracts": 22.0,
+    "days": 1,
+    "cost": 8.774,
+    "wins": 2,
+    "net_cents_per_contract": 4.494545454545456,
+    "ts": 1789425900,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "SOL"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 3,
+    "pnl": -2.6329000000000002,
+    "fees": 0.07289999999999999,
+    "gross": -2.56,
+    "contracts": 6.0,
+    "days": 1,
+    "cost": 2.56,
+    "wins": 0,
+    "net_cents_per_contract": -43.88166666666667,
+    "ts": 1789426800,
+    "day": "2026-09-14",
+    "coins": [
+      "DOGE",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 2.0
+  },
+  {
+    "n": 6,
+    "pnl": -2.2494,
+    "fees": 0.18939999999999999,
+    "gross": -2.06,
+    "contracts": 18.0,
+    "days": 1,
+    "cost": 6.06,
+    "wins": 2,
+    "net_cents_per_contract": -12.496666666666666,
+    "ts": 1789427700,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "ETH",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 8.0,
+    "no_contracts": 10.0
+  },
+  {
+    "n": 4,
+    "pnl": 0.7566999999999997,
+    "fees": 0.1433,
+    "gross": 0.8999999999999997,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 7.1000000000000005,
+    "wins": 1,
+    "net_cents_per_contract": 6.305833333333331,
+    "ts": 1789428600,
+    "day": "2026-09-14",
+    "coins": [
+      "ETH",
+      "XRP"
+    ],
+    "yes_contracts": 4.0,
+    "no_contracts": 8.0
+  },
+  {
+    "n": 6,
+    "pnl": 2.6422,
+    "fees": 0.1538,
+    "gross": 2.796,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 5.204,
+    "wins": 4,
+    "net_cents_per_contract": 22.01833333333333,
+    "ts": 1789429500,
+    "day": "2026-09-14",
+    "coins": [
+      "BNB",
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 6.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 7,
+    "pnl": -12.4201,
+    "fees": 0.5201,
+    "gross": -11.9,
+    "contracts": 31.0,
+    "days": 1,
+    "cost": 14.9,
+    "wins": 2,
+    "net_cents_per_contract": -40.06483870967742,
+    "ts": 1789430400,
+    "day": "2026-09-15",
+    "coins": [
+      "BNB",
+      "BTC",
+      "ETH",
+      "HYPE"
+    ],
+    "yes_contracts": 24.0,
+    "no_contracts": 7.0
+  },
+  {
+    "n": 7,
+    "pnl": -1.8476999999999992,
+    "fees": 0.4277,
+    "gross": -1.4199999999999993,
+    "contracts": 26.0,
+    "days": 1,
+    "cost": 11.42,
+    "wins": 5,
+    "net_cents_per_contract": -7.106538461538459,
+    "ts": 1789431300,
+    "day": "2026-09-15",
+    "coins": [
+      "BNB",
+      "BTC",
+      "DOGE",
+      "HYPE"
+    ],
+    "yes_contracts": 22.0,
+    "no_contracts": 4.0
+  },
+  {
+    "n": 10,
+    "pnl": -6.7734,
+    "fees": 0.27340000000000003,
+    "gross": -6.5,
+    "contracts": 18.0,
+    "days": 1,
+    "cost": 6.5,
+    "wins": 0,
+    "net_cents_per_contract": -37.629999999999995,
+    "ts": 1789432200,
+    "day": "2026-09-15",
+    "coins": [
+      "BNB",
+      "HYPE",
+      "XRP"
+    ],
+    "yes_contracts": 12.0,
+    "no_contracts": 6.0
+  },
+  {
+    "n": 3,
+    "pnl": -2.1246,
+    "fees": 0.18460000000000001,
+    "gross": -1.94,
+    "contracts": 12.0,
+    "days": 1,
+    "cost": 3.94,
+    "wins": 1,
+    "net_cents_per_contract": -17.705000000000002,
+    "ts": 1789453800,
+    "day": "2026-09-15",
+    "coins": [
+      "BTC",
+      "SOL",
+      "XRP"
+    ],
+    "yes_contracts": 2.0,
+    "no_contracts": 10.0
+  }
+]
