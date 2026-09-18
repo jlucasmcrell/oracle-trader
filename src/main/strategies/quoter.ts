@@ -1055,16 +1055,23 @@ export class ThinQuoter {
             // queue slot. The old condition amended (forfeiting the slot) as soon as
             // the 60s cooldown lapsed, on a move that had not reverted.
             const priceDelta = Math.abs(existing.yesPrice - yesPrice)
-            // Restore full size only once fair value has come BACK to the resting
-            // price; because the price is then unchanged this is a size-only amend.
-            const restoreSize = existing.count !== count && priceDelta < 0.01
-            if (crossed || priceDelta >= 0.03 || restoreSize) {
+            // Q1 (2026-09-18): a standalone size RESTORE is deliberately gone. Kalshi's
+            // amend docs are explicit - "Amending a resting order preserves queue
+            // position only when the amendment decreases size. All other amendments -
+            // like increasing size or changing price - forfeit queue position and place
+            // the order at the back of the queue." A restore therefore CANNOT preserve
+            // the slot, and a standalone restore is strictly self-defeating: it trades a
+            // front-of-queue slot for a back-of-queue slot, in exchange for size that,
+            // now sitting at the back, is unlikely to fill. The previous comment here
+            // claimed "it is a PRICE change that forfeits queue position, not a size
+            // increase per se" - that was wrong.
+            // Full size comes back ONLY via a genuine reprice below, where the slot is
+            // forfeited regardless. A quote shrunk by tier-1 stays shrunk (and keeps its
+            // slot) until it fills, is canceled, or truly reprices.
+            if (crossed || priceDelta >= 0.03) {
               try {
-                // Keep the resting price on a pure size restore: it is a PRICE change
-                // that forfeits queue position, not a size increase per se.
-                const amendPrice = restoreSize && !crossed ? existing.yesPrice : yesPrice
-                const r = await adapter.amendOrder(existing.orderId, c.id, outcome === 'YES' ? 'bid' : 'ask', amendPrice, count)
-                existing.yesPrice = amendPrice
+                const r = await adapter.amendOrder(existing.orderId, c.id, outcome === 'YES' ? 'bid' : 'ask', yesPrice, count)
+                existing.yesPrice = yesPrice
                 existing.count = count
                 existing.shrunkAt = undefined
                 this.state.amended++
