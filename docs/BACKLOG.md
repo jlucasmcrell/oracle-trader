@@ -1858,3 +1858,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 147. **Endgame exception shadow read (trigger: 2026-09-25).** Grade `leadlag-cadence-shadow.jsonl` rows with raw gap
     < 6c and under 3 minutes left in the window against results since 09-18 19:55Z. Positive at 95% day-clustered
     over >= 100 contracts-equivalent -> register it as step two; otherwise the floor stays alone. Do not trade it early.
+
+- **Weather research closed (2026-09-18 20:30Z, §116).** HRRR (MAE 1.68 F) does not beat the market's ask on the
+  brackets we hold books for; the market is calibrated. No taker weather arm. If anyone revisits: capture
+  full-event books first (the modal bracket is the untested case), and never infer tail direction from a
+  temperature threshold - use `strike_type`. Script: `scripts/backtests/weather_hrrr_vs_market.py`.
+- **146 first check passed early (20:20Z):** all sweeps since the floor are >= 6c; sweep rate ~1 per 25 min.
+- **147 note:** shadow rows in the orderbook era already reconfirm the floor's losing bucket at 95%
+  (gap < 6c, >= 3 min left: -3.15c [-4.34, -1.96], n=253); the exception itself is unsupported at n=53. Keep 09-25.

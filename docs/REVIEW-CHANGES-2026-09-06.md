@@ -4081,3 +4081,36 @@ clamped to 2-20 (test pins default 4, set 6, clamp 99 -> 20 and 0 -> 2), set to 
 (backup `kalshi-auto.json.bak_llfloor_*`). Ladder `kalshi-leadlag` re-baselined by `since` (its evidence is
 the dislocation log since promotion; `perfByStrategy` has no leadlag key, so nothing to rename). Registered
 in `docs/PREREGISTERED-leadlag-gap-floor.md`: judge at 60 contracts / 5 clusters, deadline 2026-10-02.
+
+## §116 - 2026-09-18 20:30Z: why weather lost, and whether a forecast-driven taker could win it (read only)
+
+The operator: people win on weather markets; why did we lose so hard? (Insurance Journal, 2026-04-15.)
+
+**What we did wrong, from the record (§47, §50).** (1) We were the MAKER on KX(HIGH|LOW)T, where the maker
+seat measures -1.70c/contract over 801,258 venue contracts and -5.55c on LOW in our own 3-48 h / 7-93c
+window; the quoter owned 76% of the weather loss. The article's winners (WindBorne, Jua, the Polymarket
+leaderboard) are forecast-driven TAKERS - we were the liquidity they took. (2) Our fair value was worse than
+the market's: sigma 3.0 F against a market-implied ~1.4 F, priced off the NWS gridpoint, so our quotes were
+the stale ones. (3) The ratchet arm bought "decided" brackets on a temperature index 9 F off (Boston lows).
+(4) The +2c maker backtest was on the legacy KXHIGH-city series (+0.67c), not the Weather Company station
+series we rested on (-1.70c). Same wrong-population error as mean-reversion's Becker backtest.
+
+**Could we take instead?** HRRR is a good forecast: daily-max MAE 1.68 F, bias -0.39 (NBM 2.32 F, -1.60),
+6,769 station-hours. Tested against the market with `scripts/backtests/weather_hrrr_vs_market.py`: 2,045
+bracket-hour book snapshots on 136 graded station-days, HRRR as N(forecast, 1.25 x hourly MAE), Kalshi's
+own strike semantics and results. **Buying the ask wherever HRRR-implied probability exceeded it: -1.5c
+[-5.1, +2.0] at >= 5c edge, -4.3c [-8.5, -0.2] at >= 20c, tails -7.5c [-8.9, -6.0].** HRRR is overconfident
+on these brackets (its 0.3-0.5 bucket resolved 8%); the market's asks are calibrated (7% -> 7%). On the
+brackets we have books for, the market is the better forecast. A first pass of this analysis read +23c to
++72c; that was two labelling errors (tail direction inferred from a fixed 85 F rule; T89 read as >= 89 when
+it means 90 or above). Caveat that survives: the book log holds only the cheap brackets the scan looked at;
+the modal bracket is untested, and testing it needs full-event book capture that nothing records today.
+
+**Conclusion.** Weather is not a fixable-input problem for us. Winning it needs a forecast the market does
+not already have, which the article's winners own (balloon networks, proprietary AI) and we do not. No arm
+is proposed. Weather stays retired; the HRRR shadow keeps running as a free calibration instrument.
+
+**Two other reads this round.** Cadence-shadow rows in the orderbook era (windows we traded, results known)
+reconfirm the §115 floor on rows we did NOT sweep: gap < 6c with >= 3 min left **-3.15c [-4.34, -1.96]** on
+253; the endgame exception +0.67c [-9.65, +10.98] on 53 - no support yet, item 147 stands. The 6c floor is
+live: since the 19:53Z restart, two dislocations (7.5c, 8.5c), one sweep, nothing under 6c.
