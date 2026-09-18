@@ -1675,3 +1675,23 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   Failure path tested (missing volume -> exit 1). Log: `logs/state-backup.log`; status: `D:\oracle-trader-backup\status.json`.
   NOT covered: an off-machine copy. If the machine dies, the backup dies with it.
 
+- **132 DONE / 127 PASS / 128 step 1 (2026-09-18 15:28Z).** Re-baseline on orderbook-priced rows only
+  (`scripts/backtests/leadlag_orderbook_baseline.py`, GET-only), 2026-09-17 09:40Z to 2026-09-18 15:20Z:
+  - graded signal **+1.35c/contract** (n=354, 80% band [+1.07, +1.63]). The pre-09-17 "+6-11c" was priced off the
+    cached list endpoint and is **void, not merely optimistic** - the real edge is roughly a fifth of it.
+  - actual fills **+1.86c/contract** on 282 contracts, **net +$5.23**. Execution now matches the signal instead of
+    trailing it, which is what the round-115/116 fixes were for.
+  - latency median **57 ms**, p90 **101 ms** over 284 executed sweeps: item 127 passes (<200 ms median, <1 s p90).
+  - per coin: XRP +10.6 graded / +5.9 filled, DOGE +0.6 / +8.6, BTC -0.8 / +7.0, BNB +1.3 / +0.9, SOL +0.9 / +1.2,
+    **ETH -6.3 / -7.1 and HYPE -2.6 / -3.8** - the only two negative on BOTH measures.
+  - 128 step 1 applied: `leadLagPollIntervalMs` 60000 -> 10000 (config key lives under `config.` in
+    kalshi-auto.json; backup `kalshi-auto.json.bak_poll10s_20260918`). Verified live: scans 10 s apart, no 429s.
+137. **ETH and HYPE lead-lag verdict (trigger: 2026-09-21 12:00Z, or 100 orderbook-priced rows per coin, whichever
+    first).** Both are negative on graded signal AND fills over 2 days (n=34 / 42 rows). Two days is not enough to
+    cull a coin, and the 10 s poll now collects rows ~6x faster. Re-run the baseline script; if either is still
+    negative on both measures with n>=100, drop it from `leadLagCoins` and record it in the coin pre-registration.
+138. **Lead-lag at 10 s: first read (trigger: 2026-09-19 12:00Z).** Re-run the baseline and compare against today's
+    +1.35c graded / +1.86c filled. Watch three things: 429 count on the Kalshi read lane, whether per-contract net
+    degrades (faster polling finds thinner gaps), and window-cap holds. If net degrades, revert to 60 s before
+    touching anything else - that is 128's one-step-per-day rule.
+
