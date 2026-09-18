@@ -1915,3 +1915,9 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **153 DONE, 155 DONE (2026-09-18 22:05Z, §121).** Polymarket maker rebate modelled at the venue formula with the
   venue's cent rounding (zero at one contract); IBKR recalibration uses per-category evaluation-half slopes
   (politics only). Both labs re-baselined for the affected arms.
+
+- **151 first pass (22:05Z, §122).** Matcher works (177 sides / 89 games); NFL and NCAAF agree to the tick, MLB ~2c with
+  sub-$1 baskets that snapshot timing can explain. Next build: `scripts/sports-books.mjs` - for matched games,
+  capture Polymarket US `/v1/markets/{slug}/book` and Kalshi batched orderbooks in the SAME cycle every 60 s from
+  4 h before start; grade who moves first and whether any sub-$1 basket survives simultaneous quotes. Trigger:
+  build 2026-09-19; read at 7 days.

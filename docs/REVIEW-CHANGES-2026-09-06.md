@@ -4210,7 +4210,7 @@ nothing yet. What the shadow has to establish over a week is how often the venue
 side moves first around the prints. IBKR is unfunded and the Kalshi account is $89; sizing, if it ever comes, is
 the operator's.
 
-## §121 - 2026-09-18 22:05Z: round 121, the paper labs price what the venues actually pay (items 153, 155)
+## §121 - 2026-09-18 21:42Z: round 121, the paper labs price what the venues actually pay (items 153, 155)
 
 **Polymarket US maker rebate (153).** `polyPaperFee(maker=true)` returned 0 ("no rebates assumed"). The venue's
 published schedule pays makers `0.0125 x C x p(1-p)` at the trade. It is now returned as a negative fee, so every
@@ -4228,3 +4228,28 @@ elsewhere), so it produces no entry where the evidence says the market is calibr
 average that holds nowhere. `political-favorite` is unchanged. Tests: slopes by category, an election frame
 fires, a Financial Markets frame does not. `calibration` re-baselines at the restart (prior stats stay under
 `calibration:pre-slopes-20260918`).
+
+## §122 - 2026-09-18 22:05Z: Kalshi <-> Polymarket US same-game read (item 151, first pass, read only)
+
+Inputs: a full Polymarket US catalog walk kept to sports markets starting within 72 h (53,367 rows; 211 of them
+`aec-` moneylines in sports Kalshi also lists), and every open Kalshi game/match market (3,746 across 328 series).
+Matcher `scripts/backtests/crossvenue_sports.py`. Three things it had to learn about the Polymarket rows: the
+`outcomes` and `outcomePrices` arrays are not aligned with each other (the priced side is `marketSides[long]`);
+Kalshi titles are cities ("Philadelphia wins") while Polymarket sides are nicknames, so identity comes from the
+side's `team` object; and matching must be event-level - both Kalshi teams onto both Polymarket phrases one-to-one -
+or "North Dakota" claims "North Dakota State" from another game.
+
+Result, 177 team-sides across 89 games, snapshots a few minutes apart:
+
+| Series | sides | mean \|Kalshi mid - Polymarket price\| | baskets under $1 after both fees |
+|---|---|---|---|
+| NFL | 28 | **0.21c** | 0 |
+| NCAAF | 43 | 0.40c | 0 |
+| WNBA | 22 | 1.43c | 0 |
+| MLB | 84 | 1.70c | 14 (best $0.959) |
+
+Same game, same score, same settlement - and the two venues agree to the tick on football. MLB shows ~2c
+gaps and a handful of sub-$1 baskets, but the two sides were captured minutes apart on next-day games, which is
+exactly the kind of gap a snapshot manufactures. Not evidence of an arbitrage; evidence that the matcher works
+and that any edge here is lead-lag around line moves, which needs both books at the same second. That recorder
+is the next build (151); nothing is traded.
