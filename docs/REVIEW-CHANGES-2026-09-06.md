@@ -4032,3 +4032,29 @@ carries an explicit mark. The live retry test uses the one-hour time exit. With 
 reproduction assertion fails. The skip-if-unmarked guard survives mutation because it is unreachable.
 
 **Checks.** Typecheck and all 15 suites pass. Restarted 13:56:25Z, after the 13:56:16Z bundle.
+
+## §114 - 2026-09-18 19:01Z: the 10 s poll reverted; the gate tally; mean-reversion re-run as the taker it was tested as
+
+**Lead-lag at 10 s, reverted (backlog 138's own rule).** 15:26Z to 19:00Z at 10 s: **-$10.83 on 75
+contracts (-14.4c)**, against -$2.60 on 38 (-6.8c) at 60 s earlier the same day. Not execution: sweep latency
+59 ms vs 62 ms, quoted net gap +3.71c vs +3.70c. The difference is **1.95 sweeps per window vs 1.17** - the
+faster poll re-swept the same window before it settled and doubled size into a coin-flip. That is the
+capacity curve from the trade-history report, reproduced in one afternoon. `leadLagPollIntervalMs` 10000 ->
+60000 with the app stopped (backup `kalshi-auto.json.bak_poll60_20260918`); restart 19:01:07Z. Any second
+attempt at a faster poll needs a per-window sweep cap of one, not three, first.
+
+**Gate tally, first read (17:28Z, 50 scans; §112's instrumentation).** fade 2,611 generated / 2,609 vetoed
+(long-horizon slots full x2,436); consensus 111/111 and volume-spike 69/69, all long-horizon slots full;
+**mean-reversion 34/34, all `weatherSeatBlock`**. The four-slot `maxLongHorizonPositions` is held by six
+consensus positions, one a 198-day NCAA 2027 market opened before the 21-day ceiling. The operator asked for
+that position to be closed: its book has **no YES bids at all** (asks at 21c/83c/97c only), so it cannot be
+closed at any price now, and a hand-placed resting sell would be an orphan order to the app's reconciler.
+Reported, not placed. The cap and the position are the operator's.
+
+**Mean-reversion, re-run as a taker (operator-directed).** The live arm since 09-09 rested maker orders and
+only ever found weather setups, which `weatherSeatBlock` refuses; §52's +2.2 to +3.6c was a taker audit on
+Becker data with zero weather rows. `makerStrategies` loses `mean-reversion`; prior stats renamed to
+`mean-reversion:pre-taker-20260918` (perf, calibration; the one open maker-rule position tagged so it settles
+into the old bucket); ladder baseline for `kalshi-mean-reversion` reset at the same instant. Pre-registered in
+`docs/PREREGISTERED-mean-reversion-taker.md`: same verdict rule, taker at the ask, hold to settlement,
+non-weather (the gate stands), judged on the venue ledger at 40 contracts / 5 clusters, deadline 2026-10-09.

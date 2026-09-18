@@ -1839,3 +1839,15 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   (a) whether `maxLongHorizonPositions` 4 is still the intent with consensus holding 6; (b) the 198-day position.
   Keep 143's 09-19 12:00Z read: it decides whether MR ever sees a non-weather setup; if not, MR as a maker arm is
   dead and a TAKER re-test on daily crypto/oil brackets is the only version the backtest actually supports.
+
+- **138 answered (2026-09-18 19:01Z, §114).** 10 s poll: -14.4c/contract on 75 contracts vs -6.8c at 60 s the
+  same day; latency and quoted gaps identical; 1.95 vs 1.17 sweeps per window. Reverted to 60 s. Rule for any
+  retry: per-ticker window cap 1 sweep (not 3) BEFORE a faster poll, then judge on 128's metrics.
+145. **Mean-reversion taker retest (trigger: 40 settled contracts across 5 day-clusters, or 2026-10-09).**
+    Registered `docs/PREREGISTERED-mean-reversion-taker.md`. Prior stats under `mean-reversion:pre-taker-20260918`.
+    First check 2026-09-19 12:00Z with 143: the gate tally must show mean-reversion generating NON-weather signals
+    with approvals, and episodes must show `entryMode: taker` for its entries. If the tally still shows only
+    weather setups, the taker version has no flow either and the arm is retired for lack of setups, not edge.
+- **NCAA 2027 position (KXNCAAMBUAC-27-EKY, 4.55 YES @21c, $0.96 exposure): unclosable, zero YES bids.** It holds
+  one of four long-horizon slots until it resolves. Operator options: raise `maxLongHorizonPositions`, or accept
+  that the count includes it. No order was placed.
