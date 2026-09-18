@@ -1741,3 +1741,73 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   archive `G:\PROJECTS\oracle-trader-backups\git-prePII-20260918-095819` is **deleted**, and the last local copy of
   the unscrubbed doc (`backups/_gitinit_20260918/...orig`) is scrubbed. `backups/` is gitignored and was not pushed.
 
+
+
+- **112 CLOSED (2026-09-18 maintenance).** Not an arithmetic error and never was two numbers of the same
+  thing. The ladder's `kalshi-leadlag: 35 settled, net -$0.23` matches the venue ledger for the stage window
+  (2026-09-17T09:16:16Z on) **to the cent**: KXBTC15M n=17 +$1.48 plus KXETH15M n=18 -$1.71. The join is
+  `leadLagRowCounts` (`src/main/ladder/ladder.ts:115`), which drops every sweep whose coin is not in
+  `leadLagProvenCoins` (still the round-93 default BTC, ETH), exactly as the 2026-09-13 addendum to
+  `docs/PREREGISTERED-leadlag-coins.md` specifies. `leadlag-coins.mjs --check` reads all eight coins. Two
+  cohorts, not a defect; the 09-16 "-$0.82 vs -$60.47" has the same explanation.
+- **135 CLOSED (2026-09-18 maintenance).** The sports anchor's `kalshi-settled` sweeps now report 6, 16 and
+  6 matchable on NPBTOTAL / KBOTOTAL / KBOGAME instead of `0 matchable`, and `anchor-grades.jsonl` gained
+  **117 rows** (654 -> 771) with the newest at 14:41:30Z rather than a day behind. gradedN 767 / mean Brier
+  0.1108, ruleN 390 / ruleNet +$22.635 = +5.80c per contract.
+
+144. **The ladder will judge the whole lead-lag arm on its two worst coins (found 2026-09-18, trigger: the
+    arm's next checkpoint at 40 proven-coin settlements, 5 away as of 15:40Z).** Over the current stage
+    window the two coins the ladder counts settled **-$0.23 over 35**, while the six it excludes settled
+    **+$6.71 over 173**; and on the six-day cohort read BTC is **-6.17c/contract, 95% [-12.28, -0.07]** -
+    the only coin whose interval excludes zero, and it is the negative one. So the pooled stop can retire an
+    arm that is making money, on the evidence of the subset that is not. Deliberately NOT acted on today:
+    the proven-coin pool is the pre-registered design (a pool cannot stop a subset, round 93 / backlog 91)
+    and re-cutting a cohort on the day its number looks inconvenient is the re-fitting the pre-registration
+    exists to forbid. What to do when the checkpoint lands: read it against this note and
+    `docs/PREREGISTERED-leadlag-coins.md`, and if the stop fires on BTC/ETH while the cohort read is
+    positive, write the amendment BEFORE the ladder is touched - the pre-registration's own promote path
+    (lower bound > 0 -> add coins to `leadLagProvenCoins`) is the mechanism, not a new rule.
+145. **The spot-first recorder died with no cause anywhere on disk (found 2026-09-18, trigger: the next
+    death, or 2026-09-25 if there is none).** `data/spot-shadow/recorder.log` ends at 13:32:12Z on a clean
+    heartbeat with `errors 0`; the last data row is 13:34Z; no process existed at 15:41Z. It was not an
+    uncaught throw - `spot-shadow.mjs:228-229` already logs `unhandledRejection` and `uncaughtException` and
+    continues - there is no Windows error report, and the Scheduled Task discards stderr, so a heap OOM
+    (173 M WebSocket messages in a 3-day process) and an external kill leave identical evidence. 2 h 09 m
+    lost, four days before the 2026-09-21 verdict. Sentinel coverage was added the same day (20 min, item
+    4a of the 09-18 log) so the next one costs one tick, but the CAUSE is still unknown. The cheap next
+    step is capturing stderr - the task action would have to redirect, which is a task edit, so decide that
+    deliberately rather than as a drive-by.
+146. **mmsim is being throttled off the public Kalshi endpoint by our own request rate (found 2026-09-18,
+    trigger: 2026-09-19, one full day under the 10 s lead-lag poll).** mmsim halts itself by design on
+    `3 throttles within an hour` and did so **twice today** (12:34Z, 13:42Z); the sentinel relaunch works
+    and it halts again, so it collects roughly 40 min per 3 h cycle. `http429` rows per day: 09-13 6,
+    09-14 1, 09-15 3, 09-16 7, 09-17 **12**, 09-18 **11 in 13.7 h**. The step is at round 115
+    (2026-09-17 08:07Z, Kalshi lanes raised to 10 reads/s + 15 writes/s); the 10 s poll (2026-09-18 15:28Z)
+    is not in these numbers yet. **Do not change mmsim's threshold** - every parameter is pre-registered and
+    touching one mints a new `runId` and restarts the 35-day clock, destroying the run this would be meant
+    to save. The lever, if one is needed, is on OUR side of the shared per-IP budget. Read tomorrow: the
+    09-19 `http429` count and halt count against today's 11 and 2, and whether the 2026-10-17 verdict still
+    has the day-clusters its stopping rule needs (backlog 119).
+147. **One Metaculus scheduled run exited -1 and wrote nothing (found 2026-09-18, trigger: a second -1
+    within 7 days).** The 11:35 run returned 4294967295 and left `last-mc.json` / `last-kalshi.json` at the
+    10:35 mtimes; the 12:35 run and a hand run were both rc=0 and wrote normally. No data lost - the shadow
+    is idempotent and re-reads the universe each hour. Not to be confused with the shadow's real state,
+    which is NOT a defect: `pairs.jsonl` stopped growing at 01:36Z because the only remaining matches are
+    2028-2030 Metaculus questions whose nearest Kalshi market closes Dec 2026 and are refused by the 60-day
+    close-date guard. 102 pairs, 9 open, 0 graded; nothing has resolved yet.
+
+- **65 / 72 / 129 / 130 / 134 READ 2026-09-18** (details in `docs/MAINTENANCE-LOG.md`, 2026-09-18 section 6).
+  65: 217 paired forecasts, **0 paired AND settled** - nothing to report, re-read daily until 20.
+  72: cohort stop rule ran with **both bars met for the first time** (1,354 contracts, 6 day-clusters) and
+  is **UNDECIDED**, new-coin 95% [-6.81, +3.82]c; auto-narrow to BTC/ETH on 2026-10-04 if unchanged.
+  129: main scan median **11.9 s** (p90 17.1 s) against 15.0 s on 09-17 and 38.1 s on 09-16, **0** app-side
+  429s - the read lane does not need lowering. 130: confirmed on the venue ledger; ZEC has **1 settlement in
+  six days**, so its Polymarket book essentially never passes the spread gate. 134: **PASS**, 2 `Kalshi leg
+  failed` lines in 24 h against ~8,600 cycles.
+
+- **Numbering collision, 2026-09-18.** An interactive session and the headless maintenance run were both
+  appending here and both reached for 140/141 within the same hour (the interactive one committed first, at
+  15:54Z, and its `git add -A` also swept the maintenance run's uncommitted source changes into its commit).
+  The maintenance items were renumbered to 144-147. If you are about to append: take the max of
+  `grep -oE '^[0-9]+\. \*\*' docs/BACKLOG.md` AT WRITE TIME, not at read time, and check `git log` for a
+  commit newer than the one you started from.

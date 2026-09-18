@@ -3530,3 +3530,330 @@ The report is written to `docs/reports/2026-09-17.md`, and the desktop task at 0
 9. Two sentinel incidents today, both closed; no incident is open; the sentinel itself is fresh.
 10. Nothing needs the operator. IB Gateway is still off (his to start) and the router's DNS is still broken for
     three names, none of which this project now depends on.
+
+
+## 2026-09-18 15:39Z - daily maintenance (headless, task OracleTrader-Maintenance, 11:30 local catch-up)
+
+The 07:00 and 07:05 runs and the 08:05 repair session all exited 1 on "You've hit your weekly limit -
+resets 11am (America/New_York)". This run is the 11:30 local catch-up added in commit e73ced0 this
+morning, and it is the first live proof that the per-day idempotence guard (keyed on SUCCESS) does not
+suppress the catch-up after failed attempts. Incident 2026-09-18T12-05-maintenance-failed is now CLOSED
+NOT-A-DEFECT.
+
+Note for anyone reading the git log: three build items were finished earlier today (11:19-11:38 local) by
+a separate session - 136 state backup, 132/127/128-step-1 lead-lag re-baseline and the 10 s poll, 139
+Manifold removal. This section does not repeat them; it covers the maintenance run itself.
+
+## 1. Liveness
+
+- App **up**, 4 electron processes, restarted 15:36:02Z by that earlier session; `main.log` age 0 min.
+- `ladder.json` `lastRunAt` **15:38:02Z**, inside the 2 h bar.
+- BTC collector **up** (`node scripts/btc-collector.mjs`, pid 31316).
+- Nightly review `reviews/2026-09-18.md` present (written 06:23Z), `attempts: 1`, no error.
+- Sentinel `status.json` **15:49:08Z**, fresh; the task returned rc=0 on the tick I started after the code change.
+- Hourly shadows all inside 2 h: HRRR 15:20Z, mention 14:50Z, Polymarket-consensus 15:00Z, Metaculus 15:50Z.
+- **DOWN and fixed: the spot-first recorder.** `data/spot-shadow/recorder.log` stopped at **13:32:12Z** and
+  the last row was written 13:34Z; no `node scripts/spot-shadow.mjs` process existed. Restarted visibly via
+  `Start-ScheduledTask OracleTrader-SpotShadow` at **15:43:29Z** and verified collecting (Coinbase ws
+  subscribed, window 15:30Z resolved on all five coins, PM ws subscribed). **2 h 09 m of the pre-registered
+  spot-first dataset is lost**, four days before its 2026-09-21 verdict (queue 84). Cause NOT established:
+  the script already has `unhandledRejection`/`uncaughtException` handlers that log and continue, and the log
+  ends on a clean heartbeat with `errors 0`, so it was not an uncaught throw; there is no Windows error
+  report; the Scheduled Task discards stderr, so an OOM (173 M WebSocket messages over a 3-day process) would
+  leave exactly this evidence and so would a kill. Recorded as backlog 145.
+- **mmsim is halting itself, by design, and it is now doing it twice a day.** See section 4b.
+
+## 2. Evidence
+
+**Venue-true 24 h** (`scripts/venue-pnl.py` on fresh GET-only dumps, `--since 2026-09-17T15:40:00Z`):
+
+- **Kalshi: 215 settlements, net +$5.34 after $4.35 fees.** The lead-lag 15-minute family is the whole of
+  it: BNB +$3.16, XRP +$2.61, DOGE +$1.96, SOL +$1.43, BTC +$1.09, ZEC +$0.51 against **HYPE -$1.74 and
+  ETH -$0.75**. Outside it, one bad night of single-contract sports NO legs (-$1.04 to -$0.98 each on
+  LALIGA/NFL/EFL/CHNL1/UEL BTTS and silver) against KXUEL1HSPREAD +$2.01 and MLBRFI +$1.76.
+- **Polymarket US: 0 resolutions, $0.00.** Balance $39.85, nothing open, nothing resting.
+- Kalshi balances by shard: **0: $12.37, 1: $0.00, 2: $25.33, 3: $28.27** (cash $65.98), 30 positions at
+  cost $30.90, 5 resting orders, equity $96.88 at cost / $91.47 at market. Stake is $1 (`amountPerTrade`)
+  against a `maxBalancePct` ceiling of 25% = $24.22: **every configured stake is covered on both venues**,
+  and shard 0 does not bind while every weather arm is retired.
+
+**Kill switch:** clear. `state.dailyPnl` -$2.75 realized, `tripped: false`; `venueDay` +$4.28 over 129
+settlements; 32 trades today (cap 200).
+
+**`trade-quality.mjs`** - live Kalshi book, all-time by arm: fade 243 trades +$8.18 (+4.50c/contract,
+event CI +1.04..+7.96), mean-reversion 14 +$19.18, consensus 87 -$0.34, volume-spike 68 -$4.80,
+momentum 54 -$10.63, book-imbalance 37 -$12.42, sports-anchor 11 -$5.64, flow-follow 14 -$3.20,
+cross-venue 3 -$0.20, news 1 -$0.11. Flags "REVIEW: losing" on book-imbalance, momentum, sports-anchor,
+volume-spike, flow-follow - of those only volume-spike and sports-anchor are still enabled. Polymarket US
+-$16.25 lifetime over 237 closed trades, all arms disabled. Quoter shadow: 44 fills, +4.61c/contract over
+33 events, CI [-8.28, +17.51], adverse 50%.
+
+**Gates:** `btc-gate` **FAIL / NOT YET** - 276 events, 738 graded strike-trades over 17 days, net
++0.08c/contract, day-clustered CI [-1.11, +1.26], Bonferroni LB -2.58c against a +1c bar.
+`quoter-shadow-gate` **insufficient sample** - allowed cohort 35 settled proxy fills over 21 events against
+a 30/40 bar, +7.69c [-8.54, +23.91]; blocked cohort -4.75c [-7.28, -2.23] over 1,059, which supports the
+gates as a filter and says nothing about the strategy behind them.
+
+**Odds API spend:** **380 of 645 today** (490 yesterday). Under budget.
+
+**Sharp anchor, out of sample:** gradedN **767**, gradedBrierSum 84.997 -> **mean Brier 0.1108**; ruleN
+**390**, ruleNet **+$22.635 = +5.80c/contract**. `anchor-grades.jsonl` **771 rows, +117 since yesterday**,
+newest 14:41:30Z - so **backlog 135 is resolved**: the `kalshi-settled` sweeps now report 6, 16 and 6
+matchable on NPBTOTAL/KBOTOTAL/KBOGAME instead of yesterday's `0 matchable`, and the grader is current
+rather than a day behind.
+
+**Errors, last 24 h:** 1,066 warn + 2 error. **1,065 of the warns are the single IBKR Gateway-down
+signature** (suppressed to 2026-09-24, external: only the operator starts IB Gateway), and the 2 errors are
+the `ibkr:snapshot` / `ibkr:markets` handlers during the same outage. The **last** such line is 12:37:21Z
+and the lab has been scanning since (`scan 4057`, 25/30 fresh pairs, 111 paper positions, 279 closed), so
+the gateway came back by itself and the 23-arm paper lab is collecting again - which is the check the
+suppression note demanded instead of trusting the signature's silence. **Zero real HTTP 429s in the app
+log** (the 35 lines matching "429" are digits inside counters, not statuses).
+
+**Silent-strategy checks the prompt names:**
+
+- `[convergence]`: scanning - `in window 188: margin-out 173 cost-out 12 no-vol 0 edge-out 3 event-dup 0
+  limits 0 | graded 10 (W:9 L:1) PnL -27c`. Refusing on margin, which is the gate doing its job.
+- `[quoter] fair-value on N of M`: **still absent**, third day (backlog 113). The arm is disabled under the
+  operator hold and logs `disabled: 117 candidates, would quote 0 (4 gated)` instead. That checklist line in
+  the maintenance prompt is stale while the arm is off; it is not a new defect.
+- `[cross-venue]`: `256 universe, searched 4 from offset 40, 0 candidates | refused
+  {"no-asset-or-title":14,"below-similarity":4}` - the rotating budget from round 117 is working and
+  **`below-similarity` is still the whole refusal on every search made**, which is backlog 133's open
+  question (the matcher, not the threshold).
+- `[dutch]`: 1,600 events scanned (59 exclusive), 0 arb slates, opps 152, executed 0.
+- WebSocket agreement (queue item 2): **315 / 320 = 0.9844 on the current process only**, below the 0.99
+  bar. The counters are per-process and the app restarted at 15:36Z, so this is not a day's slice and the
+  seven-day streak is still not computable (backlog 56). Day 0.
+
+**Shadows:** HRRR **297** graded station-days, MAE **1.96** (bias -0.37) vs NBM **2.29** (bias -1.54),
+closer on 157 vs 130 (10 ties). Mention shadow: **82 graded**, Brier base 0.2132 vs **market 0.1112** - the
+market still wins, and the 39 counterfactual 15c-gap trades lose **1.97c/contract**. Polymarket consensus:
+8,416 signals, **7,282 graded**, hit 0.71 at mean price 0.71, Brier 0.0892, **+5.47c/contract at the Kalshi
+ask net of fee** (n=1,162) and +4.11c at the Polymarket US price net of fee (n=1,123). Metaculus: **102
+pairs, 9 open, 0 graded** - see section 4c. Spot-first: restarted, verdict 2026-09-21.
+
+## 3. Ladder verdicts against the venue ledger
+
+The ladder is running (`lastRunAt` 15:38:02Z) and made **no stage transition** in the last 24 h. Stages:
+tiny-live on convergence, kalshi-fade, kalshi-volume-spike, kalshi-cross-venue, kalshi-news, kalshi-dutch,
+kalshi-leadlag, kalshi-sports-anchor, kalshi-mean-reversion, kalshi-consensus; disabled or held on quoter,
+settlement (paper), polyus-micro-maker, polyus-fade, polyus-book-imbalance, polyus-weather-fair,
+kalshi-momentum (cool-down to 09-27), kalshi-book-imbalance (cool-down to 09-25), kalshi-flow-follow,
+kalshi-weather-morning.
+
+**Backlog 112 is SOLVED, and it was never an arithmetic error.** The ladder reads
+`kalshi-leadlag: 35 settled since stage start, net -$0.23`. Stage start is 2026-09-17T09:16:16Z. On the
+venue ledger over exactly that window, `KXBTC15M` is **n=17, +$1.48** and `KXETH15M` is **n=18, -$1.71**:
+**35 settlements, -$0.23, to the cent.** The ladder's evidence join is `leadLagRowCounts`
+(`src/main/ladder/ladder.ts:115`), which drops any sweep whose coin is not in `leadLagProvenCoins` - still
+the round-93 default `BTC, ETH`. So the ladder is not miscounting the arm; it is counting the **proven-coin
+subset on purpose**, exactly as `docs/PREREGISTERED-leadlag-coins.md` addendum 2026-09-13 specifies. The
+2026-09-16 "-$0.82 against `leadlag-coins.mjs` -$60.47" gap has the same cause: that script reads all coins,
+the ladder reads two. **No factor of seventy, no defect - two different cohorts.**
+
+What that leaves is a real and uncomfortable fact rather than a bug: over the same stage window the six
+unproven coins settled **+$6.71 over 173 settlements** while the two the ladder judges by settled -$0.23,
+so the arm's next checkpoint (at 40 proven-coin settlements, 5 away) will decide the **whole** arm on
+**BTC and ETH alone** - and those are two of the three worst coins in the cohort read below. I have not
+touched it: a pool that cannot stop a subset is the pre-registered design, and re-cutting the cohort on the
+day its number looks inconvenient is exactly the re-fitting the pre-registration forbids. Recorded as
+backlog 144 with the checkpoint as its trigger.
+
+**Cohort stop rule, run today** (`node scripts/leadlag-coins.mjs --json --since 2026-09-13T10:05:00Z` on
+the fresh dump). Both bars are now met - **1,354 contracts** on the new coins (bar 400) over **6
+day-clusters** (bar 5) - and the verdict is **UNDECIDED**: the new-coin day-clustered 95% interval is
+[-6.81, +3.82] around -1.50c/contract, so neither the "upper bound < 0 -> narrow back to BTC/ETH" branch nor
+the "lower bound > 0 -> leave it" branch fires. Per the pre-registration that means keep collecting and
+re-read daily, with an automatic narrow-back on **2026-10-04** if it is still undecided. Per coin since
+09-13: BNB +3.05c, SOL +2.55c, ETH +0.30c against XRP -3.43c, HYPE -3.22c, DOGE -9.95c and **BTC -6.17c
+(95% [-12.28, -0.07], the only coin whose interval excludes zero, and it is negative)**. Established
+BTC/ETH -2.55c, new coins -1.50c, pooled -2.02c. Note the window deliberately spans the era backlog 132
+voided for SIGNAL grading; the venue ledger is real settled money and is unaffected by how the signal was
+priced, so this read stands.
+
+## 4. What changed today
+
+### 4a. The sentinel now watches the spot-first recorder (the day's build)
+
+`scripts/sentinel.mjs` watched four hourly shadow tasks for staleness with one 130-minute threshold. The
+spot-first recorder is a Scheduled Task too, but a **continuous** one - the task starts a process that then
+lives for days - and it was in no watch list at all, which is why its death at 13:34Z cost 2 h 09 m today
+and would have cost the rest of the day if this run had not looked. 130 minutes would not have caught it in
+time either.
+
+- new `scripts/lib/task-watch.mjs`: the watch table and the `isStale` rule, with a per-row threshold that
+  falls back to 130 min. It is a separate module because `sentinel.mjs` runs a live tick on import, so the
+  table could not otherwise be asserted by a test.
+- `scripts/sentinel.mjs` imports it; the loop body is unchanged apart from calling `isStale`.
+- `data/spot-shadow/recorder.log` added at **20 min** (its heartbeat is every 10 min), reviving
+  `OracleTrader-SpotShadow` through the same `startTask` path and the same 3 h re-revive guard as the
+  others. Detection goes from "whenever a human looks" to one sentinel tick, at most 35 min.
+- new suite `scripts/tests/task-watch.test.mjs`, wired as `npm run test:task-watch` (so `npm test` picks it
+  up automatically): 11 rule assertions including the two regressions that would bring today back - dropping
+  the spot row, and letting a continuous recorder inherit the hourly allowance - plus the exact 127-minute
+  gap observed today, asserted to trip the 20 min threshold and NOT the default.
+
+Verified: `npx tsc --noEmit` rc=0; `npm test` **18/18 suites passed** in 9.7 s; `npx electron-vite build`
+rc=0; `node scripts/sentinel.mjs --dry` clean; a real `Start-ScheduledTask OracleTrader-Sentinel` tick at
+15:49:08Z returned **rc=0** and wrote a normal `status.json` (no `spot-shadow-stale` finding, correctly -
+the recorder was 6 minutes old). Backup `MAINT-2026-09-18` written
+(`oracle-trader-MAINT-2026-09-18-20260918-114812.zip`, 1,731 files, 518 MB).
+
+**The app was NOT restarted.** Nothing in this change touches the trading app - the sentinel is a plain
+node script the task re-runs from source every 15 minutes - and the app was already restarted at 15:36:02Z
+on the current build. Bouncing a live trader holding 30 positions and 5 rests to prove a no-op would be the
+riskier choice, so it was not made.
+
+### 4b. mmsim is being throttled off the box by our own request rate (found, not changed)
+
+The market-making simulator has died repeatedly and the sentinel's "still stale after a relaunch" finding
+made it look like a broken relaunch. It is not. Its own row file says so:
+`{"event":"halt","reason":"429-storm","detail":"3 throttles within an hour; exiting rather than competing
+with live trading"}` - twice today (12:34Z and 13:42Z), and the relaunch in between worked fine.
+
+mmsim uses the **public unauthenticated** Kalshi endpoint, so it shares the per-IP budget with the live
+trader. `http429` events per day: 09-13 **6**, 09-14 **1**, 09-15 **3**, 09-16 **7**, 09-17 **12**, 09-18
+**11 in 13.7 h** - the step is at round 115 (2026-09-17 08:07Z), which raised the app's Kalshi lanes to
+10 reads/s and 15 writes/s. Today's 10 s lead-lag poll (15:28Z) lands on top of that and its effect is not
+in these numbers yet.
+
+Nothing changed. mmsim's 429 policy is **pre-registered** - altering any parameter mints a new `runId` and
+restarts the 35-day clock, so "just raise the threshold" would destroy the run it is meant to protect - and
+the halt is the protective behaviour working. But at roughly 40 minutes of collection per 3 h revive cycle
+the falsification run (verdict 2026-10-17) is quietly being gutted, which is backlog 119's integrity concern
+arriving by a new door. Recorded as backlog 146 with a 2026-09-19 trigger, so the 10 s poll's contribution
+is measured against today's 11 before anyone reasons about it.
+
+### 4c. Metaculus shadow: not a defect, plus one failed task run
+
+`pairs.jsonl` has not grown since 2026-09-18T01:36Z, which looks like the failure mode the prompt names.
+It is not: a manual run exits **0** and logs `matches 0; pairs stored 0; event without a clear market 6`.
+The six candidates are all long-horizon Metaculus questions (2028-2030) whose nearest Kalshi market closes
+Dec 2026, so they are refused by the 60-day close-date guard, and everything genuinely matchable is already
+in the 102 stored pairs (the `seen` set). 9 pairs are open, 0 graded - nothing has resolved yet.
+Separately, the **11:35 scheduled run exited -1 and wrote nothing** (the 12:35 run and my manual run were
+fine); one bad run, no data lost, now visible as a sentinel `task:` notify. Backlog 147 to watch the rate.
+
+### 4d. A second session was editing this repo during the run
+
+At 15:52-15:54Z an interactive session committed `746e500 fade: reprice a resting maker order only on a 3c
+move` - a **behavioural change to the live fade arm** (`autoTrader.ts` now requires a 3c move before chasing
+a resting maker order, on the finding that amended maker markets ran -2.17c/contract against +0.33c for
+never-amended ones) plus a fade loss-distribution read that concludes the arm does not scale. That is that
+session's work and its own evidence; it is recorded here only because it lands inside this run's window and
+the operator should not have to reconcile two accounts of the same day.
+
+Two consequences for this report. First, its `git add -A` swept this run's uncommitted source changes -
+`scripts/lib/task-watch.mjs`, `scripts/tests/task-watch.test.mjs`, the `sentinel.mjs` import and the
+`package.json` wiring - into that commit, so section 4a's code is in `746e500` rather than in the
+maintenance commit, and the maintenance commit carries the documentation only. Nothing was lost and nothing
+was overwritten. Second, both sessions reached for backlog numbers 140 and 141; the maintenance items are
+renumbered **144-147** and a standing note on how to avoid the next collision is at the end of
+`docs/BACKLOG.md`. `tsc` and the full suite were re-run on the merged tree, after that commit, and are green.
+
+## 5. Sentinel
+
+`status.json` at 15:49:08Z (bar: 30 min) - live. **1 incident opened today**
+(`2026-09-18T12-05-maintenance-failed`), dispatched to a repair session that died on the same weekly quota;
+**closed NOT-A-DEFECT by this run** with the catch-up verification written into the file. **No incident is
+now OPEN** (the only other `Status: OPEN` in the directory is inside the 09-08 drill, which is closed at the
+end of its own file). 1 repair session used of the 3/day budget. Standing notifies: `mmsim-stale` (section
+4b), `horizon-kalshi:KXNCAAMBUAC-27-EKY` (a position closing more than 45 days out), and the new
+`task:OracleTrader-MetaculusShadow last result -1` (section 4c). Suppressions: 4 on file, all still within
+their stated expiry, none renewed today; `[reconciler] run failed: GET /vN/portfolio/activities` lapsed at
+2026-09-18T00:00Z and was deliberately **not** renewed - the reconciler is current
+(`fill-reconciler-kalshi.json` 15:36Z, `-polymarket-us.json` 15:37Z) and backlog 52 is still the fix.
+
+## 6. Build-queue trigger checks (every one, as the prompt requires)
+
+1. **Critic skill** (daily) - trigger MET, **rule does NOT fire, nothing changed**, sixth day running. 1,812
+   decisions; settled 351 ABSTAIN / 240 VETO / 65 ERROR / 12 ALLOW_UNCHANGED. The raw read says switch
+   (ABSTAIN +2.7c, VETO -2.8c, and the script prints "consider veto mode"). Amendment 2 (currently enabled
+   arms only) decides it again: of the arms live on the ladder and present in both cohorts - consensus,
+   fade, mean-reversion, volume-spike - VETO's own net is **+$3.33 over 158, i.e. +2.1c**, which fails
+   condition (i) outright, and the critic is skilled in 2 of 4 (consensus -6.8c, volume-spike -22.9c)
+   against anti-skilled in 2 (fade +3.2c, mean-reversion +23.4c), which is not a strict majority and fails
+   (iii). Only (ii) passes. The `intelligenceEnabled: false` clause is not reached: skill is
+   composition-dependent, not absent.
+2. **WebSocket book** - NOT met, 0.9844 on the current process, and still not computable as a day's slice
+   (backlog 56). Day 0 of 7.
+3. **HRRR source** - half met (297 station-days, HRRR MAE 1.96 vs NBM 2.29, closer 157-130); the
+   **2026-09-21** date still binds.
+4, 5. **Kalshi fill channel / Avellaneda-Stoikov** - NOT met (quoter notch 1, disabled under operator hold);
+   see backlog 37, the trigger may be unreachable by retirement.
+6. **Sports anchor on Polymarket US** - NOT met: the Kalshi anchor's stage net is -$0.50.
+7. **Player props** - NOT met (anchor notch 1).
+8. **Generic strategies, item (c) maker rest patterns** - NOT met: gated on mean-reversion v3 showing fills
+   and a positive checkpoint; MR is tiny-live at -$2.64.
+65. **Challenger paired read** (on/after 2026-09-18) - **MET, run, nothing to report**:
+   `node scripts/hunch-paired.mjs` reads 1,399 incumbent forecasts, 217 challenger, 217 paired, **0 paired
+   AND settled**. The challenger started 09-12 into markets that close days out; re-read daily until 20.
+66. **cull-gate read** - NOT met (2026-09-19).
+67. **Momentum log-odds verdict** - NOT met (2026-09-21).
+68. **Mention shadow** - NOT met on both halves: 2026-09-25, and 82 graded of 100.
+69. **Momentum cool-down** - NOT met (2026-09-27); the ladder holds it at demotions 2.
+70. **mmsim verdict** - NOT met (2026-10-17), and see 4b for whether it will have the rows.
+72. **Lead-lag coin cohort** (daily) - **MET and run: UNDECIDED**, section 3.
+84. **Spot-first verdict** - NOT met (2026-09-21); today's gap is recorded against it.
+86. **Weekly lead-lag basis** - NOT met (first read Monday 2026-09-21).
+125. **Paper-lab first reads** - NOT met (2026-09-24).
+129. **Main scan time after the pacing change** (2026-09-18) - **MET, read**: median scan **11.9 s**, p90
+   17.1 s over 1,115 scans today, against 15.0 s on 09-17 and **38.1 s** on 09-16. Phase split on the last
+   scan: universe 6.7 s, data 4.1 s, signals 2.6 s, exits 2.2 s, pending 0.9 s, the rest under 200 ms.
+   **Day's 429 count on the app's Kalshi lanes: 0** (it was 4 over 09-16/17). The read lane does not need
+   lowering; the cost has moved to the public endpoint instead (4b).
+130. **Eight-coin lead-lag first read** (2026-09-18 12:00Z) - **MET**; the substantive read was done at
+   15:28Z by the earlier session and is confirmed here on the venue ledger (sections 2 and 3). The one part
+   it left open, ZEC: **1 settlement, 1 contract, in six days** - its Polymarket book essentially never
+   passes the spread gate, so ZEC is not yet a cohort member in any meaningful sense.
+134. **Lead-lag orderbook leg failures** (2026-09-18 12:00Z) - **MET, PASS**: **2** `Kalshi leg failed`
+   lines in 24 h against roughly 8,600 ten-second cycles, far under the 1% bar, so the public orderbook
+   endpoint is not rate-limiting the quote and no move to the authenticated batched endpoint is warranted.
+137. **ETH and HYPE verdict** - NOT met: 2026-09-21 or 100 orderbook-priced rows per coin, and they are at
+   **34 and 44**. Both stayed negative on both measures today (ETH -6.33c graded, HYPE -1.99c).
+138. **Lead-lag at 10 s, first read** - NOT met (2026-09-19 12:00Z).
+
+**Item taken:** none of the met triggers required a build (1 declines by its own rule; 65, 72, 129, 130 and
+134 are reads). The day's build is section 4a, taken from the liveness failure this run actually found,
+which is the queue's own standing rule that a silent recorder death is a defect to fix rather than a result.
+
+## 7. Backlog
+
+Added 144 (the ladder judges lead-lag on its two worst coins), 145 (spot-first recorder died with no cause
+on disk), 146 (mmsim throttled off the public endpoint by our own rate), 147 (Metaculus task exit -1).
+Closed 112 (reconciled exactly; it was two cohorts, not an error) and 135 (the anchor's `0 matchable`
+sweeps). Recorded the readings for 65, 72, 129, 130 and 134 in place.
+
+## 8. For the operator - nothing is due
+
+No ladder scale-up exceeds `maxBalancePct` x equity ($1 stake against a $24.22 ceiling); both venue balances
+cover every configured stake; no subscription or credit balance failed (OpenRouter $15.34). The one thing
+worth his eye, non-blocking: **IB Gateway was down from before 03:45Z until 12:37Z** and the 23-arm IBKR
+paper lab collects nothing while it is off - it is back now, on its own, and the suppression that hides the
+1,065 warn lines expires 2026-09-24. Only he can start it.
+
+## 9. Delivery
+
+This is the headless runner, so it has no `SendUserFile` and no `PushNotification`. The day's section is
+written to `docs/reports/2026-09-18.md` for the 08:30 desktop delivery task.
+
+## 10. Ten-line summary
+
+1. Venue-true last 24 h: **Kalshi +$5.34** after $4.35 fees over 215 settlements; **Polymarket US $0.00**.
+2. The whole of it is the lead-lag 15-minute family; **HYPE -$1.74 and ETH -$0.75** are the only losers in it.
+3. **No ladder transition** today; lead-lag tiny-live, next checkpoint 5 settlements away.
+4. **Backlog 112 solved**: the ladder's -$0.23 over 35 matches BTC+ETH on the venue ledger **to the cent** -
+   it judges the proven-coin subset on purpose, so there was never a seventy-fold error.
+5. But that means the next checkpoint decides the **whole** arm on its two worst coins, while the other six
+   earned **+$6.71** in the same window. Not touched - re-cutting a cohort on the day is re-fitting. Backlog 144.
+6. Coin cohort stop rule ran with both bars met for the first time: **UNDECIDED** ([-6.81, +3.82]c),
+   auto-narrow to BTC/ETH on 2026-10-04 if it stays that way.
+7. **Fixed:** the spot-first recorder was dead for 2 h 09 m and in no watch list; restarted, and the sentinel
+   now watches it at 20 minutes (new module + 18th test suite, tsc/build/18-of-18 green).
+8. **Found:** mmsim halts itself on a 429 storm twice a day - our own raised request rate is throttling it off
+   the shared public endpoint, and its 35-day run is losing hours. Pre-registered, so recorded not changed.
+9. Sentinel healthy, the day's one incident closed NOT-A-DEFECT (the 07:00 runs hit the weekly model quota;
+   the new 11:30 catch-up is what produced this report, verified live). A **second session** also committed a
+   live fade change at 15:54Z and swept this run's source files into its commit - see 4d; suites green after.
+10. **Nothing is needed from the operator.** IB Gateway was down 03:45Z-12:37Z and came back on its own.
