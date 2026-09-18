@@ -125,3 +125,18 @@ them measured the hypothesis this document registered. Fix: the list moved into 
 For grading: count only positions entered at or after the restart on the round-97 bundle (2026-09-15) toward
 the 40-contract / 5-cluster judgment. Positions sold early before that are recorded here and excluded; they
 are neither wins nor losses of the registered rule. The -$8 hard money stop still counts every dollar.
+
+## Amendment 2026-09-18 16:40Z: judgment reached; a throughput repair
+
+**Judgment.** 86 settled markets, 260 contracts, 5 day-clusters (2026-09-14 to 09-18), venue ledger:
+net **+$0.31, +0.12c/contract**, day-clustered 95% band **[-6.35, +6.59]**. Neither the stop condition
+(upper bound < 0) nor the promotion condition (lower bound > 0) is met. The arm continues at micro size
+under the ladder; the -$8 hard stop and the 2026-10-13 deadline stand. Four of five days were negative;
+09-16 (+$7.65, ATP challenger) carried the total. The shadow's ATP category grades -0.4c over 302 signals,
+so that day is recorded as variance, not as evidence for tennis.
+
+**Throughput repair (round-96 precedent: plumbing, not rule).** `consensusSignals()` allows ten market
+fetches per scan for signals outside the scan universe. It counted cache hits against that ten; the feed
+is stably ordered, so rows 11+ were refused `fetch-budget` every scan since the arm went live (51-75 of
+~95 fresh signals a scan, measured 09-14 to 09-18). Only a real venue call now spends the budget. Entry
+rule, sizing, grading and the stop rule are unchanged; the grading cut is not moved.

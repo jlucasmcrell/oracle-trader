@@ -22,6 +22,49 @@ try {
   assert.equal(second.getConfig().maxOpenPositions, 7)
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27)
 
+  // ---- consensus fetch budget spends venue calls, not cache hits (2026-09-18) ----
+  // The feed lists signals in a stable order. Counting cache hits against the 10-per-scan
+  // budget froze the window on the first ten rows; rows 11+ were refused every scan.
+  // This file is CJS-required by the runner, so the async part runs as an IIFE with an exit
+  // guard: an unfinished or failed block sets a non-zero exit code.
+  let budgetDone = false
+  process.on('exit', () => { if (!budgetDone && !process.exitCode) { console.error('consensus budget test did not finish'); process.exitCode = 1 } })
+  // Its own directory: the file-level finally removes `home` before this continuation runs.
+  const bdir = mkdtempSync(join(tmpdir(), 'oracle-budget-'))
+  void (async () => {
+    const { ConsensusFeed } = require('../../src/main/strategies/consensus')
+    const nowMs = Date.now()
+    let fetches = 0
+    const adapter = {
+      getMarket: async (id: string) => { fetches++; return { id, venue: 'kalshi', question: id, status: 'open', outcomeType: 'BINARY', closeTime: nowMs + 48 * 3600_000, probability: 0.6 } },
+      getOrderBook: async (id: string) => ({ venue: 'kalshi', marketId: id, bids: [{ price: 0.58, size: 10 }], asks: [{ price: 0.62, size: 10 }] })
+    }
+    const t: any = new AutoTrader({ getAdapter: () => adapter, getExecutionMode: () => 'paper' } as any, join(bdir, 'budget.json'))
+    const feedPath = join(bdir, 'signals.jsonl')
+    const rows = Array.from({ length: 15 }, (_, i) => JSON.stringify({ ts: new Date(nowMs).toISOString(), conditionId: `0x${i}`, title: 't', outcome: 'Yes', n_wallets: 4, poly_price: 0.6, kalshi: { market: `KXB${i}-Y`, yes_ask: 0.62 } }))
+    writeFileSync(feedPath, rows.join('\n') + '\n')
+    t.consensusFeed = new ConsensusFeed(feedPath)
+    const scan = () => ({ candles1m: {}, candles1h: {}, trades: new Map(), books: new Map(), headlinesByMarket: new Map(), live: new Map(), marketsById: new Map() })
+    const logs: string[] = []
+    const realLog = console.log
+    console.log = (...a: unknown[]) => { logs.push(a.map(String).join(' ')) }
+    let first: any[], second: any[], fetchesAfterFirst = -1
+    try {
+      first = await t.consensusSignals(scan())
+      fetchesAfterFirst = fetches
+      second = await t.consensusSignals(scan())
+    } finally { console.log = realLog }
+    const refusedOf = (line: string) => JSON.parse(/refused (\{.*?\})/.exec(line)?.[1] ?? '{}')
+    const lines = logs.filter((l) => l.startsWith('[consensus]'))
+    assert.equal(first.length, 10, 'scan 1 evaluates ten signals')
+    assert.equal(refusedOf(lines[0])['fetch-budget'], 5, 'scan 1 refuses the five past the budget')
+    assert.equal(fetchesAfterFirst, 10, 'scan 1 spends the whole budget on venue calls')
+    assert.equal(second.length, 15, 'scan 2 evaluates every signal: cached markets are free')
+    assert.equal(refusedOf(lines[1])['fetch-budget'], undefined, 'scan 2 refuses nothing for budget')
+    assert.equal(fetches, 15, 'scan 2 fetches only the five it had not seen')
+    budgetDone = true
+  })().catch((e) => { console.error(e); process.exitCode = 1 }).finally(() => rmSync(bdir, { recursive: true, force: true }))
+
   // ---- v27 (2026-09-18): the fee-model fix ---------------------------------
   // netCentsOf() used to divide an already per-contract fee by the contract
   // count a second time. netSum/netSq/byEvent/byDay are running SUMS, so the

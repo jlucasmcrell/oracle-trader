@@ -88,9 +88,13 @@ speed-and-selectivity edge: the gap has to still exist when the order lands.
    At 14 s the gap we are trading is long gone; we were systematically buying what someone
    else had already corrected.
 4. **Stale quotes throughout** - the Kalshi price came from a cached list endpoint. Gaps that
-   looked like 10c were often 0c. This did not change on 09-12, but it is why the recorded
-   "signal" stayed strongly positive through the losing streak: the measurement and the
-   trade shared the same wrong price.
+   looked like 10c were often 0c. This did not change on 09-12, so it is not a cause of the
+   streak, but it is why the recorded "signal" stayed strongly positive through it: the
+   measurement and the trade shared the same wrong price. Note what staleness did NOT do:
+   the IOC always executed against the real book, never the stale price, so it never paid
+   us and never charged us. Measured paid-minus-quoted: era A mean -2.31c (46% of fills
+   better than quoted, 31% worse), era D on orderbook quotes -0.05c (91% identical). Fresh
+   quotes remove decision noise; they are weakly better, never worse.
 
 The 09-13 kill-switch trip (§88) is the same story: correlated windows, seven coins, one
 direction, all at 14 s latency.
@@ -106,25 +110,85 @@ direction, all at 14 s latency.
 - Graded signal on honest quotes is **+1.35c/contract**, and realized fills are **+1.86c** -
   execution is no longer worse than the signal. Both are a fifth of period A's +8.94c.
 
-## 6. The other arms, briefly
+## 6a. The other arms, briefly
 
 - **fade** (+$8.18, 243 trades, 95% wins) - calibration z = **+0.15**: it wins exactly as
   often as its 0.95 entry prices imply. No edge; the profit is inside noise (t=1.99).
-- **mean-reversion** (+$19.18 on 14 trades) - two outlier markets (LALIGA +$22, ATP +$10).
-  Variance, not evidence.
 - **weather maker** (-$45.97) - retired 09-09 after the seat measured -1.70c/contract over
   801,258 venue-wide contracts. Correctly dead.
 - **book-imbalance** (-$12.42), **momentum** (-$10.63), **volume-spike** (-$4.80),
-  **sports-anchor** (-$5.64), **flow-follow** (-$3.20) - all negative, all small.
+  **flow-follow** (-$3.20) - all negative, all small.
+
+## 6. Sports: what won, what it was, and what it says
+
+**The two good sports days were two single clusters, not a process.**
+
+| Day | Sports net | What it was |
+|---|---|---|
+| 09-07 | +$10.40 | ONE market: LALIGA Elche v Real Sociedad, 38 contracts YES at 24c, resolved YES, **+$22.33**. The other four sports fills that day and the next lost $2.2-$2.9 each. |
+| 09-16 | +$11.94 | Consensus took 22 ATP challenger matches, 13 won, +$10.95. |
+
+**09-07's configuration** (`kalshi-auto.json.bak_20260907-041806`): mean-reversion v1, taker, no entry floor,
+`amountPerTrade` $5, `maxDailyTrades` 20 (hit by 08:52Z), `maxOpenPositions` 6, universe 40 markets at
+liquidity >= 150. That is a config that buys longshots quickly at size. Across its 7 sports settlements it
+was +$18.41; without the one lottery ticket, **-$3.92 on 6**. It is not a config to return to.
+
+**Consensus (the Polymarket smart-wallet arm), judged on every settled market, not just sports:**
+
+| | |
+|---|---|
+| Settled markets / contracts / day clusters | 86 / 260 / 5 |
+| Net | **+$0.31 (+0.12c/contract)** |
+| Day-clustered 95% band | **[-6.35, +6.59]** - includes zero both ways |
+| By day | 09-14 -3.01, 09-15 -0.96, **09-16 +7.65**, 09-17 -1.69, 09-18 -1.67 |
+
+The pre-registered judgment (>= 40 contracts, >= 5 clusters) is met and lands on **neither stop nor
+promote**. Our fills disagree with the signal grader in **both** directions: **+$15.07 on categories the
+grader marks negative** (atp -0.4c on n=302, wta -4.1c, mlb -3.3c) and **-$3.98 on the ones it marks
+positive**. The sports subset's +$9.18 is variance, and tennis in particular is not a signal we have.
+
+What the grader (7,306 graded signals, +5.56c at the Kalshi ask over 1,165 matched) does support: btc
+(n=2,280, +0.9c), weather "highest" (n=1,287, +0.55c), and small-n soccer/football (mls +7.7c n=41, spl
++6.1c n=35, nfl +3.4c n=97, cfb +2.3c n=77, uel/epl +1-2c). Tennis is flat, mlb negative. **No category
+filter was added**: the pre-registration's 40-contract judgment is the arbiter, and our own fills are too
+few to override the grader in either direction.
+
+**One throughput defect, fixed.** The arm allows ten market fetches per scan for signals outside the scan
+universe, but counted cache hits against that ten. The feed lists signals in a stable order, so the same
+ten rows were injected every scan and rows 11+ were refused `fetch-budget` on every scan - **51-75 of
+~95 fresh signals a scan were never evaluated at all**, from the day the arm went live. Now only a real
+venue call spends the budget; a regression test pins it (the old placement fails it).
+
+**Mean-reversion has the only backtested edge among the non-lead-lag arms, and it is not being run.**
+The 6c/10-minute move audit over 17.9M candles (§52) graded +2.2 to +3.6c/contract across 53,346
+signals. Live: **12 entries in 11 days**, +$19.18 app-attributed, of which +$22.33 is the LALIGA ticket.
+The momentum recorder, reading the **same** candle feed and market list, saw **154 qualifying setups on 42
+tickers on 09-17 and 132 on 35 tickers on 09-18**; the arm entered once. The signals are generated and
+then vetoed - and `stats.vetoed` (1,987,623 against 4,235 approvals, ~67 a scan) recorded neither which
+strategy nor why. A per-strategy gate tally now prints every 50 scans; the first read is item 143.
+
+**Sports-anchor** (The Odds API feed): 11 trades, 1 win, -$5.64. **Volume-spike** on sports: 24 markets,
++$0.39. **Momentum**: disabled at the -$5 stop.
+
+**What this says to do for sports.** Nothing here was a winning process that we changed away from.
+The order is: (1) let consensus evaluate its whole pool - done; (2) read the gate tally and unblock
+mean-reversion, the one arm with a measured prior; (3) stop treating tennis as evidence; (4) judge
+consensus's category mix at its next ladder checkpoint against the grader, not against our 59 fills.
 
 ## 7. What this says to do
 
 1. **Lead-lag is the only arm with a measured edge, and the edge is latency.** Every future
-   change to it should be judged first on what it does to sweep latency.
-2. **Period A's +8.94c is not recoverable by copying period A's config**, because period A
-   was also trading against cached quotes. What is recoverable is its discipline: few coins,
-   small size, fastest possible path. The honest baseline is today's +1.35c graded / +1.86c
-   filled.
+   change to it should be judged first on what it does to sweep latency, and second on what
+   it does to per-contract net at the day's contract count (capacity).
+2. **Period A's +8.94c is the target, not a fluke to be explained away.** Everything that
+   was true in period A (fast path, small size) is true again, and two things are better
+   (live quotes, no cap reads). The gap between A's +8.94c and D's +1.97c is unexplained on
+   283 contracts over two days; it needs a week. Coin count is NOT the lever: in era D the
+   added coins ran +2.44c against BTC/ETH's -0.51c, and in era B+C both were negative. More
+   coins with a real Polymarket 15-minute twin means more independent shots at the same
+   per-contract edge, not more contracts pushed into one market. What the daily table does
+   suggest is a capacity limit: +8c to +21c on 10-90 contract days, +7c at 516, negative or
+   flat at 677-1,765 (confounded with the latency breakage, but the hypothesis to test).
 3. **Do not raise size before latency is proven stable at the new poll rate.** The 09-12
    sizing increase is the single clearest before/after in the record: +12.0c -> +1.7c on
    unchanged coins and cadence.

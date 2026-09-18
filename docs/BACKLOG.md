@@ -1811,3 +1811,21 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   The maintenance items were renumbered to 144-147. If you are about to append: take the max of
   `grep -oE '^[0-9]+\. \*\*' docs/BACKLOG.md` AT WRITE TIME, not at read time, and check `git log` for a
   commit newer than the one you started from.
+
+- **142 DONE (2026-09-18 16:40Z).** Consensus pre-registered judgment reached: 86 settled / 260 contracts /
+  5 clusters, +0.12c/contract, 95% [-6.35, +6.59] -> continue at micro, neither stop nor promote. Fetch-budget
+  defect fixed (cache hits no longer spend the 10-per-scan budget; 51-75 signals/scan were never evaluated);
+  regression test in config-migration.test.ts, mutant fails. Amendment recorded in the pre-registration.
+143. **Gate tally first read (trigger: 2026-09-19 12:00Z).** `[gate] <strategy>: N generated, M vetoed (reasons)`
+    prints every 50 scans. Mean-reversion generated ~130 qualifying setups/day in the recorder and entered once in
+    five days; the tally names the veto. Act on the top reason for mean-reversion specifically (it has the only
+    backtested edge outside lead-lag: +2.2 to +3.6c/contract, §52). If it is absent from the tally, the verdict
+    function and the recorder disagree on inputs - diff `meanReversionVerdict` against the recorder's row builder.
+144. **Consensus category mix (trigger: the arm's next ladder checkpoint).** Compare the arm's settled net by
+    category against the shadow grader's per-category net at that time. Our 59 sports fills contradicted the
+    grader in both directions and are not evidence for a filter; the grader's positive categories are btc,
+    weather-highest and small-n soccer/football. Tennis is flat on 302 graded signals: never treat an ATP day as
+    a reason to size.
+- **Sports history (2026-09-18, TRADE-HISTORY report §6).** No sports arm had a winning process that was changed
+  away from. 09-07 was one 24c LALIGA ticket under the v1 taker/no-floor/$5 config (-$3.92 without it); 09-16 was
+  one ATP cluster. Sports-anchor (paid Odds API feed) is 1 win in 11 trades.

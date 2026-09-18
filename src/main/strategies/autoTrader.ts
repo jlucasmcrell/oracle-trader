@@ -632,6 +632,9 @@ export function shouldRepriceMaker(desiredYes: number, restingYes: number): bool
   return Math.abs(desiredYes - restingYes) >= 0.03 - 1e-9
 }
 
+/** Scans between [gate] tally lines: ~11 min at the 13 s scan. */
+const GATE_TALLY_SCANS = 50
+
 export class AutoTrader {
   private config: AutoTraderConfig
   private state: PersistedState
@@ -739,6 +742,14 @@ export class AutoTrader {
   private pendingBooks: { ts: number; ticker: string; lastPrice: number; predictedDir: 'YES' | 'NO' }[] = []
   private bookUniverse: VenueMarket[] = []
   private bookUniverseAt = 0
+
+  /**
+   * Per-strategy gate accounting, printed every GATE_TALLY_SCANS scans. `stats.vetoed` reached 1.99M against
+   * 4,235 approvals with no record of WHICH strategies were being refused or WHY; mean-reversion had ~130
+   * qualifying setups a day in the candle recorder and one entry in five days, and nothing could say where
+   * the other 129 went. A strategy absent from the line generated nothing that scan window.
+   */
+  private gateTally: { scans: number; byStrategy: Record<string, { generated: number; vetoed: number; reasons: Record<string, number> }> } = { scans: 0, byStrategy: {} }
 
   constructor(
     private readonly engine: TradingEngine,
@@ -1272,12 +1283,19 @@ export class AutoTrader {
       result.candidates = candidates.length
 
       const approved: AutoSignal[] = []
+      const tallyOf = (strategy: string) => (this.gateTally.byStrategy[strategy] ??= { generated: 0, vetoed: 0, reasons: {} })
+      // Numbers vary per signal (prices, counts); collapse them so reasons group.
+      const reasonKey = (r: string) => r.replace(/[\d.$]+/g, '#').slice(0, 44)
       for (const sig of candidates.sort((a, b) => b.score - a.score)) {
+        const t = tallyOf(sig.strategy)
+        t.generated++
         const gate = this.passesGates(sig, data)
         if (!gate.ok) {
           sig.aiVerdict = 'veto'
           sig.aiReason = gate.reason
           this.state.stats.vetoed++
+          t.vetoed++
+          t.reasons[reasonKey(gate.reason ?? '?')] = (t.reasons[reasonKey(gate.reason ?? '?')] ?? 0) + 1
           this.emit('veto', { strategy: sig.strategy, marketId: sig.marketId, reason: gate.reason })
           continue
         }
@@ -1285,10 +1303,19 @@ export class AutoTrader {
           sig.aiVerdict = 'veto'
           sig.aiReason = `score ${sig.score} < ${this.config.minScore}`
           this.state.stats.vetoed++
+          t.vetoed++
+          t.reasons['score below minScore'] = (t.reasons['score below minScore'] ?? 0) + 1
           this.emit('veto', { strategy: sig.strategy, marketId: sig.marketId, reason: `score ${sig.score}` })
           continue
         }
         approved.push(sig)
+      }
+      if (++this.gateTally.scans >= GATE_TALLY_SCANS) {
+        for (const [strategy, t] of Object.entries(this.gateTally.byStrategy).sort((a, b) => b[1].generated - a[1].generated)) {
+          const top = Object.entries(t.reasons).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([r, n]) => `${r} x${n}`).join(', ')
+          console.log(`[gate] ${strategy}: ${t.generated} generated, ${t.vetoed} vetoed over ${this.gateTally.scans} scans` + (top ? ` (${top})` : ''))
+        }
+        this.gateTally = { scans: 0, byStrategy: {} }
       }
 
       // LLM final gate (fails closed: any error ⇒ veto). Vetted in parallel —
@@ -1993,13 +2020,17 @@ export class AutoTrader {
             continue
           }
           this.consensusMarketCache.set(ticker, { at: now, m })
+          // The budget bounds VENUE CALLS, so only a real fetch spends it. Counting cache hits too (as
+          // this did until 2026-09-18) froze the window: the feed lists signals in a stable order, the
+          // first ten were injected every scan, and rows 11+ were refused 'fetch-budget' on every scan -
+          // 51-75 of ~95 fresh signals a scan never evaluated at all.
+          injected++
         }
         data.marketsById.set(m.id, m)
         if (adapter.getOrderBook && !data.books.has(m.id)) {
           const book = await adapter.getOrderBook(m.id).catch(() => undefined)
           if (book) data.books.set(m.id, book)
         }
-        injected++
       }
       // The pre-registration prices the entry at the ASK we would actually pay,
       // never at a mid or at the ask the shadow saw an hour ago.
