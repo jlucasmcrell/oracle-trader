@@ -1829,3 +1829,13 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **Sports history (2026-09-18, TRADE-HISTORY report §6).** No sports arm had a winning process that was changed
   away from. 09-07 was one 24c LALIGA ticket under the v1 taker/no-floor/$5 config (-$3.92 without it); 09-16 was
   one ATP cluster. Sports-anchor (paid Odds API feed) is 1 win in 11 trades.
+
+- **143 first read, early (2026-09-18 17:28Z, first 50 scans).** mean-reversion 34 generated / 34 vetoed, all
+  "weather series: maker seat measured negative" - its setups are weather brackets and the quoter-retirement gate
+  refuses maker entries there, correctly. §52's backtest edge was taker; the live arm is maker. The recorder's
+  non-weather setups (KXBTCD/KXETHD/KXWTI, ~25 tickers/day) produced no MR signal in this window. Book-wide:
+  fade 2,436 + consensus 111 + volume-spike 69 vetoes were all "long-horizon slots full" - 6 consensus positions
+  (one a 198-day NCAA 2027 market that predates the 21-day ceiling) hold a 4-slot cap. Operator items, not mine:
+  (a) whether `maxLongHorizonPositions` 4 is still the intent with consensus holding 6; (b) the 198-day position.
+  Keep 143's 09-19 12:00Z read: it decides whether MR ever sees a non-weather setup; if not, MR as a maker arm is
+  dead and a TAKER re-test on daily crypto/oil brackets is the only version the backtest actually supports.

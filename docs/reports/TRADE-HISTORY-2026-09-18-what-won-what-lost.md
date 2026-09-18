@@ -165,7 +165,27 @@ signals. Live: **12 entries in 11 days**, +$19.18 app-attributed, of which +$22.
 The momentum recorder, reading the **same** candle feed and market list, saw **154 qualifying setups on 42
 tickers on 09-17 and 132 on 35 tickers on 09-18**; the arm entered once. The signals are generated and
 then vetoed - and `stats.vetoed` (1,987,623 against 4,235 approvals, ~67 a scan) recorded neither which
-strategy nor why. A per-strategy gate tally now prints every 50 scans; the first read is item 143.
+strategy nor why. A per-strategy gate tally now prints every 50 scans. **Its first line (17:28Z, 50 scans):**
+
+| Strategy | Generated | Vetoed | Reason |
+|---|---|---|---|
+| fade | 2,611 | 2,609 | long-horizon slots full x2,436; event/order already resting x167 |
+| consensus | 111 | 111 | long-horizon slots full x111 |
+| volume-spike | 69 | 69 | long-horizon slots full x69 |
+| mean-reversion | 34 | 34 | weather series: maker seat measured negative x34 |
+
+Two findings. **Mean-reversion's live setups are weather brackets, and a gate from the quoter's retirement
+refuses maker entries on weather because that seat measured -1.70c/contract over 801,258 contracts.** That
+gate is correct; what it exposes is that §52's +2.2 to +3.6c was a TAKER backtest at the post-move price,
+and the live arm rests a MAKER order - the edge was never on the seat the arm uses. Worse, `classify.ts:97`
+records that the Becker dataset behind that backtest contains **zero weather rows**: the only setups the live
+arm finds are on the one series family its evidence never covered. The recorder also sees
+non-weather setups (KXBTCD, KXETHD, KXWTI daily brackets, ~25 tickers/day) on which the arm generated
+nothing in this window; tomorrow's tallies say whether those ever reach it. **The long-horizon cap (4
+slots, `maxLongHorizonPositions`) is held by six consensus positions** - one of them an NCAA 2027 market
+198 days out, opened before the 21-day ceiling - so fade, consensus and volume-spike cannot take any market
+more than 24 h from close. That cap is the operator's ("lockdown intent" in the code); it is reported, not
+changed.
 
 **Sports-anchor** (The Odds API feed): 11 trades, 1 win, -$5.64. **Volume-spike** on sports: 24 markets,
 +$0.39. **Momentum**: disabled at the -$5 stop.
