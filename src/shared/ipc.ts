@@ -1076,7 +1076,8 @@ export interface Api {
     orderBook(venue: VenueId, marketId: string): Promise<OrderBook>
   }
   portfolio: {
-    get(venue: VenueId): Promise<PortfolioSnapshot>
+    /** Current execution mode's ledger, or `mode`'s when the account pane shows the other one (a view, never a switch). */
+    get(venue: VenueId, mode?: ExecutionMode): Promise<PortfolioSnapshot>
     livePnl(venue: VenueId): Promise<LivePnl | null>
     /** Venue-authoritative resting orders; includes every strategy and manual/API order. */
     openOrders(venue: VenueId): Promise<OpenOrder[]>

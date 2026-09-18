@@ -444,13 +444,14 @@ export class TradingEngine {
    * every tab switch; without the cache each switch waited for three venue
    * calls before the panel could change.
    */
-  async getPortfolio(venue: VenueId): Promise<PortfolioSnapshot> {
-    const key = `${this.mode}:${venue}`
+  /** Snapshot for the venue in the current execution mode, or in `mode` when the UI asks for the other ledger (a view, not a switch). */
+  async getPortfolio(venue: VenueId, mode: ExecutionMode = this.mode): Promise<PortfolioSnapshot> {
+    const key = `${mode}:${venue}`
     const cached = this.portfolioCache.get(key)
     if (cached && Date.now() - cached.at < 10_000) return cached.value
     let pending = this.portfolioInflight.get(key)
     if (!pending) {
-      pending = this.computePortfolio(venue).then(value => {
+      pending = this.computePortfolio(venue, mode).then(value => {
         this.portfolioCache.set(key, { at: Date.now(), value })
         return value
       }).finally(() => this.portfolioInflight.delete(key))
@@ -459,10 +460,10 @@ export class TradingEngine {
     return pending
   }
 
-  private async computePortfolio(venue: VenueId): Promise<PortfolioSnapshot> {
+  private async computePortfolio(venue: VenueId, mode: ExecutionMode): Promise<PortfolioSnapshot> {
     const adapter = this.requireAdapter(venue)
 
-    if (this.mode === 'paper') {
+    if (mode === 'paper') {
       const broker = this.paperBrokers.get(venue)
       if (!broker) throw new Error(`No paper broker for '${venue}'`)
       const positions = await this.enrichPositions(venue, broker.getPositions())

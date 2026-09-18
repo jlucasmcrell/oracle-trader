@@ -133,7 +133,9 @@ export class PolyPaperLab {
       const now=this.clock()
       if(!s.markets.length||now-s.discoveryAt>=30*MINUTE){
         try{
-        const markets=await this.venue.searchMarkets({sort:'ending-soon',limit:1000,minCloseTime:now+30*MINUTE,maxCloseTime:now+72*60*MINUTE})
+        // 5,000 not 1,000 (2026-09-18): the adapter's catalog index makes the whole 72 h window cheap, and 1,000 was the
+        // binding cap on the rotation pool the moment the index landed (discovered stuck at exactly 1,000).
+        const markets=await this.venue.searchMarkets({sort:'ending-soon',limit:5000,minCloseTime:now+30*MINUTE,maxCloseTime:now+72*60*MINUTE})
         s.discovered=markets.length
         // Bounded catalog sample; rotate every discovery instead of permanently testing its first page.
         const eligible=markets.filter(m=>m.outcomeType==='BINARY'&&m.status==='open'&&(m.minTradeQty??1)<=1&&m.closeTime&&m.closeTime>now+30*MINUTE)

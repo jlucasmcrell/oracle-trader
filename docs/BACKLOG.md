@@ -1921,3 +1921,6 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   capture Polymarket US `/v1/markets/{slug}/book` and Kalshi batched orderbooks in the SAME cycle every 60 s from
   4 h before start; grade who moves first and whether any sub-$1 basket survives simultaneous quotes. Trigger:
   build 2026-09-19; read at 7 days.
+- **UI standardization DONE (2026-09-18 22:10Z, §123).** One account layout for every venue (left pane, Paper/Real
+  view buttons, venue content right). Open follow-up, no trigger yet: IBKR still uses its own `IbkrPanel`; fold it
+  onto the shared pane if the two drift. Trigger: any change to `IbkrPanel.tsx`'s account card.

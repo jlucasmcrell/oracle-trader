@@ -15,7 +15,7 @@ const api: Api = {
     orderBook: (venue: VenueId, marketId: string) => ipcRenderer.invoke(IPC.marketsOrderBook, venue, marketId)
   },
   portfolio: {
-    get: (venue: VenueId) => ipcRenderer.invoke(IPC.portfolioGet, venue),
+    get: (venue: VenueId, mode?: 'paper' | 'live') => ipcRenderer.invoke(IPC.portfolioGet, venue, mode),
     livePnl: (venue: VenueId) => ipcRenderer.invoke(IPC.portfolioLivePnl, venue),
     openOrders: (venue: VenueId) => ipcRenderer.invoke(IPC.portfolioOpenOrders, venue)
   },

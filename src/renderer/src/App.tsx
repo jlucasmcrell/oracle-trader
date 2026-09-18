@@ -18,6 +18,10 @@ export default function App() {
   /** Kalshi adapter is pointed at demo.kalshi.co (mock funds). Same call the Settings panel makes. */
   const [kalshiDemo, setKalshiDemo] = useState(false)
   const [livePnl, setLivePnl] = useState<LivePnl | null>(null)
+  /** What the account pane shows: the execution mode's ledger or the other one. A view, never a switch (§123). */
+  const [accountView, setAccountView] = useState<'paper' | 'live'>('paper')
+  const [otherPortfolio, setOtherPortfolio] = useState<PortfolioSnapshot | null>(null)
+  const [otherError, setOtherError] = useState('')
   const [showSettlementDetails, setShowSettlementDetails] = useState(false)
   /** Resting (unfilled) maker orders for the selected venue - the pre-fill state of a position. */
   const [restingOrders, setRestingOrders] = useState<OpenOrder[]>([])
@@ -60,6 +64,11 @@ export default function App() {
     // Venue-authoritative and fetched in the same portfolio snapshot, avoiding
     // a duplicate authenticated open-orders request every 15 seconds.
     setRestingOrders(p.openOrders ?? [])
+    const other = s.executionMode === 'live' ? 'paper' : 'live'
+    window.api.portfolio
+      .get(v, other)
+      .then((op) => { if (venueRef.current === v) { setOtherPortfolio(op); setOtherError('') } })
+      .catch((err) => { if (venueRef.current === v) { setOtherPortfolio(null); setOtherError(String(err)) } })
     window.api.settings
       .get()
       .then((cfg) => setKalshiDemo(cfg.kalshiDemo === true))
@@ -103,7 +112,12 @@ export default function App() {
     setHistStats(null)
     setLivePnl(null)
     setRestingOrders([])
+    setOtherPortfolio(null)
+    setOtherError('')
   }, [venue])
+
+  // The pane follows the execution mode by default; the operator can flip it to look at the other ledger.
+  useEffect(() => { if (state) setAccountView(state.executionMode) }, [state?.executionMode])
 
   useEffect(() => {
     refresh(venue)
@@ -256,9 +270,12 @@ export default function App() {
 
   const mode = state?.executionMode ?? 'paper'
   const venues = state?.venues ?? []
-  const positionMark = portfolio?.positionValue ?? (portfolio?.positions ?? []).reduce((sum, p) => sum + (p.shares ?? 0) * (p.currentPrice ?? 0), 0)
-  const orderReserve = portfolio?.openOrderReserve ?? restingOrders.reduce((sum, o) => sum + o.remainingCount * (o.outcome === 'NO' ? 1 - o.yesPrice : o.yesPrice), 0)
-  const positionCost = (portfolio?.positions ?? []).reduce((sum, p) => sum + (p.shares ?? 0) * (p.avgPrice ?? 0), 0)
+  const shown = accountView === mode ? portfolio : otherPortfolio
+  const shownOrders = accountView === mode ? restingOrders : (otherPortfolio?.openOrders ?? [])
+  const positionMark = shown?.positionValue ?? (shown?.positions ?? []).reduce((sum, p) => sum + (p.shares ?? 0) * (p.currentPrice ?? 0), 0)
+  const orderReserve = shown?.openOrderReserve ?? shownOrders.reduce((sum, o) => sum + o.remainingCount * (o.outcome === 'NO' ? 1 - o.yesPrice : o.yesPrice), 0)
+  const positionCost = (shown?.positions ?? []).reduce((sum, p) => sum + (p.shares ?? 0) * (p.avgPrice ?? 0), 0)
+  const venueName = venues.find((v) => v.id === venue)?.name ?? venue
 
   return (
     <div className="app">
@@ -272,7 +289,8 @@ export default function App() {
           ))}
           <button className={showIbkr ? 'active' : ''} onClick={() => setShowIbkr(true)}>IBKR</button>
         </div>
-        <div className="mode-toggle" style={showIbkr?{display:'none'}:undefined}>
+        <div className="mode-toggle" style={showIbkr?{display:'none'}:undefined} title="Execution mode: where real orders go. The account pane's Paper / Real account buttons only change what is shown.">
+          <span className="muted" style={{ marginRight: 6, fontSize: 11 }}>Execution</span>
           <button className={mode === 'paper' ? 'active' : ''} onClick={() => setMode('paper')}>
             Paper
           </button>
@@ -310,17 +328,21 @@ export default function App() {
         </button>
       </header>
 
-      {showIbkr ? <IbkrPanel /> : <main>
-        {venue==='polymarket-us'&&<PolyPaperPanel />}
-        <section className="panel summary">
-          <h2>Account</h2>
-          {portfolio ? (
+      {showIbkr ? <IbkrPanel /> : <main className="ibkr-layout">
+        <aside className="panel ibkr-account summary">
+          <h2>Account · {venueName}</h2>
+          <div className="mode-toggle" aria-label="account view">
+            <button className={accountView === 'paper' ? 'active' : ''} aria-pressed={accountView === 'paper'} onClick={() => setAccountView('paper')}>Paper (simulated)</button>
+            <button className={accountView === 'live' ? 'active' : ''} aria-pressed={accountView === 'live'} onClick={() => setAccountView('live')}>Real account</button>
+          </div>
+          <p className="muted">The buttons above switch what this pane shows, not how Oracle trades. Execution is <strong>{mode}</strong> (top bar).</p>
+          {shown ? (
             <div>
               {(() => {
-                const cash = portfolio.account?.balance ?? 0
+                const cash = shown.account?.balance ?? 0
                 const unrealized = positionMark - positionCost
-                const live = portfolio.mode === 'live'
-                const pnl = livePnl?.available ? livePnl : null
+                const live = shown.mode === 'live'
+                const pnl = live && livePnl?.available ? livePnl : null
                 // Net result from the venue's own records. Settlements and the cash ledger exclude open positions, so
                 // add their mark-to-market; 'account-cash' already counts their cost as spent, so add their full mark.
                 const net = pnl ? pnl.realizedPnl + (pnl.source === 'account-cash' ? positionMark : unrealized) : undefined
@@ -330,13 +352,13 @@ export default function App() {
                 return (
                   <>
                     <div className={`acct-mode ${live ? 'acct-live' : 'acct-paper'}`}>
-                      {live ? 'LIVE · real money' : 'PAPER · simulated'} · {portfolio.account?.username ?? venue}
+                      {live ? 'LIVE · real money' : 'PAPER · simulated'} · {shown.account?.username ?? venue}
                       {kalshiDemo && venue === 'kalshi' ? ' · DEMO exchange (mock funds)' : ''}
                     </div>
                     <div className="acct-headline">
                       <div>
                         <div className="stat-label">Account value</div>
-                        <div className="big">${(portfolio.totalValue ?? 0).toFixed(2)} <span>{portfolio.currency}</span></div>
+                        <div className="big">${(shown.totalValue ?? 0).toFixed(2)} <span>{shown.currency}</span></div>
                         <div className="muted">cash + open positions at current prices</div>
                       </div>
                       {net !== undefined && (
@@ -426,12 +448,12 @@ export default function App() {
                       )}
                 </div>
               )}
-              <div className="section-label">Open orders ({restingOrders.length})</div>
-              {restingOrders.length === 0 ? (
+              <div className="section-label">Open orders ({shownOrders.length})</div>
+              {shownOrders.length === 0 ? (
                 <div className="muted">No resting orders. Maker orders appear here until they fill or are pulled.</div>
               ) : (
                 <ul className="positions">
-                  {restingOrders.map((o) => (
+                  {shownOrders.map((o) => (
                     <li key={o.orderId} className="position-card">
                       <div className="pos-head">
                         <span className={`p-outcome ${o.outcome === 'YES' ? 'bt-pos' : 'bt-neg'}`}>{o.outcome}</span>
@@ -450,12 +472,12 @@ export default function App() {
                   ))}
                 </ul>
               )}
-              <div className="section-label">Open positions ({portfolio.positions.length})</div>
-              {portfolio.positions.length === 0 ? (
+              <div className="section-label">Open positions ({shown.positions.length})</div>
+              {shown.positions.length === 0 ? (
                 <div className="muted">No open positions.</div>
               ) : (
                 <ul className="positions">
-                  {portfolio.positions.map((p, i) => (
+                  {shown.positions.map((p, i) => (
                     <li key={i} className="position-card">
                       <div className="pos-head">
                         <span className={`p-outcome ${p.outcome === 'YES' ? 'bt-pos' : 'bt-neg'}`}>{p.outcome}</span>
@@ -478,7 +500,8 @@ export default function App() {
                         {p.resolution !== undefined && (
                           <span className="muted">{p.resolution === 'YES' || p.resolution === 'yes' ? ' won' : ' lost'}</span>
                         )}
-                        <button className="sell" disabled={busy} onClick={() => sell(p)}>
+                        {/* Orders go through the EXECUTION mode; a position shown from the other ledger cannot be sold from here. */}
+                        <button className="sell" disabled={busy || accountView !== mode} title={accountView !== mode ? `This is the ${accountView} ledger; execution is ${mode}` : undefined} onClick={() => sell(p)}>
                           Sell
                         </button>
                       </div>
@@ -488,19 +511,24 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="muted">Loading...</div>
+            <div className="muted">{accountView !== mode && otherError ? `${accountView === 'live' ? 'Real account' : 'Paper ledger'} unavailable: ${otherError}` : 'Loading...'}</div>
           )}
-        </section>
+        </aside>
 
-        <section className="panel">
-          <h2>Kalshi AutoTrader</h2>
-          <AutoTraderPanel log={addLog} onChanged={() => refresh(venue)} />
-        </section>
-
-        <section className="panel">
-          <h2>Mini AutoTrader (Polymarket US)</h2>
-          <MiniAutoPanel venue="polymarket-us" log={addLog} onChanged={() => refresh(venue)} />
-        </section>
+        <div className="ibkr-content">
+        {venue==='polymarket-us'&&<PolyPaperPanel />}
+        {venue === 'kalshi' && (
+          <section className="panel">
+            <h2>Kalshi AutoTrader</h2>
+            <AutoTraderPanel log={addLog} onChanged={() => refresh(venue)} />
+          </section>
+        )}
+        {venue === 'polymarket-us' && (
+          <section className="panel">
+            <h2>Mini AutoTrader (Polymarket US)</h2>
+            <MiniAutoPanel venue="polymarket-us" log={addLog} onChanged={() => refresh(venue)} />
+          </section>
+        )}
 
         <section className="panel">
           <h2>Event Scanner</h2>
@@ -617,6 +645,7 @@ export default function App() {
             ))}
           </ul>
         </section>
+        </div>
       </main>}
 
       {showSettings && (

@@ -187,7 +187,7 @@ function registerIpc(): void {
     if (!adapter?.getOrderBook) throw new Error(`Order book is not supported for ${venue}`)
     return adapter.getOrderBook(marketId)
   })
-  ipcMain.handle(IPC.portfolioGet, (_e, venue: VenueId) => engine.getPortfolio(venue))
+  ipcMain.handle(IPC.portfolioGet, (_e, venue: VenueId, mode?: ExecutionMode) => engine.getPortfolio(venue, mode))
   ipcMain.handle(IPC.portfolioLivePnl, (_e, venue: VenueId) => engine.getLivePnl(venue))
   ipcMain.handle(IPC.portfolioOpenOrders, async (_e, venue: VenueId) => {
     if (engine.getExecutionMode() !== 'live') return []

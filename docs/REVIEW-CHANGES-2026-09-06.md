@@ -4253,3 +4253,21 @@ gaps and a handful of sub-$1 baskets, but the two sides were captured minutes ap
 exactly the kind of gap a snapshot manufactures. Not evidence of an arbitrage; evidence that the matcher works
 and that any edge here is lead-lag around line moves, which needs both books at the same second. That recorder
 is the next build (151); nothing is traded.
+
+## §123 - 2026-09-18 22:10Z: one account layout for every venue (view is not execution)
+
+Operator ask: IBKR's left pane with Paper/Real tabs everywhere; Polymarket's paper panel sat above the account
+card; Kalshi's only "Paper" was the top-bar switch, which flips where real orders go.
+
+- `App.tsx`: every non-IBKR venue now renders `main.ibkr-layout` - `aside.ibkr-account` (left) with
+  "Paper (simulated) / Real account" buttons, then the venue's content column (Polymarket paper lab, that venue's
+  AutoTrader panel, scanner, history, log). The buttons are a VIEW: `accountView` follows `executionMode` on load
+  and can be flipped to look at the other ledger; the top-bar switch is labelled "Execution" with a tooltip.
+  Sell is disabled on the ledger that is not the execution mode (an order from there would have gone to the
+  other book). The Kalshi AutoTrader panel shows only on the Kalshi tab, the Mini AutoTrader only on Polymarket US.
+- `engine.getPortfolio(venue, mode = this.mode)` with cache key `${mode}:${venue}`; IPC `portfolio.get(venue, mode?)`
+  passes the view through. `computePortfolio` reads the paper ledger when asked for paper regardless of the
+  engine mode. Nothing about execution changed.
+- Verified in a stubbed renderer harness (both tabs, both views, Sell disabled on the paper view under live
+  execution; harness removed). 18/18 suites. Restarted 22:09:50Z on the 22:05:12Z bundle; 4 procs, arms scanning.
+- Also in this commit: `polyPaper` discovery `limit: 5000` (served from the catalog index, §120).
