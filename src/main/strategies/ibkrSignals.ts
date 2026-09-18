@@ -3,7 +3,7 @@ import type { IbkrLabMarket } from '../../shared/ibkrLab'
 export const IBKR_STRATEGIES = [
   {id:'fade',name:'Longshot fade',description:'Buy the opposite of a 3–12% longshot; test favorite-longshot calibration.'},
   {id:'favorite',name:'Favorite continuation',description:'Buy the 75–92% side with at least 4c of payout room after costs.'},
-  {id:'calibration',name:'Probability recalibration',description:'Predefined 1.15 log-odds slope; enters when that fair value is at least 0.5c above the ask and holds to settlement, so the result measures the slope after costs.'},
+  {id:'calibration',name:'Probability recalibration',description:'Category log-odds slope from the Becker evaluation half (only Politics is compressed, 1.15; every other group is calibrated within band and yields no entry); enters when that fair value is at least 0.5c above the ask and holds to settlement, so the result measures the slope after costs.'},
   {id:'political-favorite',name:'Political underconfidence',description:'Recalibration restricted to election and government contracts.'},
   {id:'momentum',name:'Quote momentum',description:'Follow a 4c ten-minute move; distinct from the Kalshi trade-print rule.'},
   {id:'log-momentum',name:'Log-odds momentum',description:'Follow a 0.35 log-odds move over ten minutes.'},
@@ -47,6 +47,15 @@ export const IBKR_HOLD_MAX_DAYS=60
 export interface LabFrame {market:IbkrLabMarket;yes:IbkrQuote;no:IbkrQuote;history:{at:number;p:number}[];forecast?:{at:number;p:number};spot?:{price:number;annualVol:number;at:number};weather?:{p:number;morning:boolean;at:number}}
 export interface LabSignal {strategy:string;marketId:string;outcome:'YES'|'NO';limit:number;maker:boolean;reason:string;basket?:string}
 const logit=(p:number)=>Math.log(p/(1-p)),clamp=(p:number)=>Math.max(.001,Math.min(.999,p))
+/**
+ * Log-odds calibration slope by ForecastEx category, from docs/reports/backtest-calibration-slopes-2026-09-14.md
+ * (Becker Kalshi data, EVALUATION half, all horizons). Politics 1.150 [1.115, 1.175] is the only group whose band
+ * excludes 1.0; Finance 1.005, Crypto 1.011, Weather 1.008, Science/Tech 1.153 [0.981, 1.195] and Other 1.023 are
+ * calibrated within band, so they get 1.0 and produce no recalibration entry. Round 121 replaced the single 1.15
+ * that had been applied to every category.
+ */
+export const CALIBRATION_SLOPE:Record<string,number>={Elections:1.15,Government:1.15}
+export const calibrationSlope=(category:string)=>CALIBRATION_SLOPE[category]??1
 export const freshAsk=(q:IbkrQuote,now:number)=>q.dataType==='live'&&!q.error&&q.ask!==undefined&&q.ask>=.01&&q.ask<=.99&&Number.isFinite(q.askSize)&&q.askSize!>=1&&now-(q.askAt??0)<=30000&&now-(q.askAt??0)>=0
 export function frameMid(f:LabFrame):number {return (f.yes.ask!+1-f.no.ask!)/2}
 export function cryptoFair(spot:number,strike:number,annualVol:number,years:number):number {
@@ -75,13 +84,14 @@ export function ibkrSignals(frames:LabFrame[],now:number):LabSignal[] {
     const favorite=p>.5?'YES':'NO',favCost=(favorite==='YES'?f.yes:f.no).ask!
     if(Math.min(p,1-p)>=.03&&Math.min(p,1-p)<=.12&&favCost<=.96){add(f,'fade',favorite,'Favorite-longshot hypothesis');add(f,'fade-maker',favorite,'Passive favorite-longshot hypothesis',true)}
     if(Math.max(p,1-p)>=.75&&Math.max(p,1-p)<=.92&&favCost<=.94)add(f,'favorite',favorite,'Favorite continuation')
-    const fair=1/(1+Math.exp(-1.15*logit(clamp(p))))
+    const fair=1/(1+Math.exp(-calibrationSlope(f.market.category)*logit(clamp(p))))
+    const politicalFair=1/(1+Math.exp(-1.15*logit(clamp(p))))
     const edge=(id:string,estimate:number,minimum=.03)=>{
       if(estimate-f.yes.ask!-.02>=minimum)add(f,id,'YES',`Estimated P(YES) ${(estimate*100).toFixed(1)}%`)
       if(1-estimate-f.no.ask!-.02>=minimum)add(f,id,'NO',`Estimated P(YES) ${(estimate*100).toFixed(1)}%`)
     }
     edge('calibration',fair,-.015)
-    if(/Election|Government/i.test(f.market.category))edge('political-favorite',fair,-.015)
+    if(/Election|Government/i.test(f.market.category))edge('political-favorite',politicalFair,-.015)
     const h=f.history.filter(h=>h.at>=now-20*60000&&h.at<now-60000)
     const anchor=h.find(h=>h.at<=now-10*60000)
     if(anchor&&h.length>=3&&spread<=.08){

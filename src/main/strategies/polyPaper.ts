@@ -7,10 +7,15 @@ import type {OrderBook,VenueMarket} from '../../shared/types'
 import {POLY_PAPER_RULES_SINCE,POLY_PAPER_STRATEGIES,type PolyPaperState,type PolyPaperStatus,type PolyPaperQuote,type PolyPaperOrder,type PolyPaperPosition,type PolyPaperStrategy} from '../../shared/polyPaper'
 
 const MINUTE=60000,STARTING_CASH=1000
-// Published US fee change: September 16, 2026 23:59 Eastern. No rebates credited.
+// Published US fee change: September 16, 2026 23:59 Eastern. Maker rebate per docs.polymarket.us/fees (2026-09-18):
+// -0.0125 x p(1-p) per contract, applied at the trade. Returned as a NEGATIVE fee so every caller's `cash -= price + fee`
+// and `net = exit - entry - fee` credit it without special cases. The per-second liquidity incentive program is NOT
+// modelled (its pools are per market and published live). At one contract the rebate rounds to $0.00 in
+// polyPaperOrderFee, exactly as the venue bills - the formula only matters once size exceeds ~4 contracts.
+export const POLY_MAKER_REBATE=.0125
 export function polyPaperFee(price:number,at:number,maker=false,rate?:number){
   const scheduled=at>=Date.parse('2026-09-17T03:59:00Z')?.0695:.06
-  return maker?0:price*(1-price)*Math.max(scheduled,Number.isFinite(rate)?rate!:0)
+  return maker?-POLY_MAKER_REBATE*price*(1-price):price*(1-price)*Math.max(scheduled,Number.isFinite(rate)?rate!:0)
 }
 /**
  * The fee the venue actually BILLS for one order, as opposed to the exact per-share
@@ -27,7 +32,8 @@ export function polyPaperFee(price:number,at:number,maker=false,rate?:number){
  * which is why the share count is an argument here and not baked in.
  */
 export function polyPaperOrderFee(shares:number,price:number,at:number,maker=false,rate?:number){
-  return Math.round(shares*polyPaperFee(price,at,maker,rate)*100)/100
+  // `|| 0` folds the -0 a rounded-away rebate produces; the ledger and strict comparisons must never see -0.
+  return Math.round(shares*polyPaperFee(price,at,maker,rate)*100)/100||0
 }
 /** Unit-sized counterfactual: the lab opens exactly one share per position. */
 const PAPER_SHARES=1

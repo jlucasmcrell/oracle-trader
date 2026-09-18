@@ -14,7 +14,9 @@ assert.equal(polyPaperQuote(book(.6,.4),now),undefined)
 assert.equal(polyPaperQuote(book(.4,.5,.5),now),undefined)
 assert.equal(polyPaperFee(.5,base),.015)
 assert.equal(polyPaperFee(.5,Date.parse('2026-09-17T03:59Z')),.0695/4)
-assert.equal(polyPaperFee(.5,base,true),0)
+assert.equal(polyPaperFee(.5,base,true),-.0125*.25,'maker rebate at the venue formula')
+assert.equal(polyPaperOrderFee(1,.5,base,true),0,'one contract: the rebate rounds to zero, as billed')
+assert.equal(polyPaperOrderFee(100,.5,base,true),-.31,'100 contracts at 50c: -$0.31, the documented table value')
 assert.equal(polyPaperFee(.5,base,false,.1),.025)
 // The venue bills the ORDER TOTAL to the nearest cent (measured on 432 real fills); the
 // per-share helper above stays exact, the order helper is what the ledger charges.

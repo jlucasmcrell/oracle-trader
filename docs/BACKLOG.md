@@ -1911,3 +1911,7 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   matcher `scripts/backtests/crossvenue_econ.py`. First read at 2026-09-25 12:00Z: divergence distribution per pair,
   depth at the divergent quotes, and lead/lag around the Sep 24 claims print and the Oct 2 jobs report.
 - **148 first read passed early:** catalog walk 943 pages / 54,186 markets / 464 s; recorder 1,480 rows a cycle, 0 missing.
+
+- **153 DONE, 155 DONE (2026-09-18 22:05Z, §121).** Polymarket maker rebate modelled at the venue formula with the
+  venue's cent rounding (zero at one contract); IBKR recalibration uses per-category evaluation-half slopes
+  (politics only). Both labs re-baselined for the affected arms.

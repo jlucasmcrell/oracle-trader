@@ -1,6 +1,6 @@
 import type { VenueMarket } from './types'
 export const POLY_PAPER_STRATEGIES = [
-  {id:'join',name:'Passive join',rule:'Buy both sides at their best bid; no assumed rebate.'},
+  {id:'join',name:'Passive join',rule:'Buy both sides at their best bid; maker rebate credited at the venue formula, cent-rounded.'},
   {id:'improve',name:'Passive improve',rule:'Improve each bid by one tick without crossing.'},
   {id:'momentum',name:'Quote momentum',rule:'Follow a 3c move over at least five minutes.'},
   {id:'reversion',name:'Mean reversion',rule:'Fade a 4c move over at least five minutes.'},
@@ -25,7 +25,7 @@ export interface PolyPaperState {
  * 2026-09-17T07:31:43Z). They stay in the ledger and are reported as a separate cohort; scorecards and live
  * qualification use only trades opened under the current rules. Move this forward whenever those rules change.
  */
-export const POLY_PAPER_RULES_SINCE=Date.parse('2026-09-17T07:31:43Z')
+export const POLY_PAPER_RULES_SINCE=Date.parse('2026-09-18T21:41:34Z') // maker rebate modelled (round 121); the 07:31:43Z cohort held 2 trades
 export interface PolyPaperStatus {
   enabled:boolean;running:boolean;started:number;scans:number;lastScan?:number;lastError?:string;discovered:number;tracked:number;fresh:number
   strategies:{id:string;name:string;rule:string;cash:number;open:number;pending:number;closed:number;net:number;unrealized:number;unpriced:number;days:number;markets:number;lower?:number;upper?:number;assessment:string;legacyClosed:number;legacyNet:number}[]

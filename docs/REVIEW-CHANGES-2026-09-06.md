@@ -4209,3 +4209,22 @@ The October pair is a same-figure Dutch book of 4c at two contracts of depth - s
 nothing yet. What the shadow has to establish over a week is how often the venues diverge, how deep, and which
 side moves first around the prints. IBKR is unfunded and the Kalshi account is $89; sizing, if it ever comes, is
 the operator's.
+
+## §121 - 2026-09-18 22:05Z: round 121, the paper labs price what the venues actually pay (items 153, 155)
+
+**Polymarket US maker rebate (153).** `polyPaperFee(maker=true)` returned 0 ("no rebates assumed"). The venue's
+published schedule pays makers `0.0125 x C x p(1-p)` at the trade. It is now returned as a negative fee, so every
+existing `cash -= price + fee` / `net = exit - entry - fee` path credits it unchanged. `polyPaperOrderFee` keeps the
+cent rounding the venue's own billing showed on 432 real fills, which means the rebate is **$0.00 at the lab's one
+contract** and becomes real from about four - the model is right at every size, and the panel now says why the
+maker arms show no credit. The liquidity incentive program is not modelled. Cohort constant moved to now (the
+07:31:43Z cohort held 2 trades). Tests: formula, one-contract rounding, the documented -$0.31 per 100 at 50c.
+
+**IBKR calibration slopes by category (155).** The `calibration` arm applied one 1.15 log-odds slope to every
+ForecastEx category. The Becker evaluation-half slopes: Politics **1.150 [1.115, 1.175]** - the only group whose
+band excludes 1.0; Finance 1.005, Crypto 1.011, Weather 1.008, Science/Tech 1.153 [0.981, 1.195], Other 1.023,
+all calibrated within band. The arm now uses the category's own slope (1.15 for Elections/Government, 1.0
+elsewhere), so it produces no entry where the evidence says the market is calibrated - it stops testing an
+average that holds nowhere. `political-favorite` is unchanged. Tests: slopes by category, an election frame
+fires, a Financial Markets frame does not. `calibration` re-baselines at the restart (prior stats stay under
+`calibration:pre-slopes-20260918`).

@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
 import {IbkrLab} from '../../src/main/strategies/ibkrLab'
-import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
+import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
 import {forecastTime,finalSettlements,csvRows} from '../../src/main/venues/forecastexData'
 import {IbkrReader} from '../../src/main/venues/ibkr'
 import {ibkrWeather} from '../../src/main/strategies/ibkrWeather'
@@ -86,6 +86,11 @@ async function main(){
   // Round 114: calibration is reachable on a real 2c book (the old 3c-beyond-ask rule never fired on 29,601 frames).
   assert.ok(ibkrSignals([frame(.8)],now).some(s=>s.strategy==='calibration'&&s.outcome==='YES'),'Calibration fires on a 2c spread')
   assert.ok(ibkrSignals([frame(.8)],now).some(s=>s.strategy==='political-favorite'),'Political recalibration fires on an election contract')
+  // Round 121: the general recalibration arm uses the category's own evaluation-half slope. Only politics is
+  // compressed; a calibrated category (slope 1.0) yields no entry, so the arm no longer trades an average.
+  assert.deepEqual([calibrationSlope('Elections'),calibrationSlope('Financial Markets'),calibrationSlope('Environmental')],[1.15,1,1])
+  assert.ok(ibkrSignals([frame(.8)],now).some(s=>s.strategy==='calibration'),'Recalibration fires on an election contract')
+  assert.ok(!ibkrSignals([{...frame(.8),market:{...market(),category:'Financial Markets'}}],now).some(s=>s.strategy==='calibration'),'No recalibration entry on a calibrated category')
   assert.ok(!ibkrSignals([{...frame(.8),market:{...market(),expiresAt:now+90*86400000}}],now).some(s=>IBKR_HOLD_TO_SETTLEMENT.has(s.strategy)),'Held arms skip contracts that cannot settle inside the test')
   // Correct opposing ask exit, both fees and no exit on the entry snapshot.
   const e=setup(),p=addPosition(e,{strategy:'momentum',entryMark:-.02});e.s.quotes['201']=quote(201,.5)
