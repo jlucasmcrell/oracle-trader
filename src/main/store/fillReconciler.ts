@@ -35,6 +35,16 @@ export interface ReconcilerState {
   lastError?: string
   /** 'ok' when the newest page reached fills we had already seen; 'partial' when the page cap was hit before overlap. */
   completeness: 'ok' | 'partial' | 'unknown'
+  /**
+   * Fills the venue reported with a NEGATIVE fee, i.e. maker-rebate credits, and
+   * their running total in cents. Polymarket US publishes a rebate formula, but the
+   * measured answer across 2026-09-02..12 was that nothing is credited: every
+   * reported fee was a whole number of cents and the only credit in 432 fills was a
+   * single isolated maker rebate. Maker flow is therefore modelled as fee-free rather
+   * than inventing income. This counts; it never credits.
+   */
+  rebateCredits?: number
+  rebateCents?: number
 }
 
 export const VENUE_FILL_REF = 'venue-fill'
@@ -160,6 +170,21 @@ export class FillReconciler {
         for (const row of archiveRows) this.archived.add(row.id)
       }
       if (plan.rows.length) this.history.recordMany(plan.rows)
+      // Maker-rebate detector (2026-09-18). A rebate arrives as a NEGATIVE fee on
+      // the fill. We record it and log it ONCE the first time it is ever seen; we
+      // deliberately do not credit it to any strategy's P&L, because the measured
+      // history says the venue credits nothing and booking it would invent income.
+      const rebateRows = plan.rows.filter((r) => Number(r.fee) < 0)
+      if (rebateRows.length) {
+        const addedCents = rebateRows.reduce((s, r) => s + Math.abs(Number(r.fee)) * 100, 0)
+        const seenBefore = this.state.rebateCredits ?? 0
+        this.state.rebateCredits = seenBefore + rebateRows.length
+        this.state.rebateCents = Math.round(((this.state.rebateCents ?? 0) + addedCents) * 1e6) / 1e6
+        if (seenBefore === 0) {
+          this.log('[reconciler] maker rebate CREDIT detected on ' + this.venue + ': ' + rebateRows.length +
+            ' fill(s), ' + addedCents.toFixed(2) + 'c - recorded, not credited; quantify before modelling as income')
+        }
+      }
       // Completeness: the page overlapped fills we had already seen (or was
       // shorter than the cap), so nothing can have slipped between runs.
       const overlapped = fills.length < limit || fills.some((f) => seen.has(f.id))
