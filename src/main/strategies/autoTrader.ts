@@ -2026,6 +2026,13 @@ export class AutoTrader {
           // 51-75 of ~95 fresh signals a scan never evaluated at all.
           injected++
         }
+        // A signal under 24 h old can point at a match that has already played: 16 of 24 injected markets
+        // probed on 2026-09-18 were `finalized`. Refuse those here, before spending a book read on a dead
+        // market (they were reaching the ask check as 'no-ask', ~45 wasted venue reads a scan).
+        if ((m.status !== undefined && m.status !== 'open') || (m.closeTime !== undefined && m.closeTime <= now)) {
+          refused['market-closed'] = (refused['market-closed'] ?? 0) + 1
+          continue
+        }
         data.marketsById.set(m.id, m)
         if (adapter.getOrderBook && !data.books.has(m.id)) {
           const book = await adapter.getOrderBook(m.id).catch(() => undefined)
