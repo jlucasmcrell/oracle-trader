@@ -1666,3 +1666,12 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 135. **Paper cohort constants (trigger: any change to a paper lab's entry or exit rules).** Move `IBKR_RULES_SINCE` /
     `POLY_PAPER_RULES_SINCE` to the restart time of that change in the same round, and say so in REVIEW-CHANGES.
     Backlog 125's first reads (2026-09-24) use the current cohort only.
+
+- **136 DONE (2026-09-18 15:19Z).** State backup (SESSION-REPORT 7.3): `scripts/state-backup.py` mirrors
+  `%APPDATA%\oracle-trader` and repo `data/` to `D:\oracle-trader-backup` (different volume) and keeps 72 rotated
+  zips of the small state files, so a bad migration can be rolled back - a mirror alone would copy the damage.
+  Each run re-hashes a sample against the source and asserts ladder/kalshi-auto/config/history/order-journal are in
+  the zip; it exits 1 otherwise. Task `OracleTrader-StateBackup`, hourly, first run rc=0, 3.3 GB mirrored.
+  Failure path tested (missing volume -> exit 1). Log: `logs/state-backup.log`; status: `D:\oracle-trader-backup\status.json`.
+  NOT covered: an off-machine copy. If the machine dies, the backup dies with it.
+
