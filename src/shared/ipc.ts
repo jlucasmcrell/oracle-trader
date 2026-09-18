@@ -387,6 +387,8 @@ export interface AutoTraderConfig {
   leadLagPollIntervalMs?: number
   /** Widest Polymarket book, in cents, a pair may be compared on (default 5). */
   leadLagMaxSpreadCents?: number
+  /** Raw Polymarket-vs-Kalshi gap a sweep needs, in cents (2-20). Was a hardcoded 4.0 until 2026-09-18; see PREREGISTERED-leadlag-gap-floor.md. */
+  leadLagMinDislocationCents?: number
   /** Filled contracts per Kalshi ticker per 15-minute window (default 3 x per-order). */
   leadLagMaxContractsPerWindow?: number
   /** Filled spend, dollars, across all tickers per 15-minute window (default 40). */

@@ -4183,7 +4183,9 @@ export class AutoTrader {
     return {
       leadLagEnabled: true,
       leadLagLiveEnabled: this.config.leadLagLiveEnabled ?? false,
-      leadLagMinDislocationCents: 4.0,
+      // Gap floor (§115): the 4-6c bucket was flat or negative in every era and carried most of the volume. Clamped so
+      // a typo cannot open the arm to 1c noise or close it entirely.
+      leadLagMinDislocationCents: Math.max(2, Math.min(20, this.config.leadLagMinDislocationCents ?? 4)),
       leadLagMaxSpreadCents: this.config.leadLagMaxSpreadCents ?? 5.0,
       leadLagMaxContractsPerOrder: Math.max(1, Math.min(AutoTrader.LEADLAG_HARD_MAX_CONTRACTS, this.config.leadLagMaxContractsPerOrder ?? 1)),
       leadLagMaxCapitalSpend: Math.max(1, Math.min(AutoTrader.LEADLAG_HARD_MAX_SPEND, this.config.leadLagMaxCapitalSpend ?? 15)),

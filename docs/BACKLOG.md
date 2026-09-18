@@ -1851,3 +1851,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **NCAA 2027 position (KXNCAAMBUAC-27-EKY, 4.55 YES @21c, $0.96 exposure): unclosable, zero YES bids.** It holds
   one of four long-horizon slots until it resolves. Operator options: raise `maxLongHorizonPositions`, or accept
   that the count includes it. No order was placed.
+
+146. **Lead-lag 6c gap floor (trigger: 60 settled contracts across 5 day-clusters, or 2026-10-02).** Registered
+    `docs/PREREGISTERED-leadlag-gap-floor.md` (§115). First check 2026-09-19 12:00Z alongside 138: SWEEP EXECUTED
+    lines must all carry a raw gap >= 6c, and sweeps/day should fall to roughly a third. Judge on the venue ledger.
+147. **Endgame exception shadow read (trigger: 2026-09-25).** Grade `leadlag-cadence-shadow.jsonl` rows with raw gap
+    < 6c and under 3 minutes left in the window against results since 09-18 19:55Z. Positive at 95% day-clustered
+    over >= 100 contracts-equivalent -> register it as step two; otherwise the floor stays alone. Do not trade it early.

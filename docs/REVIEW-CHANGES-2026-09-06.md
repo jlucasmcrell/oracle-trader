@@ -4058,3 +4058,26 @@ Becker data with zero weather rows. `makerStrategies` loses `mean-reversion`; pr
 into the old bucket); ladder baseline for `kalshi-mean-reversion` reset at the same instant. Pre-registered in
 `docs/PREREGISTERED-mean-reversion-taker.md`: same verdict rule, taker at the ask, hold to settlement,
 non-weather (the gate stands), judged on the venue ledger at 40 contracts / 5 clusters, deadline 2026-10-09.
+
+## §115 - 2026-09-18 19:55Z: the lead-lag lever is the gap size, not the poll
+
+The operator asked whether 60 s had ever been the winning setting and what 90 s or 120 s would do. Neither
+is the mechanism. Every executed sweep since 09-07 (3,883 contracts) graded at fill + fee against Kalshi's
+result, keyed by the raw gap recorded at decision time and by minutes left in the window:
+
+- **Raw 4-6c gaps are flat or negative in every era** (+0.29c / -3.30c / -2.74c on 307 / 1,792 / 265
+  contracts) and carry most of the volume. Era A's +$54.51 was +$53.60 from gaps of 6c and up.
+- The bucket that loses everywhere is **gap < 6c with 3+ minutes left**: -4.10 / -4.35 / -3.66c. It alone
+  was -$75 of the losing era's -$69 net.
+- Sub-6c gaps in the **last 3 minutes** are positive in every era (+52 / +23 / +3c) on thin samples
+  (24 / 68 / 36 contracts) - registered as a shadow read, not traded.
+- Counterfactual with a 6c floor: A +$53.60, B+C -$10.11, D +$0.42 (vs +$54.51, -$69.19, -$6.84).
+- Poll interval: 10 s vs 60 s changed sweeps per window (1.95 vs 1.17) at identical latency and gaps; a
+  longer poll lowers re-sweep odds and coverage in equal measure. The floor removes the losing bucket at any
+  cadence.
+
+**Change.** `leadLagMinDislocationCents` was a hardcoded 4.0 in `leadLagCfg()`; it is now a config field
+clamped to 2-20 (test pins default 4, set 6, clamp 99 -> 20 and 0 -> 2), set to **6** with the app stopped
+(backup `kalshi-auto.json.bak_llfloor_*`). Ladder `kalshi-leadlag` re-baselined by `since` (its evidence is
+the dislocation log since promotion; `perfByStrategy` has no leadlag key, so nothing to rename). Registered
+in `docs/PREREGISTERED-leadlag-gap-floor.md`: judge at 60 contracts / 5 clusters, deadline 2026-10-02.

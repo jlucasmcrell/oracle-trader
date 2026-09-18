@@ -22,6 +22,17 @@ try {
   assert.equal(second.getConfig().maxOpenPositions, 7)
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27)
 
+  // ---- lead-lag gap floor is a config field with a clamp (2026-09-18) ----
+  {
+    const t: any = new AutoTrader({}, join(home, 'floor.json'))
+    // setConfig without these starts the trader's timers and the process never exits (the first hang of 2026-09-18).
+    const quiet = { enabled: false, autoPoll: false, bookLogging: false }
+    assert.equal(t.leadLagCfg().leadLagMinDislocationCents, 4, 'default stays 4c')
+    t.setConfig({ ...quiet, leadLagMinDislocationCents: 6 }); assert.equal(t.leadLagCfg().leadLagMinDislocationCents, 6)
+    t.setConfig({ ...quiet, leadLagMinDislocationCents: 99 }); assert.equal(t.leadLagCfg().leadLagMinDislocationCents, 20, 'clamped high')
+    t.setConfig({ ...quiet, leadLagMinDislocationCents: 0 }); assert.equal(t.leadLagCfg().leadLagMinDislocationCents, 2, 'clamped low: never 1c noise')
+  }
+
   // ---- consensus fetch budget spends venue calls, not cache hits (2026-09-18) ----
   // The feed lists signals in a stable order. Counting cache hits against the 10-per-scan
   // budget froze the window on the first ten rows; rows 11+ were refused every scan.
