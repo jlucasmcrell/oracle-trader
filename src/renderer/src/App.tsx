@@ -344,7 +344,7 @@ export default function App() {
                           <div className="stat-label">Net result</div>
                           <div className={`big ${tone(net)}`}>{signed(net)}</div>
                           <div className="muted">
-                            {pnl!.fromTs ? `since ${new Date(pnl!.fromTs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'all recorded trading'}, after fees
+                            {pnl!.fromTs ? `since ${new Date(pnl!.fromTs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : 'all recorded trading'}, after fees
                           </div>
                         </div>
                       )}
