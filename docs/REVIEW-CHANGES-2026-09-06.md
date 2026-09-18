@@ -4287,3 +4287,25 @@ card; Kalshi's only "Paper" was the top-bar switch, which flips where real order
   Task `OracleTrader-SportsBooks` (logon +1 min, restart 3x, no time limit). App restarted 22:15:35Z on the
   22:14:18Z bundle. Read at 7 days: who moves first around line moves, and whether any sub-$1 basket survives
   simultaneous quotes.
+
+## §125 - 2026-09-19 00:10Z: long-horizon cap raised; IBKR funded; the Polymarket paper account is the lab
+
+- **Long-horizon slots** (operator: "raise it to whatever you think is best"): `maxLongHorizonPositions` 4 -> 8 and
+  `consensusExtraLongSlots` 2 -> 4 (config edit with the app stopped, restarted 23:33:58Z). Why those numbers: the
+  gate tally over the last 50 scans was fade 3,665/3,665 vetoed (3,007 on slots), volume-spike 203/203, consensus
+  63/63 - every >24 h entry was blocked by six consensus positions. Consensus is the only long-horizon arm with a
+  positive judged edge (+0.12c/contract, §-consensus), so it gets the maximum reserved slots (12 total); the shared
+  pool of 8 is for fade (+$4.80 on 260 at $1, break-even before rounding) and volume-spike (-$4.80), which fade will
+  fill first. Capital at risk >24 h is at most 12 x $1 of $89. First scan after the restart: consensus took 3
+  (already-entered 24 -> 27). Read at the next gate tally.
+- **IBKR funded.** Read-only account summary on a research client id: NetLiquidation / AvailableFunds $100.00.
+  Nothing goes live: `liveEligible` needs >= 30 closed, >= 10 events, >= 3 days and a positive 95% lower bound, and
+  every one of the 17 paper arms has a negative lower bound today (best: calibration:pre-slopes +0.008 mean,
+  spot-first +0.04 on 4). The app's Real account view now shows the balance instead of "Not funded". Lab read
+  stays 2026-09-24.
+- **Polymarket US "Paper (simulated)" view** (operator: "Poly Paper doesn't match the paper panel"): it was the
+  engine's paper ledger, which nothing on that venue trades while every arm is on hold. It now renders
+  `PolyPaperAccountCard` - the eight $1,000 lab accounts as one account: value = cash + open positions at their
+  mark (entry + fee + mark = what exiting on the last quote returns), net result, realized / open P&L, counts, and
+  a per-account line. Same card shape as the live view. Verified in the stubbed harness (value and net reconcile),
+  restarted 23:42:28Z. Kalshi's paper view stays the engine ledger, which its paper arms do trade.

@@ -132,10 +132,19 @@ export function isMveMarket(m: { ticker?: string; mve_collection_ticker?: string
  * markets 8-23 minutes from close, the nearest-dated rows on the exchange.
  * Slicing by close time gives the near end its own page budget; a truncation
  * can then only ever drop the far end, which is the half nothing trades yet.
+ *
+ * A slice must also be narrow enough not to truncate at all, because WITHIN a
+ * slice the API's order is still not close time — and it returns that slice's
+ * nearest-dated rows LAST. Measured 2026-09-18 at the same 72 h horizon: the
+ * 48-72 h slice needed 26 pages, so the 617 rows past the bound were the ones
+ * closing at the 48 h edge, among them $647k-volume NCAAF totals; 190 markets
+ * left the scanner's universe, 132 of them autoTrader-eligible and 79 in the
+ * fade band. Six-hourly edges out to 72 h put the densest band (66-72 h,
+ * 13,062 rows) at 14 of 25 pages and cost 39 requests a pass instead of 34.
  */
 export function universeWindows(nowSec: number, floorTs: number, horizonTs: number): [number, number][] {
   if (!(horizonTs > floorTs)) return []
-  const edges = [1, 6, 24, 48, 168, 720]
+  const edges = [1, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 96, 120, 144, 168, 336, 720]
     .map((h) => nowSec + h * 3600)
     .filter((t) => t > floorTs && t < horizonTs)
   const bounds = [floorTs, ...edges, horizonTs]

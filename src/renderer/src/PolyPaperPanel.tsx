@@ -1,6 +1,40 @@
 import {useEffect,useState} from 'react'
 import type {PolyPaperStatus} from '../../shared/polyPaper'
 const money=(n:number)=>n.toLocaleString(undefined,{style:'currency',currency:'USD'})
+/** The Polymarket US "Paper (simulated)" account is the eight-arm paper lab, not the engine's paper ledger (which
+ *  nothing on this venue trades while every arm is on operator hold). Same shape as the live card (§125). */
+export function PolyPaperAccountCard(){
+  const [data,setData]=useState<PolyPaperStatus>(),[error,setError]=useState('')
+  useEffect(()=>{let active=true;const update=()=>void window.api.settings.polyPaperStatus().then(s=>{if(active){setData(s);setError('')}}).catch(e=>{if(active)setError(String(e))});update();const timer=setInterval(update,5000);return()=>{active=false;clearInterval(timer)}},[])
+  if(!data)return <div className="muted">{error?`Paper lab unavailable: ${error}`:'Loading...'}</div>
+  const arms=data.strategies,start=1000*arms.length
+  const cash=arms.reduce((a,s)=>a+s.cash,0),realized=arms.reduce((a,s)=>a+s.net,0),unrealized=arms.reduce((a,s)=>a+s.unrealized,0),unpriced=arms.reduce((a,s)=>a+s.unpriced,0)
+  // Account value = cash + open positions at their mark. A fill takes entry+fee from cash and mark is the net of exiting
+  // on the last quote, so entry+fee+mark is what the position would return now (one contract per entry).
+  const value=cash+data.positions.reduce((a,p)=>a+p.entry+p.fee+(p.mark??0),0),net=value-start
+  const signed=(v:number)=>`${v>=0?'+':'-'}$${Math.abs(v).toFixed(2)}`,tone=(v:number)=>v>=0?'bt-pos':'bt-neg'
+  return <>
+    <div className="acct-mode acct-paper">PAPER · simulated · {arms.length} strategy accounts of {money(1000)}</div>
+    <div className="acct-headline">
+      <div><div className="stat-label">Account value</div><div className="big">${value.toFixed(2)} <span>USD</span></div><div className="muted">cash + open positions at current prices, all accounts</div></div>
+      <div style={{textAlign:'right'}}><div className="stat-label">Net result</div><div className={`big ${tone(net)}`}>{signed(net)}</div><div className="muted">since {new Date(data.started).toLocaleDateString(undefined,{month:'short',day:'numeric'})}, after modelled fees</div></div>
+    </div>
+    <div className="acct-stats acct-grid">
+      <span className="stat" title="Closed paper trades, after modelled fees and rebates."><span className="stat-label">Realized</span><span className={`stat-val ${tone(realized)}`}>{signed(realized)}</span></span>
+      <span className="stat" title="Open paper positions at their last fresh quote."><span className="stat-label">Open P&amp;L</span><span className={`stat-val ${tone(unrealized)}`}>{signed(unrealized)}{unpriced?` (${unpriced} unpriced)`:''}</span></span>
+      <span className="stat"><span className="stat-label">Open positions</span><span className="stat-val">{data.positions.length}</span></span>
+      <span className="stat"><span className="stat-label">Resting orders</span><span className="stat-val">{data.orders.length}</span></span>
+      <span className="stat"><span className="stat-label">Closed trades</span><span className="stat-val">{arms.reduce((a,s)=>a+s.closed,0)}</span></span>
+      <span className="stat"><span className="stat-label">Scans</span><span className="stat-val">{data.scans}</span></span>
+    </div>
+    <div className="section-label">Accounts ({arms.length})</div>
+    <ul className="positions">
+      {arms.map(s=><li key={s.id}><span>{s.name}</span><span className={tone(s.net+s.unrealized)}>{signed(s.net+s.unrealized)}</span><span className="muted">{s.open} open · {s.closed} closed · {s.assessment}</span></li>)}
+    </ul>
+    <p className="muted">Details, rules and the per-arm verdicts are in the paper strategy tests panel. No broker orders.</p>
+  </>
+}
+
 export default function PolyPaperPanel(){
   const [data,setData]=useState<PolyPaperStatus>(),[error,setError]=useState(''),[working,setWorking]=useState(false)
   useEffect(()=>{let active=true;const update=()=>void window.api.settings.polyPaperStatus().then(s=>{if(active)setData(s)}).catch(e=>{if(active)setError(String(e))});update();const timer=setInterval(update,5000);return()=>{active=false;clearInterval(timer)}},[])

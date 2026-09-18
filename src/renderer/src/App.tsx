@@ -9,7 +9,7 @@ import ResearchPanel from './ResearchPanel'
 import SettingsPanel from './SettingsPanel'
 import QuantPanel from './QuantPanel'
 import IbkrPanel from './IbkrPanel'
-import PolyPaperPanel from './PolyPaperPanel'
+import PolyPaperPanel, { PolyPaperAccountCard } from './PolyPaperPanel'
 
 export default function App() {
   const [state, setState] = useState<EngineState | null>(null)
@@ -336,7 +336,9 @@ export default function App() {
             <button className={accountView === 'live' ? 'active' : ''} aria-pressed={accountView === 'live'} onClick={() => setAccountView('live')}>Real account</button>
           </div>
           <p className="muted">The buttons above switch what this pane shows, not how Oracle trades. Execution is <strong>{mode}</strong> (top bar).</p>
-          {shown ? (
+          {venue === 'polymarket-us' && accountView === 'paper' ? (
+            <PolyPaperAccountCard />
+          ) : shown ? (
             <div>
               {(() => {
                 const cash = shown.account?.balance ?? 0

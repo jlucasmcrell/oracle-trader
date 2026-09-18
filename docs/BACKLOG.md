@@ -1929,3 +1929,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **UI standardization DONE (2026-09-18 22:10Z, §123).** One account layout for every venue (left pane, Paper/Real
   view buttons, venue content right). Open follow-up, no trigger yet: IBKR still uses its own `IbkrPanel`; fold it
   onto the shared pane if the two drift. Trigger: any change to `IbkrPanel.tsx`'s account card.
+- **Long-horizon cap 8 + 4 (2026-09-19 00:10Z, §125).** Trigger: at the next `[gate]` tally (~50 scans, about an hour)
+  confirm fade/volume-spike/consensus vetoes are no longer all `long-horizon`; at the consensus ladder checkpoint,
+  judge the new entries against the grader as before. If fade's resting NO orders take all 8 shared slots within a
+  scan and volume-spike never enters, that is the intended order of preference, not a defect.
+- **IBKR funded $100 (2026-09-19).** No arm is `liveEligible`. Trigger: the 2026-09-24 lab read; any arm whose 95%
+  lower bound turns positive is a candidate for `liveStrategies` at 1 contract, `maxLiveCost` 1.5 - the operator's
+  call, reported with the read.
