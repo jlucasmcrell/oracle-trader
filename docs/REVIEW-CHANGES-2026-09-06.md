@@ -4114,3 +4114,28 @@ is proposed. Weather stays retired; the HRRR shadow keeps running as a free cali
 reconfirm the §115 floor on rows we did NOT sweep: gap < 6c with >= 3 min left **-3.15c [-4.34, -1.96]** on
 253; the endgame exception +0.67c [-9.65, +10.98] on 53 - no support yet, item 147 stands. The 6c floor is
 live: since the 19:53Z restart, two dislocations (7.5c, 8.5c), one sweep, nothing under 6c.
+
+## §117 - 2026-09-18 21:00Z: four weather-data sources assessed; full-event book capture built
+
+The operator sent four links after §116.
+
+| Source | What it is | Use to us |
+|---|---|---|
+| World Climate Service / Prescient point-in-time archive | Paid B2B archive of as-issued forecasts, **population-weighted regional** max/min temperature for ISOs (ERCOT, PJM...), for backtesting energy trades | Wrong variable (regional, not station), paid. No. |
+| ECMWF Open Data | **Free, CC-BY-4.0**, IFS and AIFS at 0.25 deg, includes `mx2t6`/`mn2t6` (6-hour max/min 2 m temperature) and the ENS ensemble; AIFS released immediately, IFS after the dissemination window | **The one usable input.** A 51-member ensemble gives bracket probabilities directly, at D+1..D+3, which HRRR (18 h) cannot. |
+| Brightband NNJA-AI | NOAA/NASA observation archive (satellites, stations, radiosondes) re-processed for training ML weather models | Training data for building a model. Not a forecast. No. |
+| WxC-Bench (Sci. Data 2026) | ML-ready benchmark dataset for weather/climate downstream tasks | Research infrastructure. Not a forecast. No. |
+
+**What blocks every forecast test, ECMWF included.** §116's test could only see the brackets the trading scan
+logged - cheap tails, mean ask 7c. The modal bracket, where a better forecast would show, has never been
+recorded. `scripts/weather-books.mjs` now captures every open KXHIGHT*/KXLOWT* market's live top-of-book
+every 30 minutes (public endpoints, no keys, trades nothing): 492 markets across 82 events per cycle, 24 s,
+zero without a book. Task `OracleTrader-WeatherBooks` (clone of the BtcCollector task: logon trigger, three
+restarts, no time limit). Output `data/weather-books/YYYY-MM-DD.jsonl`. The global paged `/markets` list never
+surfaced weather markets within 60 pages; enumeration goes through the Climate & Weather series list.
+
+**Next, not yet built (backlog 149).** An ECMWF ENS shadow: `pip install ecmwf-opendata eccodes cfgrib xarray`
+(free), pull `mx2t6`/`mn2t6` for the 27 HRRR stations at D+1..D+3 each run, grade against observed highs/lows
+AND against the modal bracket's ask from the new books. Nothing to grade until the books have a week. The
+prior stays low - §116 found the market calibrated where we could look, and the article's winners own
+data the market does not - but this is the first version of the test that can actually answer the question.

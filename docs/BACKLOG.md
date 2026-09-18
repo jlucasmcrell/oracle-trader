@@ -1866,3 +1866,12 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **146 first check passed early (20:20Z):** all sweeps since the floor are >= 6c; sweep rate ~1 per 25 min.
 - **147 note:** shadow rows in the orderbook era already reconfirm the floor's losing bucket at 95%
   (gap < 6c, >= 3 min left: -3.15c [-4.34, -1.96], n=253); the exception itself is unsupported at n=53. Keep 09-25.
+
+148. **Weather book capture (registered 2026-09-18 21:00Z, §117).** `OracleTrader-WeatherBooks`, every 30 min, all
+    open KXHIGHT/KXLOWT markets with strike semantics and live top-of-book -> `data/weather-books/`. First read
+    2026-09-20 12:00Z: rows/day, events/day, `bookMissing` count, and that the recorder survived a logon.
+149. **ECMWF ENS shadow (trigger: 2026-09-25, once 148 has a week).** Free CC-BY open data (`mx2t6`/`mn2t6`, ENS,
+    0.25 deg). Install `ecmwf-opendata eccodes cfgrib xarray`; pull for the 27 HRRR stations at D+1..D+3 per run;
+    grade bracket probabilities vs observed highs/lows and vs the modal bracket's ask in the books, day-clustered.
+    Positive at 95% over >= 30 station-days at the modal bracket -> register a taker weather arm; otherwise weather
+    stays closed and this line records why. HRRR (§116) is the control: it lost on the cheap brackets.
