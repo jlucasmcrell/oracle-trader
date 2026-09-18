@@ -354,7 +354,7 @@ Only the quoter change touches anything that trades.
 `data/sentinel/incidents/2026-09-18T12-05-maintenance-failed.md` is **still OPEN**
 (no Outcome written). Cause: LLM weekly quota exhausted. The 07:00 run cannot
 succeed before the 11am reset, so the **11:30 catch-up is the first run that can
-succeed** -- it had not yet fired at the time of writing (11:08).
+succeed** -- it had not yet fired at the time of writing (11:08). **Verified at 11:12: the task is Ready, both triggers are Enabled, and the per-day guard keys on SUCCESS -- it skips only when the log shows `] exit 0`, not on "already attempted" -- so the 07:00 failure does NOT suppress the 11:30 catch-up. Today's log contains no `exit 0`, so the catch-up will run.**
 
 Note: `data/` is gitignored, so **the sentinel's incident record is not under
 version control at all.**
