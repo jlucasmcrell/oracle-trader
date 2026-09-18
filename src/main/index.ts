@@ -400,7 +400,7 @@ app.whenReady().then(async () => {
   engine.setRiskLimits(config.get().riskLimits)
   // Background Polymarket US catalog walk (§118): started here, not in the adapter's init, so tests never touch the gateway.
   const polyUs = engine.getAdapter('polymarket-us')
-  if (polyUs instanceof PolymarketUsAdapter) polyUs.startCatalogRefresh()
+  if (polyUs instanceof PolymarketUsAdapter) polyUs.startCatalogRefresh(join(app.getPath('userData'), 'polyus-moneylines.json'))
 
 
 

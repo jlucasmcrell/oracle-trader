@@ -1,5 +1,6 @@
 import { createPrivateKey, sign } from 'node:crypto'
 import type { KeyObject } from 'node:crypto'
+import { renameSync, writeFileSync } from 'node:fs'
 import { HttpClient } from '../util/http'
 import { reconcileUsLedger } from './usLedger'
 import type { VenueAdapter, VenueCapabilities } from '../../shared/venue'
@@ -230,11 +231,26 @@ export class PolymarketUsAdapter implements VenueAdapter {
   }
 
   /** Start the background catalog walk (idempotent). Exposed so the app can start it without credentials. */
-  startCatalogRefresh(): void {
+  startCatalogRefresh(moneylinesPath?: string): void {
     if (this.catalogTimer) return
+    this.moneylinesPath = moneylinesPath
     void this.refreshCatalog().catch(() => undefined)
     this.catalogTimer = setInterval(() => { void this.refreshCatalog().catch(() => undefined) }, CATALOG_REFRESH_MS)
     this.catalogTimer.unref?.()
+  }
+
+  /** The moneyline subset of the index for scripts/sports-books.mjs (backlog 151), so the recorder does not walk
+   *  the gateway a second time. Atomic write; a failure is logged, never thrown. */
+  private moneylinesPath?: string
+  private writeMoneylines(rows: UsMarket[]): void {
+    if (!this.moneylinesPath) return
+    try {
+      const ml = rows.filter((m) => typeof m.slug === 'string' && m.slug.startsWith('aec-') && /^who will win\b/i.test(String(m.question ?? '')))
+      writeFileSync(`${this.moneylinesPath}.tmp`, JSON.stringify({ at: Date.now(), rows: ml }))
+      renameSync(`${this.moneylinesPath}.tmp`, this.moneylinesPath)
+    } catch (e) {
+      console.warn(`[polymarket-us] moneylines file: ${String(e).slice(0, 120)}`)
+    }
   }
 
   /** One full walk of the open catalog; keeps rows closing inside the horizon. Never throws to the caller. */
@@ -259,6 +275,7 @@ export class PolymarketUsAdapter implements VenueAdapter {
         await new Promise((r) => setTimeout(r, CATALOG_PAGE_GAP_MS))
       }
       this.catalog = { at: Date.now(), rows: kept }
+      this.writeMoneylines(kept)
       console.log(`[polymarket-us] catalog walk: ${pages} pages, ${kept.length} markets closing within ${CATALOG_HORIZON_MS / 3600_000}h, ${((Date.now() - started) / 1000).toFixed(0)}s`)
       return kept.length
     } catch (err) {

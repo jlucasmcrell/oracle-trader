@@ -4271,3 +4271,19 @@ card; Kalshi's only "Paper" was the top-bar switch, which flips where real order
 - Verified in a stubbed renderer harness (both tabs, both views, Sell disabled on the paper view under live
   execution; harness removed). 18/18 suites. Restarted 22:09:50Z on the 22:05:12Z bundle; 4 procs, arms scanning.
 - Also in this commit: `polyPaper` discovery `limit: 5000` (served from the catalog index, §120).
+
+## §124 - 2026-09-18 22:20Z: same-second sports books recorder running (item 151, next build)
+
+- `scripts/sports-books.mjs` (GET-only, no keys, trades nothing): every 60 s, for every matched game from 4 h
+  before start to 5 h after, records the Kalshi orderbook (batched `/markets/orderbooks`, depth 3) and the
+  Polymarket US `/book` in the same cycle, each stamped with its own fetch time, to `data/sports-books/YYYY-MM-DD.jsonl`
+  (`{ts, slug, ticker, event, team, gameStart, kalshiTeamIsLong, pm:{at,bids,asks}, k:{at,bids,asks}}`; `pm` is
+  the long side's book). Discovery every 30 min with the §122 matcher (one-to-one team phrases per event).
+- Discovery reads `%APPDATA%/oracle-trader/polyus-moneylines.json`, the moneyline subset the app now writes on
+  each catalog walk (`PolymarketUsAdapter.writeMoneylines`, atomic, `aec-` slugs whose question starts
+  "Who will win"), so the recorder does not walk the gateway a second time; if the file is missing or older
+  than 2 h it walks the gateway itself. Seeded once from the 21:44Z snapshot; the app overwrites it.
+- First run: 350 matched sides across 178 games; 36 active sides across 18 games per cycle, 0 books missing.
+  Task `OracleTrader-SportsBooks` (logon +1 min, restart 3x, no time limit). App restarted 22:15:35Z on the
+  22:14:18Z bundle. Read at 7 days: who moves first around line moves, and whether any sub-$1 basket survives
+  simultaneous quotes.

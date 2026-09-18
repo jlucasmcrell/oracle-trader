@@ -1921,6 +1921,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   capture Polymarket US `/v1/markets/{slug}/book` and Kalshi batched orderbooks in the SAME cycle every 60 s from
   4 h before start; grade who moves first and whether any sub-$1 basket survives simultaneous quotes. Trigger:
   build 2026-09-19; read at 7 days.
+- **151 recorder RUNNING (2026-09-18 22:20Z, §124).** `scripts/sports-books.mjs` under task `OracleTrader-SportsBooks`;
+  36 sides / 18 games per cycle on the first run. Trigger: read `data/sports-books/*.jsonl` on **2026-09-25** - per
+  game, which venue's mid moves first (cross-correlation at 60 s lags) and whether any basket A/B < $1 at
+  simultaneous asks persists for more than one cycle; verify `polyus-moneylines.json` is being rewritten by the app
+  (its `at` within 45 min) before trusting discovery.
 - **UI standardization DONE (2026-09-18 22:10Z, §123).** One account layout for every venue (left pane, Paper/Real
   view buttons, venue content right). Open follow-up, no trigger yet: IBKR still uses its own `IbkrPanel`; fold it
   onto the shared pane if the two drift. Trigger: any change to `IbkrPanel.tsx`'s account card.
