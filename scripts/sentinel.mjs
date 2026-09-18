@@ -26,6 +26,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
+import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
 const UD = path.join(process.env.APPDATA ?? '', 'oracle-trader')
@@ -177,14 +178,9 @@ const collector = mtime(path.join(REPO, 'data/btc-collector', `${today}.jsonl`))
 if ((collector === undefined && new Date(now).getUTCHours() >= 1) || (collector !== undefined && now - collector > 15 * MIN)) {
   add('collector-stale', 'repair', 'BTC collector not writing', collector === undefined ? `data/btc-collector/${today}.jsonl missing` : `last write ${ageMin(collector)} min ago`)
 }
-for (const [key, file, task] of [
-  ['hrrr-stale', 'data/hrrr-shadow/forecasts.jsonl', 'OracleTrader-HrrrShadow'],
-  ['metaculus-stale', 'data/metaculus-shadow/last-mc.json', 'OracleTrader-MetaculusShadow'],
-  ['mention-stale', 'data/mention-shadow/run.log', 'OracleTrader-MentionShadow'],
-  ['polyconsensus-stale', 'data/polymarket-consensus/run.log', 'OracleTrader-PolyConsensus'],
-]) {
+for (const [key, file, task, staleMs] of TASK_WATCH) {
   const t = mtime(path.join(REPO, file))
-  if (t !== undefined && now - t > 130 * MIN) {
+  if (isStale(t, now, staleMs)) {
     const last = state.revived[key] ?? 0
     if (now - last > 3 * H) {
       state.revived[key] = now

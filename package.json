@@ -27,6 +27,7 @@
     "execution:report": "node scripts/execution-quality-report.mjs",
     "test:execution-quality": "node scripts/tests/execution-quality.test.mjs",
     "test:collection": "node scripts/tests/collection-integrity.test.mjs",
+    "test:task-watch": "node scripts/tests/task-watch.test.mjs",
     "test:migration": "node scripts/tests/run.cjs scripts/tests/config-migration.test.ts",
     "test:fee": "node scripts/tests/run.cjs scripts/tests/kalshi-fee.test.ts",
     "test:paper-mc": "node scripts/tests/run.cjs scripts/tests/paper-mc.test.ts",

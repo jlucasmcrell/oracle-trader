@@ -8,7 +8,7 @@ import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, obser
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
-import { CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
+import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter } from '../../src/main/venues/polymarketUs'
 import { isPinnedQuote, refreshedCloseTime, settlementProbeDue, statsBand, stuckSettlements } from '../../src/main/strategies/ledgerAudit'
@@ -793,6 +793,11 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
 // ---- lead-lag speed and breadth (round 91, backlog 84) ----
 {
   const pairs = leadLagPairs(1789290000)
+  // A maker reprice forfeits queue position on Kalshi, and this account's own settled markets show amended maker
+  // orders at -2.17c/contract against +0.33c for never-amended ones. Chase only a move worth the lost slot.
+  eq('maker reprice: 1c and 2c moves hold the queue slot, 3c repriced',
+    [shouldRepriceMaker(0.41, 0.40), shouldRepriceMaker(0.42, 0.40), shouldRepriceMaker(0.43, 0.40), shouldRepriceMaker(0.37, 0.40)],
+    [false, false, true, true])
   eq('leadlag: book top is best YES bid and 1 - best NO bid, unsorted levels and empty sizes ignored',
     [kalshiBookTop({ orderbook_fp: { yes_dollars: [['0.7900', '5'], ['0.8000', '3'], ['0.8100', '0']], no_dollars: [['0.1900', '4'], ['0.1800', '9']] } }),
       kalshiBookTop({ orderbook_fp: { yes_dollars: [['0.5', '1']], no_dollars: [] } }), kalshiBookTop(null)],

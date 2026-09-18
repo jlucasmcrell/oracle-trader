@@ -617,6 +617,21 @@ function nowDate(): string {
  * engine's global paper/live mode. LIVE execution additionally requires the
  * explicit liveArmed switch (and dutchLiveEnabled for multi-leg Dutch).
  */
+/**
+ * Reprice a resting maker order only on a move of at least 3c.
+ *
+ * Kalshi's amend forfeits queue position on any price change (size decreases are the one exception), so a 1c chase
+ * puts the order at the back of the book exactly when its price is right, and leaves it at the front exactly when it
+ * is stale. Measured on this account's own settled maker markets (2026-09-18): markets whose order was amended ran
+ * -2.17c/contract over 143 contracts, while never-amended ones ran +0.33c/contract over 1,786. The quoter's shadow
+ * meter shows the same ~-2c on 1,115 markouts. Correlation is not settled - a market that moves is also a worse
+ * market - but both readings argue for chasing less, and a decayed edge is already handled by pulling the order
+ * rather than repricing it.
+ */
+export function shouldRepriceMaker(desiredYes: number, restingYes: number): boolean {
+  return Math.abs(desiredYes - restingYes) >= 0.03 - 1e-9
+}
+
 export class AutoTrader {
   private config: AutoTraderConfig
   private state: PersistedState
@@ -3326,7 +3341,7 @@ export class AutoTrader {
               this.emit('autoexpired', { marketId: p.marketId, question: `edge decayed (${edgeCents.toFixed(1)}¢) — pulled` })
               continue
             }
-            if (Math.abs(desired - p.yesPrice) >= 0.01 - 1e-9) {
+            if (shouldRepriceMaker(desired, p.yesPrice)) {
               const side = p.outcome === 'NO' ? 'ask' : 'bid'
               // The amend carries the order's TOTAL size, and already-filled
               // contracts are INSIDE that total. Adding `promoted` back on top

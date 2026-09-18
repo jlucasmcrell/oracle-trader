@@ -1712,3 +1712,32 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
     file count was wrong, and they poison every grep).
   - Verified: tsc rc=0, 17/17 suites, build, restart 15:36:02Z clean - lead-lag scanning at 10 s, no adapter errors.
 
+- **140 DONE (2026-09-18 15:52Z).** Maker reprice discipline on the LIVE fade arm (SESSION-REPORT 8.3 applied where it
+  actually trades, not to the retired quoter). `autoTrader.ts` chased a resting maker order on a **1c** move; Kalshi
+  forfeits queue position on any price change. Measured on this account's own settled markets: markets whose maker
+  order was amended ran **-2.17c/contract over 143 contracts (net -$3.09)**, never-amended ones **+0.33c over 1,786
+  (net +$5.82)**. New pure helper `shouldRepriceMaker()` requires **3c**, matching the quoter's rule; a decayed edge
+  still pulls the order rather than chasing it. Test pins 1c/2c hold, 3c reprices; the old 1c threshold fails it.
+  Caveat recorded: amend correlates with a moving market, so this is not a clean causal estimate - both readings
+  argue for chasing less.
+- **Quoter (SESSION-REPORT 6.7 #3): NOT revived.** It sits at `disabled` for cause - its maker seat in KX(HIGH|LOW)T*
+  measures -1.70c/contract over 801,258 contracts and -5.55c in the window it quoted. Enabling it at 2 contracts to
+  exercise the tier-1 shrink would buy evidence on a seat the venue-wide data says loses. The same queue mechanism
+  was applied to the live arm instead (140). Revisit only if the weather maker seat is re-measured positive.
+141. **Fade loss distribution (SESSION-REPORT 6.2 blocker) - ANSWERED: do not scale.** 138 settled fade trades:
+    net **+$8.01**, win rate **95%**, mean win **+$0.125**, mean loss **-$1.19**, worst **-$2.13**; the worst 6 trades
+    erase the whole profit. Two numbers decide it:
+    - **Calibration: z = +0.15.** Mean entry 0.9464 implies 7.4 losses if the price is fair; we took 7. The arm wins
+      exactly as often as its prices say it should - that is the signature of NO edge, not of a favourite bias.
+    - **Breakeven loss rate is 9.5%**; observed 5.1% with a 95% CI of **2.5% - 10.1%**. The interval crosses breakeven,
+      and net is only t=1.99.
+    Scaling multiplies EV and tail alike, so 5x turns the worst observed trade into -$10.65 against ~$89 equity while
+    the edge itself remains unproven. **Stake stays $1** (sizes are the operator's call; this is the recommendation and
+    the evidence). Re-test at **250 trades or 15 losses**, whichever first: that is the sample where the CI can clear
+    9.5%. Losses are not clusterable - they are spread across KXWTI/KXNATGASD/KXHIGHT/KXSOLE/KXAAAGASD, all at 0.93-0.98
+    entries, i.e. the favourite simply lost. No filter removes them.
+- **Git: private remote live (2026-09-18 15:44Z).** `https://github.com/jlucasmcrell/oracle-trader` (PRIVATE), 13
+  commits pushed. PII re-verified across all history before pushing (0 hits, positive control 48). The pre-scrub
+  archive `G:\PROJECTS\oracle-trader-backups\git-prePII-20260918-095819` is **deleted**, and the last local copy of
+  the unscrubbed doc (`backups/_gitinit_20260918/...orig`) is scrubbed. `backups/` is gitignored and was not pushed.
+
