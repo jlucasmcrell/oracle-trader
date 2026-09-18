@@ -10,6 +10,7 @@
     "preview": "electron-vite preview",
     "start": "electron .",
     "typecheck": "tsc --noEmit",
+    "test": "node scripts/tests/run-all.cjs",
     "smoke:manifold": "node scripts/smoke-manifold.mjs",
     "intelligence:report": "node scripts/intelligence-report.mjs",
     "test:settlement-accounting": "node scripts/settlement-accounting-regression.mjs",
