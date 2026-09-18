@@ -1875,3 +1875,19 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
     grade bracket probabilities vs observed highs/lows and vs the modal bracket's ask in the books, day-clustered.
     Positive at 95% over >= 30 station-days at the modal bracket -> register a taker weather arm; otherwise weather
     stays closed and this line records why. HRRR (§116) is the control: it lost on the cheap brackets.
+
+150. **Kalshi <-> ForecastEx same-event shadow (trigger: 2026-09-19 to build; read at 7 days).** Match by product
+    (FF, CPIY, UNR, IJC, RGDP, elections, CF crypto strikes, temperature thresholds: ForecastEx "exceed X" = the sum
+    of Kalshi brackets above X). Record both books every 30 min from feeds we hold (IBKR lab quotes, weather books,
+    Kalshi orderbooks); grade divergence against each venue's result and who moves first. First prototype today
+    found ForecastEx temperature asks 10-40c from the Kalshi-implied probability with quotes hours old - stale
+    resting orders on a thin venue, or a real gap; the shadow decides.
+151. **Kalshi <-> Polymarket US same-event shadow (trigger: after 148/1 has a week).** Games and races listed on
+    both. Needs the catalog index (§118) and a team/event matcher (start from the sports-anchor's). Same grading.
+152. **ForecastEx coupon in the IBKR lab (trigger: the first coupon posting on the real account).** Accrue monthly
+    coupons on held value; changes which hold-to-settlement arms clear zero.
+153. **Polymarket US maker rebate in the paper lab (trigger: 2026-09-19).** Credit 0.0125 x p(1-p) on `join`/`improve`
+    fills (documented formula, paid at trade); keep the liquidity program out; re-baseline both arms.
+154. **Polymarket US consensus and sports-anchor paper arms (trigger: 148/1 has a week).** Both signals exist.
+155. **IBKR calibration slopes by category (trigger: 2026-09-22).** Replace the single 1.15 with the Becker per-
+    category slopes; re-baseline `calibration` and `political-favorite`.

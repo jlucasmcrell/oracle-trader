@@ -120,6 +120,25 @@ async function main() {
       assert.equal(await Promise.race([post, timeout]), 'posted')
     } finally { globalThis.fetch = realFetch }
   })
+  await test('Polymarket US catalog index: one background walk serves ending-soon without re-paging', async () => {
+    const a: any = new PolymarketUsAdapter(); a.requireAuth = () => {}
+    const day = 86_400_000, now = Date.now()
+    const row = (slug: string, closeIn: number) => ({ slug, id: slug, question: slug, closed: false, status: 'MARKET_STATUS_ACTIVE', outcomes: ['Yes', 'No'], outcomePrices: ['0.5', '0.5'],
+      marketSides: [{ long: true, price: '0.5' }, { long: false, price: '0.5' }], endDate: new Date(now + closeIn).toISOString(), gameStartTime: new Date(now + closeIn - 3600_000).toISOString() })
+    // Page 0: 100 rows, half closing inside a week, half in two months. Page 1: 30 rows (short page ends the walk).
+    const pages = [Array.from({ length: 100 }, (_, i) => row(`p0-${i}`, i % 2 ? 3 * day : 60 * day)), Array.from({ length: 30 }, (_, i) => row(`p1-${i}`, 2 * day))]
+    let calls = 0
+    a.gateway = { get: async (path: string) => { calls++; const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0); return { markets: pages[off / 100] ?? [] } } }
+    assert.equal(await a.refreshCatalog(), 80, '50 + 30 rows close inside the horizon')
+    assert.equal(calls, 2)
+    const got = await a.searchMarkets({ sort: 'ending-soon', limit: 1000, minCloseTime: now + 60_000, maxCloseTime: now + 5 * day })
+    assert.equal(calls, 2, 'a fresh index serves the query with no further gateway calls')
+    assert.equal(got.length, 80)
+    assert.ok(got.every((m: any) => m.closeTime <= now + 5 * day))
+    a.catalog.at = now - 46 * 60_000
+    await a.searchMarkets({ sort: 'ending-soon', limit: 10, minCloseTime: now + 60_000, maxCloseTime: now + 5 * day })
+    assert.ok(calls > 2, 'a stale index falls back to the paged walk')
+  })
   await test('Kalshi account pagination completes beyond 50 pages and rejects repeated cursors', async () => {
     const a: any = new KalshiAdapter(); let n = 0
     a.authGet = async () => ({ fills: [{ id: ++n }], cursor: n < 65 ? String(n) : '' })

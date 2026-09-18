@@ -398,6 +398,9 @@ app.whenReady().then(async () => {
   })
   engine.setExecutionMode(config.get().executionMode)
   engine.setRiskLimits(config.get().riskLimits)
+  // Background Polymarket US catalog walk (§118): started here, not in the adapter's init, so tests never touch the gateway.
+  const polyUs = engine.getAdapter('polymarket-us')
+  if (polyUs instanceof PolymarketUsAdapter) polyUs.startCatalogRefresh()
 
 
 

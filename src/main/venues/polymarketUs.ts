@@ -49,6 +49,13 @@ export const ACTIVITY_PAGE_PACE_MS = 700
  * (2026-09-08). Sampled 2026-09-08: NFL division winners carry a fixture 1.7
  * days out and an endDate 137 days out; games keep endDate within ~14 days.
  */
+/** Catalog index cadence and bounds (see PolymarketUsAdapter.refreshCatalog). */
+export const CATALOG_REFRESH_MS = 30 * 60_000
+export const CATALOG_STALE_MS = 45 * 60_000
+export const CATALOG_HORIZON_MS = 7 * 24 * 3600_000
+export const CATALOG_MAX_ROWS = 200_000
+const CATALOG_PAGE_GAP_MS = 120
+
 export function isUsFutures(m: { marketType?: string; sportsMarketType?: string }): boolean {
   return m.marketType === 'futures' || m.sportsMarketType === 'futures'
 }
@@ -196,12 +203,62 @@ export class PolymarketUsAdapter implements VenueAdapter {
 
   private gateway: HttpClient
   private api: HttpClient
+  /**
+   * Background catalog index (2026-09-18). The gateway lists 80,000+ open markets, leaves `volume` null on every
+   * row, and honours neither orderBy=gameStartTime nor a start-time floor, so the only way to find every
+   * short-dated market is to walk the whole catalog. A 3,000-row walk per scan saw ~4% of it (the paper lab
+   * tracked 12 of 791 candidates). This walks all of it every CATALOG_REFRESH_MS in the background, keeps the
+   * rows whose derived close is inside CATALOG_HORIZON_MS, and lets searchMarkets('ending-soon') read from it.
+   */
+  private catalog?: { at: number; rows: UsMarket[] }
+  private catalogTimer?: ReturnType<typeof setInterval>
+  private catalogWalking = false
   private keyId?: string
   private edKey?: KeyObject
 
   constructor(marketDataPaceMs?:number) {
     this.gateway = new HttpClient({ baseUrl: GATEWAY, rateLimit: marketDataPaceMs?1:200, rateLimitWindowMs:marketDataPaceMs })
     this.api = new HttpClient({ baseUrl: API, rateLimit: 200 })
+  }
+
+  /** Start the background catalog walk (idempotent). Exposed so the app can start it without credentials. */
+  startCatalogRefresh(): void {
+    if (this.catalogTimer) return
+    void this.refreshCatalog().catch(() => undefined)
+    this.catalogTimer = setInterval(() => { void this.refreshCatalog().catch(() => undefined) }, CATALOG_REFRESH_MS)
+    this.catalogTimer.unref?.()
+  }
+
+  /** One full walk of the open catalog; keeps rows closing inside the horizon. Never throws to the caller. */
+  async refreshCatalog(): Promise<number> {
+    if (this.catalogWalking) return this.catalog?.rows.length ?? 0
+    this.catalogWalking = true
+    const started = Date.now()
+    try {
+      const kept: UsMarket[] = []
+      let pages = 0
+      for (let offset = 0; offset < CATALOG_MAX_ROWS; offset += 100) {
+        const params = new URLSearchParams({ limit: '100', offset: String(offset), closed: 'false', orderBy: 'volume', orderDirection: 'desc' })
+        const res = await this.gateway.get<{ markets?: UsMarket[] }>(`/v1/markets?${params.toString()}`)
+        const ms = res.markets ?? []
+        pages++
+        for (const m of ms) {
+          if (m.closed) continue
+          const close = deriveUsCloseTime({ endMs: m.endDate ? Date.parse(m.endDate) : undefined, gameMs: m.gameStartTime ? Date.parse(m.gameStartTime) : undefined, resolved: m.status === 'MARKET_STATUS_RESOLVED', futures: isUsFutures(m) }, started)
+          if (close !== undefined && close > started && close - started <= CATALOG_HORIZON_MS) kept.push(m)
+        }
+        if (ms.length < 100) break
+        await new Promise((r) => setTimeout(r, CATALOG_PAGE_GAP_MS))
+      }
+      this.catalog = { at: Date.now(), rows: kept }
+      console.log(`[polymarket-us] catalog walk: ${pages} pages, ${kept.length} markets closing within ${CATALOG_HORIZON_MS / 3600_000}h, ${((Date.now() - started) / 1000).toFixed(0)}s`)
+      return kept.length
+    } catch (err) {
+      console.warn('[polymarket-us] catalog walk failed:', err instanceof Error ? err.message : String(err))
+      return this.catalog?.rows.length ?? 0
+    } finally {
+      this.catalogWalking = false
+    }
   }
 
   async init(credentials?: VenueCredentials): Promise<void> {
@@ -237,7 +294,11 @@ export class PolymarketUsAdapter implements VenueAdapter {
     // which is why polyus-fade had never filled an order. The cost is 20 extra
     // 100-row requests on a scan that completes in 3.6s against Kalshi's 68s.
     const want = query.sort === 'ending-soon' ? 3000 : Math.min(query.limit ?? 200, 1000)
-    const collected: UsMarket[] = []
+    let collected: UsMarket[] = []
+    // A fresh catalog index covers the whole venue; the 3,000-row walk below is the fallback until the first walk lands.
+    const fresh = query.sort === 'ending-soon' && this.catalog && Date.now() - this.catalog.at < CATALOG_STALE_MS
+    if (fresh) collected = this.catalog!.rows.slice()
+    else
     // Paginate: the gateway caps at 100/request and volume-sorts. orderBy=endDate
     // is silently ignored, so we bound by date and sort client-side.
     for (let offset = 0; offset < want; offset += 100) {

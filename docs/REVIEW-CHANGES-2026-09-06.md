@@ -4139,3 +4139,24 @@ surfaced weather markets within 60 pages; enumeration goes through the Climate &
 AND against the modal bracket's ask from the new books. Nothing to grade until the books have a week. The
 prior stays low - §116 found the market calibrated where we could look, and the article's winners own
 data the market does not - but this is the first version of the test that can actually answer the question.
+
+## §118 - 2026-09-18 22:00Z: Polymarket US catalog index; the research program
+
+**Defect.** `searchMarkets('ending-soon')` walked 3,000 rows of a catalog that now holds **80,000+ open markets**
+(probed: 800 pages in 316 s, `volume` null on every row, `orderBy=gameStartTime` and a start-time floor both
+ignored by the gateway). The paper lab tracked 12 of 791 candidates; the held live arms saw the same 4% sample.
+SESSION-REPORT 6.4 was right that the slice was the reason polyus-fade never fired.
+
+**Fix.** The adapter keeps a background catalog index: a full walk every 30 minutes (120 ms between pages), keeping
+rows whose derived close (the adapter's own `deriveUsCloseTime`) is inside 7 days; `searchMarkets('ending-soon')`
+serves from it while it is under 45 minutes old and falls back to the old walk otherwise. Started from
+`main/index.ts` after `engine.init` - not from the adapter's `init()`, which made every suite that constructs the
+adapter retry against a mocked-dead gateway (469 s run). Test: two mocked pages, 80 kept, zero further gateway
+calls on a fresh index, fallback on a stale one. 18/18 suites, 9.6 s.
+
+**Research program.** `docs/RESEARCH-PROGRAM-2026-09-18.md`: inventory of all three venues, venue mechanics
+verified from the venues (Polymarket US maker rebate 0.0125 x p(1-p) and a per-second liquidity program; ForecastEx
+$0.01/contract and monthly incentive coupons on held value), an audit of every IBKR and Polymarket paper arm,
+and a ranked list. The two largest gaps on both non-Kalshi venues are the same: **no same-event cross-venue
+test** (Kalshi <-> ForecastEx on Fed/CPI/claims/elections/crypto strikes/temperature thresholds; Kalshi <->
+Polymarket US on games and races), and maker accounting that ignores what the venue pays.
