@@ -734,7 +734,7 @@ export interface AutoVetTest {
   error?: string
 }
 
-// ---- mini multi-venue auto-trader (Manifold · Polymarket US) ----
+// ---- mini auto-trader (Polymarket US; Manifold removed 2026-09-18) ----
 
 export interface MiniAutoConfig {
   /** Only fade categories where the bias is measured to exist (see classify.ts). */
@@ -750,13 +750,12 @@ export interface MiniAutoConfig {
   enabled: boolean
   autoPoll: boolean
   pollIntervalSeconds: number
-  /** Venue-currency amount per trade (M$ on Manifold, USD on Polymarket US). */
+  /** Venue-currency amount per trade (USD on Polymarket US). */
   amountPerTrade: number
   maxOpenPositions: number
   maxDailyTrades: number
   /**
-   * Venue-wide daily realized-loss brake in venue currency; 0 disables (and
-   * Manifold, being play money, leaves it at 0). New entries halt for the rest
+   * Venue-wide daily realized-loss brake in venue currency; 0 disables. New entries halt for the rest
    * of the UTC day once the day's realized loss reaches it; exits and
    * settlement keep running, and it clears itself at 00:00Z.
    */
@@ -770,12 +769,12 @@ export interface MiniAutoConfig {
    * LIVE entry style on venues with an order book (Polymarket US): 'maker'
    * rests a post-only limit inside the spread — the maker fee there is a
    * REBATE, flipping fee sign entirely; 'taker' crosses immediately. Paper
-   * always simulates taker. Ignored on AMM venues (Manifold).
+   * always simulates taker. Ignored on AMM venues.
    */
   fadeEntryMode: 'taker' | 'maker'
-  /** Minimum venue-reported market liquidity (M$ on Manifold); skipped when the venue doesn't report it. */
+  /** Minimum venue-reported market liquidity; skipped when the venue doesn't report it. */
   fadeMinLiquidity: number
-  /** Minimum unique bettors (Manifold) — filters creator-resolved insider markets nobody trades. */
+  /** Minimum unique bettors, where the venue reports them — filters creator-resolved insider markets nobody trades. */
   fadeMinBettors: number
   /** Max bid/ask spread in cents for fade entries on venues with an order book. */
   fadeMaxSpreadCents: number
@@ -904,19 +903,11 @@ export interface RiskLimits {
   maxStakePerBet: number
   /**
    * Per-venue override of maxStakePerBet, in that venue's currency. Exists because the global number is
-   * "venue-currency": 10 means $10 on Kalshi and 10 mana on Manifold, and raising it for the play-money
-   * venue must not raise the real-money cap. Absent venues use the global.
+   * "venue-currency", so one venue's cap must not be raised by another's. Absent venues use the global.
    */
   maxStakePerBetByVenue?: Partial<Record<VenueId, number>>
   /** Max number of open positions (0 = unlimited). */
   maxOpenPositions: number
-}
-
-export interface ManifoldConnection {
-  connected: boolean
-  username?: string
-  balance?: number
-  error?: string
 }
 
 export interface KalshiConnection {
@@ -927,9 +918,6 @@ export interface KalshiConnection {
 
 export interface SettingsView {
   executionMode: ExecutionMode
-  hasManifoldKey: boolean
-  manifoldUsername?: string
-  manifoldBalance?: number
   hasKalshiKey: boolean
   kalshiBalance?: number
   /** Kalshi adapter is pointed at the DEMO exchange (separate creds, mock funds). */
@@ -1142,7 +1130,6 @@ export interface Api {
     ibkrReconciliation(): Promise<{ lastRunAt?: number; lastError?: string; ingested: number }>
     ibkrWatchAdd(request: OrderRequest, expiresAt: number): Promise<import('./ibkr').IbkrWatch[]>
     ibkrWatchStop(id: string): Promise<import('./ibkr').IbkrWatch[]>
-    saveManifoldKey(key: string): Promise<ManifoldConnection>
     saveKalshiCredentials(apiKeyId: string, privateKey: string): Promise<KalshiConnection>
     setKalshiDemo(demo: boolean): Promise<KalshiConnection>
     savePolymarketUsCredentials(apiKeyId: string, secretKey: string): Promise<KalshiConnection>
@@ -1199,7 +1186,6 @@ export const IPC = {
   ibkrReconciliation: 'ibkr:reconciliation',
   ibkrWatchAdd: 'ibkr:watch-add',
   ibkrWatchStop: 'ibkr:watch-stop',
-  settingsSaveKey: 'settings:saveManifoldKey',
   settingsSaveKalshi: 'settings:saveKalshiCredentials',
   settingsSetKalshiDemo: 'settings:setKalshiDemo',
   settingsSavePolymarketUs: 'settings:savePolymarketUsCredentials',

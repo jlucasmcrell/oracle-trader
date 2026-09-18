@@ -63,7 +63,7 @@ function ledgers() {
   }
   const q = readJson(join(DATA, 'quoter-kalshi.json'))
   if (q) h.quoter = { resting: (q.quotes || []).length, exposure: +(q.quotes || []).reduce((a, x) => a + x.count * (x.outcome === 'YES' ? x.yesPrice : 1 - x.yesPrice), 0).toFixed(2), placed: q.placed, filled: q.filled, lastError: q.lastError || null, tickAgeMin: q.lastTick ? +((Date.now() - q.lastTick) / 60000).toFixed(1) : null }
-  for (const v of ['polymarket-us', 'manifold']) {
+  for (const v of ['polymarket-us']) {
     const m = readJson(join(DATA, `mini-auto-${v}.json`))
     if (m) h[v] = { armed: !!m.config.liveArmed, open: (m.state.openTrades || []).length, resting: (m.state.pendingOrders || []).length, daily: m.state.daily?.count, lastError: m.state.lastError || null, perf: m.state.perf ? { trades: m.state.perf.trades, wins: m.state.perf.wins, losses: m.state.perf.losses, pnl: +(m.state.perf.realizedPnl || 0).toFixed(2) } : null }
   }
@@ -106,7 +106,7 @@ async function tick() {
   if (status.quoter?.tickAgeMin !== null && status.quoter?.tickAgeMin > 10) alerts.push(`quoter stale ${status.quoter.tickAgeMin} min`)
   if (status.quoter?.exposure > 30) alerts.push(`quoter exposure $${status.quoter.exposure}`)
   if ((status.errors5m.count || 0) >= 10) alerts.push(`${status.errors5m.count} errors in 5 min: ${status.errors5m.sample}`)
-  for (const v of ['kalshi', 'polymarket-us', 'manifold', 'quoter']) if (status[v]?.lastError) alerts.push(`${v}: ${String(status[v].lastError).slice(0, 80)}`)
+  for (const v of ['kalshi', 'polymarket-us', 'quoter']) if (status[v]?.lastError) alerts.push(`${v}: ${String(status[v].lastError).slice(0, 80)}`)
   status.alerts = alerts
   try { writeFileSync(join(OUT, 'latest.json'), JSON.stringify(status, null, 2)); appendFileSync(join(OUT, 'health.jsonl'), JSON.stringify(status) + '\n') } catch (e) { log('write failed ' + e.message) }
   const k = status.kalshi, q = status.quoter, pu = status['polymarket-us']

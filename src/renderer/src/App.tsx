@@ -498,8 +498,8 @@ export default function App() {
         </section>
 
         <section className="panel">
-          <h2>Mini AutoTrader (Manifold  -  Polymarket US)</h2>
-          <MiniAutoPanel venue={venue === 'kalshi' ? 'manifold' : venue} log={addLog} onChanged={() => refresh(venue)} />
+          <h2>Mini AutoTrader (Polymarket US)</h2>
+          <MiniAutoPanel venue="polymarket-us" log={addLog} onChanged={() => refresh(venue)} />
         </section>
 
         <section className="panel">

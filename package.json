@@ -1,7 +1,7 @@
 {
   "name": "oracle-trader",
   "version": "0.1.0",
-  "description": "Desktop auto-trader for prediction markets - Manifold-first with a swappable multi-venue adapter layer, paper-trading, event scanning, and copy-trading.",
+  "description": "Desktop auto-trader for prediction markets - Kalshi, Polymarket US and IBKR ForecastEx behind a swappable adapter layer, paper-trading, event scanning, and copy-trading.",
   "main": "out/main/index.js",
   "license": "MIT",
   "scripts": {
@@ -11,7 +11,6 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/tests/run-all.cjs",
-    "smoke:manifold": "node scripts/smoke-manifold.mjs",
     "intelligence:report": "node scripts/intelligence-report.mjs",
     "test:settlement-accounting": "node scripts/settlement-accounting-regression.mjs",
     "test:review": "node scripts/tests/run.cjs scripts/tests/review-fixes.test.ts",

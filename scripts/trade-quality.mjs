@@ -94,7 +94,7 @@ if (existsSync(fillsPath)) {
 }
 
 // ---------- Minis ----------
-for (const v of ['polymarket-us', 'manifold']) {
+for (const v of ['polymarket-us']) {
   const m = rj(join(DATA, `mini-auto-${v}.json`)); if (!m) continue
   const p = m.state.perf || {}, by = m.state.perfByStrategy || {}
   console.log(`\n${v.toUpperCase()} (armed=${m.config.liveArmed}) — open ${(m.state.openTrades || []).length}, resting ${(m.state.pendingOrders || []).length}, total ${p.trades} closed ${p.wins}W/${p.losses}L net $${f2(p.realizedPnl)}`)

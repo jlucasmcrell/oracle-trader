@@ -318,7 +318,8 @@ export class MiniAuto {
       // venues were silently running different strategies, which made their
       // records incomparable. Manifold keeps exiting early because its
       // markets are creator-resolved (resolution risk, not price).
-      this.config.fadeExitEnabled = this.venue === 'manifold'
+      // Manifold was removed 2026-09-18; only Manifold set this true, so every surviving venue holds to settlement.
+      this.config.fadeExitEnabled = false
     }
     if ((persisted.configVersion ?? 1) < 20) {
       // v20 (2026-09-09 audit): the mini had no loss-based brake at all. Sized
@@ -1252,7 +1253,7 @@ export class MiniAuto {
         // and MKT at the resolution value on our leg. A MKT with no
         // resolutionProbability keeps waiting: never guess a settlement.
         const resUpper = typeof resolution === 'string' ? resolution.toUpperCase() : undefined
-        if ((this.venue === 'manifold' || this.venue === 'polymarket-us') && (resUpper === 'CANCEL' || resUpper === 'MKT')) {
+        if (this.venue === 'polymarket-us' && (resUpper === 'CANCEL' || resUpper === 'MKT')) {
           const p = mk?.resolutionProbability
           const winPrice = resUpper === 'CANCEL' ? t.entryPrice : t.outcome === 'YES' ? p : p === undefined ? undefined : 1 - p
           if (winPrice !== undefined && Number.isFinite(winPrice)) {

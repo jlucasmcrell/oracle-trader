@@ -175,7 +175,7 @@ export default function MiniAutoPanel({ log, onChanged, venue }: Props) {
             ) : (
               <span className="muted">no closed trades yet</span>
             )}
-            <span className="muted">{venue === 'manifold' ? 'M$' : 'USD'} - paper or live, whichever the mode was</span>
+            <span className="muted">USD - paper or live, whichever the mode was</span>
           </div>
 
           <div className="row">
@@ -195,18 +195,6 @@ export default function MiniAutoPanel({ log, onChanged, venue }: Props) {
               <input type="checkbox" checked={cfg.fadeFavoritesEnabled} onChange={(e) => patch({ fadeFavoritesEnabled: e.target.checked })} />
               favorites
             </label>
-            {venue === 'manifold' && (
-              <>
-                <label className="inline" title="Skip markets with less pooled liquidity than this - tiny creator-resolved markets are often insider-known.">
-                  liq &gt;= M$
-                  <input type="number" min={0} step={50} value={cfg.fadeMinLiquidity} onChange={(e) => patch({ fadeMinLiquidity: Number(e.target.value) })} />
-                </label>
-                <label className="inline" title="Skip markets with fewer unique bettors than this.">
-                  bettors &gt;=
-                  <input type="number" min={0} value={cfg.fadeMinBettors} onChange={(e) => patch({ fadeMinBettors: Number(e.target.value) })} />
-                </label>
-              </>
-            )}
             {venue === 'polymarket-us' && (
               <>
                 <label className="check" title="One-contract passive maker research. Stable hash assigns YES/NO; fills hold to settlement.">

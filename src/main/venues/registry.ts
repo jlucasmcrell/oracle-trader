@@ -1,6 +1,5 @@
 import type { VenueAdapter } from '../../shared/venue'
 import type { VenueId } from '../../shared/types'
-import { ManifoldAdapter } from './manifold'
 import { PolymarketUsAdapter } from './polymarketUs'
 import { KalshiAdapter } from './kalshi'
 import { IbkrAdapter } from './ibkrAdapter'
@@ -15,7 +14,6 @@ export class VenueRegistry {
   private adapters = new Map<VenueId, VenueAdapter>()
 
   constructor() {
-    this.register(new ManifoldAdapter())
     this.register(new PolymarketUsAdapter())
     this.register(new KalshiAdapter())
     this.register(new IbkrAdapter())

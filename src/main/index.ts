@@ -27,7 +27,7 @@ import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
 import { NightlyReview } from './intelligence/nightlyReview'
 import { IPC } from '../shared/ipc'
-import type { AutoTraderConfig, BacktestParams, KalshiConnection, ManifoldConnection, MiniAutoConfig, RiskLimits, SettingsView } from '../shared/ipc'
+import type { AutoTraderConfig, BacktestParams, KalshiConnection, MiniAutoConfig, RiskLimits, SettingsView } from '../shared/ipc'
 import type { ExecutionMode, MarketSearchQuery, OrderRequest, SellRequest, VenueId } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -242,17 +242,6 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.settingsGet, async () => {
     const cfg = config.get()
-    let username: string | undefined
-    let balance: number | undefined
-    if (cfg.manifoldApiKey) {
-      try {
-        const acc = await engine.getAdapter('manifold')?.getAccount()
-        username = acc?.username
-        balance = acc?.balance
-      } catch {
-        // ignore — key may be stale/invalid
-      }
-    }
     let kalshiBalance: number | undefined
     if (cfg.kalshiApiKeyId && cfg.kalshiPrivateKey) {
       try {
@@ -273,9 +262,6 @@ function registerIpc(): void {
     }
     return {
       executionMode: cfg.executionMode,
-      hasManifoldKey: !!cfg.manifoldApiKey,
-      manifoldUsername: username,
-      manifoldBalance: balance,
       hasKalshiKey: !!(cfg.kalshiApiKeyId && cfg.kalshiPrivateKey),
       kalshiBalance,
       kalshiDemo: cfg.kalshiDemo,
@@ -305,18 +291,6 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ibkrWatchStop, (_e, id: string) => ibkrWatch.stop(id))
   const ibkrWatchTimer = setInterval(() => void ibkrWatch.tick().catch(e=>console.error('[ibkr-watch]',String(e))),60_000)
   app.once('before-quit',()=>clearInterval(ibkrWatchTimer))
-  ipcMain.handle(IPC.settingsSaveKey, async (_e, key: string) => {
-    const k = typeof key === 'string' ? key.trim() : ''
-    config.update({ manifoldApiKey: k })
-    await engine.setCredentials('manifold', { apiKey: k || undefined })
-    if (!k) return { connected: false } as ManifoldConnection
-    try {
-      const acc = await engine.getAdapter('manifold')!.getAccount()
-      return { connected: true, username: acc.username, balance: acc.balance } as ManifoldConnection
-    } catch (err) {
-      return { connected: false, error: err instanceof Error ? err.message : String(err) } as ManifoldConnection
-    }
-  })
   ipcMain.handle(IPC.settingsSaveKalshi, async (_e, apiKeyId: string, privateKey: string) => {
     const id = typeof apiKeyId === 'string' ? apiKeyId.trim() : ''
     const pk = typeof privateKey === 'string' ? privateKey : ''
@@ -419,21 +393,12 @@ app.whenReady().then(async () => {
     paperStartingBalances: config.get().paperStartingBalances
   })
   await engine.init({
-    manifold: { apiKey: config.get().manifoldApiKey },
     kalshi: kalshiCreds(),
     'polymarket-us': { apiKeyId: config.get().polymarketUsApiKeyId, privateKey: config.get().polymarketUsPrivateKey }
   })
   engine.setExecutionMode(config.get().executionMode)
   engine.setRiskLimits(config.get().riskLimits)
 
-  if (config.get().manifoldApiKey) {
-    try {
-      const acc = await engine.getAdapter('manifold')?.getAccount()
-      console.log(`[main] Manifold connected as ${acc?.username || acc?.userId} · balance ${acc?.balance ?? '?'} M$`)
-    } catch (err) {
-      console.warn('[main] Manifold key invalid:', err instanceof Error ? err.message : err)
-    }
-  }
 
 
   autoTrader = new AutoTrader(engine, join(app.getPath('userData'), 'kalshi-auto.json'))
@@ -472,7 +437,7 @@ app.whenReady().then(async () => {
     app.once('before-quit', stopReference)
   }
 
-  for (const venue of ['manifold', 'polymarket-us'] as VenueId[]) {
+  for (const venue of ['polymarket-us'] as VenueId[]) {
     const mini = new MiniAuto(engine, venue, join(app.getPath('userData'), `mini-auto-${venue}.json`))
     mini.setEventHandler((type, payload) => {
       mainWindow?.webContents.send(IPC.event, { type, payload })

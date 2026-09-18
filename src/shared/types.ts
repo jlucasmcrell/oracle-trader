@@ -1,7 +1,7 @@
 // Core domain types shared across main, preload, and renderer processes.
 // These are framework-agnostic and would survive a UI or shell swap.
 
-export type VenueId = 'manifold' | 'polymarket' | 'polymarket-us' | 'kalshi' | 'ibkr'
+export type VenueId = 'polymarket' | 'polymarket-us' | 'kalshi' | 'ibkr'
 
 export type ExecutionMode = 'paper' | 'live'
 

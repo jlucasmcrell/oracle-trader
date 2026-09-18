@@ -136,7 +136,7 @@ const plan = planParameterChanges(
     { target: 'kalshi', key: 'liveArmed', value: 1 },
     { target: 'kalshi', key: 'maxLlmPerScan', value: 12 },
     { target: 'polymarket-us', key: 'microMakerMinSpreadCents', value: 2 },
-    { target: 'manifold', key: 'fadeMinLiquidity', value: 200 }
+    { target: 'manifold', key: 'fadeMinLiquidity', value: 200 } // a venue that no longer exists: the model can name anything
   ],
   kalshi,
   { 'polymarket-us': poly },
@@ -148,7 +148,7 @@ eq('review skips live strategy', plan.skipped.find((s) => s.key === 'convergence
 eq('review never touches arms', plan.skipped.find((s) => s.key === 'liveArmed')?.reason, 'not in the allow-list')
 eq('review skips unchanged', plan.skipped.find((s) => s.key === 'maxLlmPerScan')?.reason, 'unchanged')
 eq('review skips live mini', plan.skipped.find((s) => s.key === 'microMakerMinSpreadCents')?.reason, 'strategy is live; recorded for the operator')
-eq('review skips manifold', plan.skipped.find((s) => s.key === 'fadeMinLiquidity')?.reason, 'target not eligible')
+eq('review skips an unknown target', plan.skipped.find((s) => s.key === 'fadeMinLiquidity')?.reason, 'target not eligible')
 eq('review respects auto-apply off', planParameterChanges([{ target: 'kalshi', key: 'quoterMaxSpreadCents', value: 15 }], kalshi, {}, false).apply.length, 0)
 eq('review applies to live strategies when allowed', planParameterChanges([{ target: 'kalshi', key: 'convergenceMaxDailyTrades', value: 2 }], kalshi, {}, true, true).apply.map((a) => [a.key, a.to]), [['convergenceMaxDailyTrades', 2]])
 

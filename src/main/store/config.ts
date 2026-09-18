@@ -7,7 +7,6 @@ import type { RiskLimits } from '../../shared/ipc'
 
 export interface AppConfig {
   executionMode: ExecutionMode
-  manifoldApiKey: string
   kalshiApiKeyId: string
   kalshiPrivateKey: string
   /** Point the Kalshi adapter at the DEMO exchange (separate creds, mock funds). */
@@ -29,7 +28,6 @@ export interface AppConfig {
 
 const DEFAULTS: AppConfig = {
   executionMode: 'paper',
-  manifoldApiKey: '',
   kalshiApiKeyId: '',
   kalshiPrivateKey: '',
   kalshiDemo: false,
@@ -37,7 +35,7 @@ const DEFAULTS: AppConfig = {
   kalshiDemoPrivateKey: '',
   polymarketUsApiKeyId: '',
   polymarketUsPrivateKey: '',
-  paperStartingBalances: { manifold: 900, 'polymarket-us': 45, kalshi: 72 },
+  paperStartingBalances: { 'polymarket-us': 45, kalshi: 72 },
   riskLimits: { maxStakePerBet: 0, maxOpenPositions: 0 }
 }
 
@@ -62,8 +60,7 @@ export class ConfigStore {
           // deep-merge nested configs so newly added fields get defaults
           riskLimits: { ...DEFAULTS.riskLimits, ...(parsed.riskLimits ?? {}) }
         }
-        if (this.data.manifoldApiKey) {
-          this.data.manifoldApiKey = this.decrypt(this.data.manifoldApiKey)
+        if (false) {
         }
         if (this.data.kalshiApiKeyId) {
           this.data.kalshiApiKeyId = this.decrypt(this.data.kalshiApiKeyId)
@@ -92,9 +89,6 @@ export class ConfigStore {
   save(): void {
     try {
       const toWrite: AppConfig = { ...this.data }
-      if (toWrite.manifoldApiKey) {
-        toWrite.manifoldApiKey = this.encrypt(toWrite.manifoldApiKey)
-      }
       if (toWrite.kalshiApiKeyId) {
         toWrite.kalshiApiKeyId = this.encrypt(toWrite.kalshiApiKeyId)
       }

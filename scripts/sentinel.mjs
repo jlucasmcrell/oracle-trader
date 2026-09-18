@@ -433,7 +433,7 @@ for (const t of pinnedOpen.slice(0, 6)) {
     // public GET; unreachable is not evidence
   }
 }
-for (const venue of ['polymarket-us', 'manifold']) {
+for (const venue of ['polymarket-us']) {
   const m = readJson(path.join(UD, `mini-auto-${venue}.json`), {})
   const err = m.state?.lastError
   const rec = state.mini[venue] ?? {}

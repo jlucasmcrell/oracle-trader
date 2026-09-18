@@ -29,7 +29,8 @@ import { sendAlert } from '../util/alert'
 import { GEMINI, geminiKey } from './gemini'
 
 export interface ParameterProposal {
-  target: 'kalshi' | 'polymarket-us' | 'manifold'
+  /** The model names the target; anything without a config is recorded as not eligible. */
+  target: string
   key: string
   value: number | boolean | string
   rationale?: string
@@ -92,7 +93,7 @@ export const PARAM_BOUNDS: Record<'kalshi' | 'polymarket-us', Record<string, Bou
 export function planParameterChanges(
   proposals: ParameterProposal[],
   kalshi: AutoTraderConfig,
-  minis: Partial<Record<'polymarket-us' | 'manifold', MiniAutoConfig>>,
+  minis: Partial<Record<'polymarket-us', MiniAutoConfig>>,
   autoApply: boolean,
   autoApplyLive = false
 ): { apply: { target: 'kalshi' | 'polymarket-us'; key: string; from: unknown; to: number }[]; skipped: { target: string; key: string; reason: string }[] } {
@@ -191,7 +192,7 @@ export function reviewModelPlans(
   return plans
 }
 
-const SYSTEM = `You are the nightly strategy review analyst for Oracle Trader, a small prediction-market auto-trader (Kalshi real money, Polymarket US real money, Manifold play money). You reason over the evidence packet you are given and nothing else. You cannot place orders, change arms, sizes, loss limits, or keys; the app applies only numeric parameter proposals that fall inside its published bounds and only for strategies that are not live — everything else you propose is filed for the operator.
+const SYSTEM = `You are the nightly strategy review analyst for Oracle Trader, a small prediction-market auto-trader (Kalshi real money, Polymarket US real money, IBKR ForecastEx paper). You reason over the evidence packet you are given and nothing else. You cannot place orders, change arms, sizes, loss limits, or keys; the app applies only numeric parameter proposals that fall inside its published bounds and only for strategies that are not live — everything else you propose is filed for the operator.
 Principles: win rate is a base-rate trap on 90c contracts; net cents per contract after fees with clustered confidence intervals is the number; small samples deserve "insufficient evidence", not narratives; a strategy is dead when its fee-inclusive clustered interval excludes zero on the wrong side; venue-settled P&L outranks any app ledger. Be specific: cite the packet's numbers.
 Output ONLY a JSON object with exactly these fields:
 {"summary": string (<= 120 words), "healthFlags": string[], "findings": [{"topic": string, "evidence": string, "severity": "info"|"warn"|"high"}], "parameterProposals": [{"target": "kalshi"|"polymarket-us", "key": string, "value": number, "rationale": string}], "experimentProposals": [{"title": string, "hypothesis": string, "design": string, "metric": string, "stopRule": string}], "codeProposals": [{"title": string, "whereToLook": string, "rationale": string}], "confidence": number}`

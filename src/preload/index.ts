@@ -68,7 +68,6 @@ const api: Api = {
     ibkrReconciliation: () => ipcRenderer.invoke(IPC.ibkrReconciliation),
     ibkrWatchAdd: (request, expiresAt) => ipcRenderer.invoke(IPC.ibkrWatchAdd, request, expiresAt),
     ibkrWatchStop: (id) => ipcRenderer.invoke(IPC.ibkrWatchStop, id),
-    saveManifoldKey: (key: string) => ipcRenderer.invoke(IPC.settingsSaveKey, key),
     saveKalshiCredentials: (apiKeyId: string, privateKey: string) =>
       ipcRenderer.invoke(IPC.settingsSaveKalshi, apiKeyId, privateKey),
     setKalshiDemo: (demo: boolean) => ipcRenderer.invoke(IPC.settingsSetKalshiDemo, demo),

@@ -1695,3 +1695,20 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
     degrades (faster polling finds thinner gaps), and window-cap holds. If net degrades, revert to 60 s before
     touching anything else - that is 128's one-step-per-day rule.
 
+- **139 DONE (2026-09-18 15:36Z).** Manifold removed (SESSION-REPORT 6.1). Dropped from the `VenueId` union first so
+  the compiler enumerated every site: adapter + registry, the settings key path (IPC, preload, panel), config
+  (`manifoldApiKey`, paper starting balance), the mini-auto venue loop, research venues, nightly-review targets,
+  sentinel/watchdog/trade-quality loops, two smoke scripts and the package entry.
+  - Behaviour preserved for Polymarket US: `miniAuto.ts:1255` CANCEL/MKT resolution is now Poly-only with the same
+    body; `fadeExitEnabled` migration v11 set true ONLY for Manifold, so it is now a constant false - identical for
+    every surviving venue.
+  - Design question answered: the Mini AutoTrader panel used to bind the Kalshi tab to the Manifold play-money venue
+    (`App.tsx:502`). It is now Polymarket US on every tab; Kalshi has its own AutoTrader panel.
+  - `ParameterProposal.target` is now `string`: the nightly-review target comes from a model, and "not eligible" is
+    the correct handling for a name that has no config - that path is what the ladder test now covers.
+  - Left alone: runtime state files `mini-auto-manifold.json`, `paper-manifold.json` in userData. Dead but harmless,
+    and they are the only record of that venue's trading. Delete when the state backup has a few days of history.
+  - 81 stale `.bak_*` files moved out of `src/` to `backups/_src_bak_20260918/` (they are why the original Manifold
+    file count was wrong, and they poison every grep).
+  - Verified: tsc rc=0, 17/17 suites, build, restart 15:36:02Z clean - lead-lag scanning at 10 s, no adapter errors.
+

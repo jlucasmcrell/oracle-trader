@@ -9,7 +9,7 @@ const STOP = new Set([
   'he', 'she', 'they', 'we', 'you', 'i', 'me', 'my', 'vs', 'its', 'his', 'her', 'their', 'about', 'before', 'after'
 ])
 
-const VENUES: VenueId[] = ['manifold', 'polymarket-us', 'kalshi']
+const VENUES: VenueId[] = ['polymarket-us', 'kalshi']
 
 function stem(w: string): string {
   if (/^[a-z]{4,}s$/.test(w)) return w.slice(0, -1)

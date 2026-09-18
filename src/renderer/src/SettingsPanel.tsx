@@ -7,8 +7,6 @@ interface Props {
 
 export default function SettingsPanel({ log }: Props) {
   const [settings, setSettings] = useState<SettingsView | null>(null)
-  const [key, setKey] = useState('')
-  const [showKey, setShowKey] = useState(false)
   const [kalshiId, setKalshiId] = useState('')
   const [kalshiPk, setKalshiPk] = useState('')
   const [pmUsId, setPmUsId] = useState('')
@@ -16,7 +14,6 @@ export default function SettingsPanel({ log }: Props) {
   const [pmUsStatus, setPmUsStatus] = useState('')
   const [ibkrStatus, setIbkrStatus] = useState('Checking Gateway...')
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState('')
   const [kalshiStatus, setKalshiStatus] = useState('')
   const [maxStake, setMaxStake] = useState(0)
   const [maxPositions, setMaxPositions] = useState(0)
@@ -41,23 +38,6 @@ export default function SettingsPanel({ log }: Props) {
       log(result.message)
     } catch (err) {
       setIbkrStatus(`Check failed: ${String(err)}`)
-    }
-  }
-
-  const saveKey = async () => {
-    setBusy(true)
-    try {
-      const conn = await window.api.settings.saveManifoldKey(key)
-      if (conn.connected) {
-        setStatus(`Connected as ${conn.username ?? '?'} - ${conn.balance?.toFixed(0) ?? '?'} M$`)
-        log(`Manifold connected as ${conn.username ?? '?'}`)
-      } else {
-        setStatus(conn.error ? `Failed: ${conn.error}` : 'Key cleared')
-      }
-      setKey('')
-      await load()
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -109,32 +89,6 @@ export default function SettingsPanel({ log }: Props) {
 
   return (
     <div className="settings">
-      <div className="s-section">
-        <div className="section-label">Manifold (M$ - real value, purchasable/cashable)</div>
-        <div className="s-row">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="Paste Manifold API key..."
-          />
-          <button className="ghost" onClick={() => setShowKey(!showKey)}>
-            {showKey ? 'Hide' : 'Show'}
-          </button>
-        </div>
-        <div className="s-row">
-          <button onClick={saveKey} disabled={busy}>
-            {busy ? 'Testing...' : 'Save & test'}
-          </button>
-        </div>
-        <div className="muted">
-          {status ||
-            (settings?.hasManifoldKey
-              ? `Connected as ${settings.manifoldUsername ?? '?'} - ${settings.manifoldBalance?.toFixed(0) ?? '?'} M$`
-              : 'No key saved - paper mode only.')}
-        </div>
-      </div>
-
       <div className="s-section">
         <div className="section-label">
           Kalshi {settings?.kalshiDemo ? ' - DEMO exchange (mock funds)' : '(real USD)'}
