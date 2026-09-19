@@ -84,17 +84,23 @@ export class PolyClobWs {
     this.log(`[poly-ws] ${s}`)
   }
 
-  /** Watch these tokens (idempotent). A changed set reconnects with the new subscription list. */
+  /**
+   * Watch these tokens (idempotent). Only an ADDITION reconnects with the enlarged list: a token missing from one
+   * scan (a pair whose book read failed) must not churn the socket. Old tokens age out when the list passes 24
+   * (eight coins roll a new window every 15 minutes), so the reconnect happens about once per window roll.
+   */
   ensure(tokens: string[]): void {
-    const next = new Set(tokens.filter(Boolean))
-    let changed = next.size !== this.wanted.size
-    for (const t of next) if (!this.wanted.has(t)) changed = true
-    if (!changed) { if (!this.sock && !this.reconnectTimer) this.connect(); return }
-    this.wanted = next
-    for (const t of [...this.tops.keys()]) if (!next.has(t)) this.tops.delete(t)
-    this.stats.subscribed = next.size
+    let added = false
+    for (const t of tokens) if (t && !this.wanted.has(t)) { this.wanted.add(t); added = true }
+    if (!added) { if (this.wanted.size && !this.sock && !this.reconnectTimer) this.connect(); return }
+    while (this.wanted.size > 24) {
+      const oldest = this.wanted.values().next().value as string
+      this.wanted.delete(oldest)
+      this.tops.delete(oldest)
+    }
+    this.stats.subscribed = this.wanted.size
     this.close()
-    if (next.size) this.connect()
+    this.connect()
   }
 
   top(token: string): PolyTop | undefined {
