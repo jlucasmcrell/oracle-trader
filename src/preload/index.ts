@@ -21,7 +21,7 @@ const api: Api = {
   },
   autoTrader: {
     getConfig: () => ipcRenderer.invoke(IPC.autoTraderGet),
-    setConfig: (cfg: AutoTraderConfig) => ipcRenderer.invoke(IPC.autoTraderSet, cfg),
+    setConfig: (cfg: Partial<AutoTraderConfig>) => ipcRenderer.invoke(IPC.autoTraderSet, cfg),
     scan: () => ipcRenderer.invoke(IPC.autoTraderScan),
     getStatus: () => ipcRenderer.invoke(IPC.autoTraderStatus),
     reset: () => ipcRenderer.invoke(IPC.autoTraderReset),
@@ -29,7 +29,7 @@ const api: Api = {
   },
   autoMini: {
     getConfig: (venue: VenueId) => ipcRenderer.invoke(IPC.autoMiniGet, venue),
-    setConfig: (venue: VenueId, cfg: MiniAutoConfig) => ipcRenderer.invoke(IPC.autoMiniSet, venue, cfg),
+    setConfig: (venue: VenueId, cfg: Partial<MiniAutoConfig>) => ipcRenderer.invoke(IPC.autoMiniSet, venue, cfg),
     scan: (venue: VenueId) => ipcRenderer.invoke(IPC.autoMiniScan, venue),
     getStatus: (venue: VenueId) => ipcRenderer.invoke(IPC.autoMiniStatus, venue),
     reset: (venue: VenueId) => ipcRenderer.invoke(IPC.autoMiniReset, venue),

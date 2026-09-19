@@ -18,6 +18,7 @@
  */
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { needsSettleFetch, settledCacheEntry } from './lib/cull-cache.mjs'
 
 const DIR = process.env.CULL_DIR ?? join(process.env.APPDATA ?? '', 'oracle-trader', 'universe-culled')
 const KALSHI = 'https://api.elections.kalshi.com/trade-api/v2'
@@ -55,6 +56,14 @@ function loadCache() {
   }
 }
 
+function saveCache(cache) {
+  try {
+    writeFileSync(CACHE, JSON.stringify(cache))
+  } catch {
+    /* best effort */
+  }
+}
+
 async function settle(ticker, cache) {
   const c = cache[ticker]
   // A blank result on a settled market can fill in later; re-check those for 24h, then let them rest.
@@ -76,6 +85,48 @@ async function settle(ticker, cache) {
   }
 }
 
+
+/**
+ * One request per 50 tickers instead of one per ticker. 41k culled markets at 180 ms each is over two hours -
+ * longer than the weekly task's own time limit, so the 2026-09-18 run was killed at 97% and wrote nothing,
+ * and because the cache write sat below the loop it never existed and every run restarted from zero.
+ * Batching the same read into ~800 requests is also far gentler on the endpoint the live trader shares,
+ * and the cache is written per chunk so a killed run still hands its work to the next one.
+ *
+ * This does NOT replace the per-ticker settle() below it. Measured 2026-09-19: the batch endpoint silently
+ * omits some tickers it has answers for - 8,079 of 38,754 came back absent here and every one of the eight
+ * sampled resolved `finalized` with a result on `/markets/<ticker>`. The single-market loop is the recovery
+ * path for those, and it is now the only place the run still spends real time.
+ */
+async function prefillSettled(tickers, cache) {
+  // Dedup first: `due` carries one row per (day, ticker), so the same ticker recurs across day files.
+  const todo = [...new Set(tickers)].filter((t) => needsSettleFetch(cache[t]))
+  if (!todo.length) return
+  let done = 0
+  for (let i = 0; i < todo.length; i += 50) {
+    const chunk = todo.slice(i, i + 50)
+    try {
+      const r = await fetch(`${KALSHI}/markets?tickers=${encodeURIComponent(chunk.join(','))}&limit=1000`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(30_000) })
+      if (r.ok) {
+        const j = await r.json()
+        for (const m of j.markets ?? []) {
+          if (!m.ticker) continue
+          // An open market has no answer yet: settledCacheEntry returns undefined so a later run re-reads it.
+          const entry = settledCacheEntry(m)
+          if (entry !== undefined) cache[m.ticker] = entry
+        }
+      }
+    } catch {
+      /* a failed chunk stays uncached and is retried next run */
+    }
+    done += chunk.length
+    if ((i / 50) % 20 === 0) saveCache(cache)
+    process.stdout.write(`  settling ${done}/${todo.length}\r`)
+    await sleep(180)
+  }
+  saveCache(cache)
+  process.stdout.write('\n')
+}
 
 // ---- normal CDF / inverse, for the Wang-Transform fit below ----
 /** Abramowitz-Stegun 7.1.26 erf; accurate to ~1.5e-7, far finer than the 1c tick this is applied to. */
@@ -178,6 +229,8 @@ const now = Date.now()
 const due = [...rows.values()].filter((r) => r.close && Date.parse(r.close) < now)
 console.log(`past close and gradeable: ${due.length}\n`)
 
+await prefillSettled(due.map((r) => r.ticker), cache)
+
 const results = {}
 let settled = 0
 let n = 0
@@ -215,11 +268,7 @@ for (const r of due) {
 }
 // Persist. Without this, every run re-fetches every settled market against the endpoint the live trader
 // shares - the grader's whole pacing discipline undone by a missing write.
-try {
-  writeFileSync(CACHE, JSON.stringify(cache))
-} catch {
-  /* best effort */
-}
+saveCache(cache)
 console.log(`settled with a result: ${settled}\n`)
 // ---- Wang-Transform calibration check (Yang, SSRN 6468338: lambda_hat = 0.187 for Kalshi) ----
 // Our calibratedYesRate() returns IDENTITY above 10c, i.e. asserts zero bias across 90% of the price range.

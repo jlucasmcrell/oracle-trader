@@ -33,6 +33,8 @@ export class IbkrLab {
   private discoveryFailedAt=0
   private modelBusy=false
   private liveBusy=false
+  /** orderId -> permId, from open-order snapshots: the id a completed-order row still carries (B-07). */
+  private permIds=new Map<string,number>()
   private readonly sources:IbkrLabSources
   constructor(private path:string,private reader:IbkrReader,private engine:TradingEngine,private venue:IbkrAdapter,sources:Partial<IbkrLabSources>={}){
     this.state={version:1,config:{...IBKR_LAB_DEFAULTS,liveStrategies:[]},startedAt:Date.now(),scans:0,markets:[],quotes:{},histories:{},orders:[],positions:[],trades:[],cash:Object.fromEntries(IBKR_STRATEGIES.map(s=>[s.id,startingCash])),seen:{},live:[],notes:{},forecast:{},modelDay:day(Date.now()),modelCalls:0}
@@ -246,7 +248,7 @@ export class IbkrLab {
     if(s.live.filter(l=>l.strategy===p.strategy&&l.status!=='closed').length>=s.config.maxOpenPerStrategy)return
     if(s.live.filter(l=>sameDay(l.createdAt,Date.now())).reduce((a,l)=>a+(l.net??0),0)<=-s.config.maxDailyLoss)return
     const id=randomUUID(),ref=`ibkr-lab:${p.strategy}:${id}:entry`
-    const live={id,strategy:p.strategy,market:p.market,outcome:p.outcome,quantity:p.quantity,createdAt:Date.now(),status:'submitting' as const,filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0,pendingRef:ref,basket:p.basket}
+    const live={id,strategy:p.strategy,market:p.market,outcome:p.outcome,quantity:p.quantity,createdAt:Date.now(),status:'submitting' as const,filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0,pendingRef:ref,entryRef:ref,basket:p.basket}
     s.live.push(live);this.save()
     const record=s.live.at(-1)!
     try{const r=await this.engine.placeOrder({venue:'ibkr',ref,marketId:String((p.outcome==='YES'?p.market.yes:p.market.no).conId),outcome:p.outcome,contracts:p.quantity,limitPrice:limit,amount:s.config.maxLiveCost,timeInForce:'immediate_or_cancel'});record.orderId=r.orderId;record.status='open';record.pendingRef=undefined;record.message=r.venueStatus}
@@ -259,16 +261,22 @@ export class IbkrLab {
     try{
       await this.engine.reconcileOrders('ibkr')
       const fills=await this.venue.getFills(),open=await this.venue.getOpenOrders(),completed=await this.venue.reader.completed()
-      const terminal=(id:string|undefined,filled:number)=>{
+      // A TWS COMPLETED_ORDER carries orderRef and permId but NO orderId/clientId (decoder.js decodeMsg_COMPLETED_ORDER), so
+      // matching completed rows by `${clientId}:${orderId}` was never true and no live exit could ever submit (audit
+      // 2026-09-19, B-07). Our orderRef is the journal's client id, unique per submission; match on it, and on the
+      // permId the open-order snapshot reported for that order id when we have one.
+      const permIdOf=(id:string)=>this.permIds.get(id)
+      const terminal=(id:string|undefined,filled:number,ref?:string)=>{
         if(!id||open.some(o=>o.orderId===id))return false
-        const row=completed.find(o=>`${o.order.clientId}:${o.order.orderId}`===id)
+        const row=completed.find(o=>(ref&&o.order.orderRef===ref)||(o.order.permId!==undefined&&o.order.permId===permIdOf(id))||`${o.order.clientId}:${o.order.orderId}`===id)
         return !!row&&/^(Filled|Cancelled|Canceled|ApiCancelled|Inactive)$/i.test(row.state.status??row.state.completedStatus??'')&&Number.isFinite(row.order.filledQuantity)&&row.order.filledQuantity===filled
       }
+      for(const o of open)if(o.permId!==undefined)this.permIds.set(o.orderId,o.permId)
       for(const p of this.state.live.filter(p=>p.status==='open'||p.status==='uncertain')){
         if(p.status==='uncertain'&&p.pendingRef){
           const intent=this.engine.orderIntent('ibkr',p.pendingRef),isExit=p.pendingRef.includes(':exit:')
           if(intent?.state==='acknowledged'&&intent.orderId){
-            if(isExit){p.exitOrderId=intent.orderId;(p.exitOrderIds??=[]).push(intent.orderId)}else p.orderId=intent.orderId
+            if(isExit){p.exitOrderId=intent.orderId;(p.exitOrderIds??=[]).push(intent.orderId);(p.exitRefs??={})[intent.orderId]=p.pendingRef}else p.orderId=intent.orderId
             p.status='open';p.pendingRef=undefined
           }else if(!intent||intent.state==='rejected'){p.status=isExit?'open':'closed';p.pendingRef=undefined;p.message='Order rejected before acceptance';if(!isExit)p.net=0}
           else continue
@@ -288,9 +296,9 @@ export class IbkrLab {
           const q=this.state.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
           if(q&&freshAsk(q,now)&&q.ask!+slippage<=.99){p.entryMark=round(1-q.ask!-slippage-fee-(p.entryCost+p.fees)/p.filled);p.entryMarkAt=now}
         }
-        p.ordersComplete=(p.filled===p.quantity||terminal(p.orderId,p.filled))&&ids.every(id=>terminal(id,exits.filter(f=>f.orderId===id).reduce((a,f)=>a+f.shares,0)))
+        p.ordersComplete=(p.filled===p.quantity||terminal(p.orderId,p.filled,p.entryRef))&&ids.every(id=>terminal(id,exits.filter(f=>f.orderId===id).reduce((a,f)=>a+f.shares,0),p.exitRefs?.[id]))
         if(p.exitFilled+(p.paired??0)>p.filled){p.status='uncertain';p.message='Execution totals exceed holdings; entries held for reconciliation';continue}
-        if(!p.filled&&terminal(p.orderId,0)){p.net=0;p.status='closed';p.message='IOC completed without a fill';continue}
+        if(!p.filled&&terminal(p.orderId,0,p.entryRef)){p.net=0;p.status='closed';p.message='IOC completed without a fill';continue}
         if(p.filled&&p.exitFilled+(p.paired??0)>=p.filled){p.net=round((p.pairRevenue??0)+p.exitFilled-p.entryCost-p.exitCost-p.fees);p.status='closed';continue}
       }
       // Account-level netting precedes any exit decision; otherwise a just-paired position looks closable twice.
@@ -306,7 +314,7 @@ export class IbkrLab {
         const ids=p.exitOrderIds??(p.exitOrderId?[p.exitOrderId]:[]),exits=Object.values(p.executions??{}).filter(f=>ids.includes(f.orderId??''))
         if(p.basket&&(this.state.live.some(other=>other!==p&&other.status==='open'&&other.filled>other.exitFilled+(other.paired??0)&&other.basket===p.basket)||now-p.createdAt<120000))continue
         if(!p.filled||now-p.createdAt<60000||now-(p.lastExitAt??0)<60000||this.engine.getExecutionMode()!=='live')continue
-        if(!terminal(p.orderId,p.filled)||ids.some(id=>!terminal(id,exits.filter(f=>f.orderId===id).reduce((a,f)=>a+f.shares,0))))continue
+        if(!terminal(p.orderId,p.filled,p.entryRef)||ids.some(id=>!terminal(id,exits.filter(f=>f.orderId===id).reduce((a,f)=>a+f.shares,0),p.exitRefs?.[id])))continue
         if(!p.basket&&IBKR_HOLD_TO_SETTLEMENT.has(p.strategy))continue
         const remaining=p.filled-p.exitFilled-(p.paired??0)
         const q=this.state.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
@@ -317,7 +325,7 @@ export class IbkrLab {
         if(move<.05&&move>-.08&&now-p.createdAt<3600000&&p.market.closeTime-now>10*60000)continue
         p.exitAttempt=(p.exitAttempt??0)+1;p.pendingRef=`ibkr-lab:${p.strategy}:${p.id}:exit:${p.exitAttempt}`;p.lastExitAt=now
         p.status='submitting';p.ordersComplete=false;this.save()
-        try{const r=await this.engine.sellPosition({venue:'ibkr',marketId:String((p.outcome==='YES'?p.market.yes:p.market.no).conId),outcome:p.outcome,shares:remaining,limitPrice:p.outcome==='YES'?round(1-q.ask!-slippage):round(q.ask!+slippage),timeInForce:'immediate_or_cancel',ref:p.pendingRef});p.exitOrderId=r.orderId;(p.exitOrderIds??=[]).push(r.orderId);p.pendingRef=undefined;p.status='open'}catch(e){p.status='uncertain';p.message=String(e)}
+        try{const r=await this.engine.sellPosition({venue:'ibkr',marketId:String((p.outcome==='YES'?p.market.yes:p.market.no).conId),outcome:p.outcome,shares:remaining,limitPrice:p.outcome==='YES'?round(1-q.ask!-slippage):round(q.ask!+slippage),timeInForce:'immediate_or_cancel',ref:p.pendingRef});p.exitOrderId=r.orderId;(p.exitOrderIds??=[]).push(r.orderId);(p.exitRefs??={})[r.orderId]=p.pendingRef!;p.pendingRef=undefined;p.status='open'}catch(e){p.status='uncertain';p.message=String(e)}
       }
       this.save()
     }finally{this.liveBusy=false}

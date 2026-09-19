@@ -4494,3 +4494,89 @@ Operator: "I won't remember this and will need a reminder or it will need to be 
   a shadow and, if that passes its own five-cluster read, switches the live arm's quote source and reports it -
   the same way every lead-lag configuration change to date was made. The operator is not asked. Sizes, loss
   limits, funding, keys and the global arm stay his.
+
+## §133 - 2026-09-19 11:20Z: the three due reads, and the weekly gate that could never finish
+
+`data/due-triggers.md` listed three reads. Two were re-reads of triggers 129 and 134 (the 09-18 session
+recorded both in the maintenance log rather than as DONE bullets here, so the parser kept surfacing them);
+both are re-run on today's data below and are now retired in `docs/BACKLOG.md` so they stop repeating. The
+third, 66, could not be read at all, and finding out why was the day's build.
+
+**129, main scan time after the pacing change - READ, no action.** 618 `scan` rows on 09-19 to 11:00Z:
+median **27.1 s**, p90 38.1 s, against 11.9 s / 17.1 s for the whole of 09-18. Phase medians: universe
+**13.7 s**, exits 4.3 s, data 3.3 s, signals 3.0 s, vetoes 1.4 s, pending 1.1 s, everything else under
+200 ms. The registered action is conditioned on 429s, not on the clock: **real HTTP 429s on the Kalshi
+lanes, 0** on 09-19 and 0 on 09-16/17 (the 8 on 09-18 were Polymarket US `/v1/orders/open`, a different
+venue and a different lane). So the read lane is not lowered.
+
+The clock moved for a reason that is not throttling, and it is our own fix from yesterday. `scanned` per
+scan went **2,000 -> 5,000** between 09-18 and 09-19, and the universe phase tracked it 3.5 s -> 13.4 s
+hour for hour. §128's six-hourly `universeWindows` slicing stopped the 48-72 h window truncating at the
+25-page bound; **zero** page-bound warnings since the 23:42Z restart, against 37 before it. We are now
+scanning the markets we used to silently drop, and paying for them in scan time. Recorded as backlog 169
+rather than reverted: a bigger universe at 27 s is worth more than a truncated one at 12 s, but the cost
+is real and the exit-quote batching already parked at backlog 41 is the lever if it grows again.
+
+**134, lead-lag orderbook leg failures - READ, PASS not reached, no action.** The registered instrument
+("count `Kalshi leg failed` lines") gives **22** lines since 2026-09-18T09:40Z against roughly 10,300
+five-second cycles: **0.21%**, well under the 1% bar. Caveat worth writing down, because the line count
+alone cannot answer the question it was registered to answer: that log is throttled to one line per 60 s
+(`leadLag.ts:717`), so it is a floor, not a count. The unthrottled instrument is the scan note, which
+carries the per-cycle `kalshiFail` counter: over 481 sampled cycles in the same window, **12 of 3,848
+pair-legs failed (0.31%)** and 6 cycles carried at least one failure (1.25%, and with 6 events the
+interval straddles 1% either way). Both leg measures are under the bar, so the quote stays on the public
+orderbook and nothing moves to the authenticated batched endpoint. Backlog 170 asks for a persistent
+counter so the next read is a measurement rather than an inference from two throttled proxies.
+
+**66, cull-gate - THE READ WAS NOT POSSIBLE, and that is a defect, now fixed.**
+`data/cull-gate/report-20260918-0800.txt` is 23 KB of progress ticks and no verdict. The weekly task
+`OracleTrader-CullGate` carries `ExecutionTimeLimit PT2H`; `schtasks` recorded `267014` (terminated) and
+the file stops at **39,750 of 41,047**. `cull-gate.mjs` settled one market per HTTP request, paced 180 ms,
+so 41k rows is 2 h 04 m of wall clock - four minutes past its own limit, every week.
+
+The compounding half is worse than the timeout. The single `writeFileSync(CACHE, ...)` sat **below** the
+grading loop, so a killed run persisted nothing: `settled-cache.json` did not exist on disk at all this
+morning, five weekly runs in. Every run restarted from zero, spent two hours re-fetching the same 41k
+markets against the endpoint the live trader shares, and died at the same place. The comment above that
+write - "without this, every run re-fetches every settled market... the grader's whole pacing discipline
+undone by a missing write" - described exactly what was happening, one line below the code that could
+never reach it.
+
+Fix, in `scripts/cull-gate.mjs`: `prefillSettled()` batches the settle lookup into
+`/markets?tickers=<50>&limit=1000`, the same call `kalshi.ts:755` already uses, and writes the cache every
+20 chunks. Probed first against 50 real culled tickers: 50/50 returned, all `finalized`, empty cursor.
+This is ~780 requests (after the dedup below) where there were 49,146 - **50x less load on the shared
+endpoint**, not more - and a
+killed run now hands its work to the next one instead of discarding it. The two cache rules
+(`needsSettleFetch`, `settledCacheEntry`) moved to `scripts/lib/cull-cache.mjs` because the script itself
+runs on import and cannot be tested; 10 assertions in `review-fixes.test.ts` cover them, including the one
+that matters - an OPEN market must cache nothing, or the row is frozen out of every later run.
+
+One thing the probe changed: the batch does NOT replace the per-ticker loop. Of 38,754 distinct due tickers,
+8,079 came back absent from the batched response, and all eight sampled resolved `finalized` with a result
+on `/markets/<ticker>`. So `/markets?tickers=` silently omits rows it has answers for, the single-market
+loop is the recovery path for them, and it is now the only place the run still spends real time (~40 min for
+the residue instead of ~2 h for everything). The batch list is also deduped - `due` carries one row per
+(day, ticker) and the same ticker recurs across day files, which was 49,146 lookups for 38,754 markets.
+
+## §133 - 2026-09-19 14:30Z: audit fix round one - the critical, the eight highs, and two of my own
+
+Operator: "Yes, go ahead" on the audit report (`docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md`). Each fix
+carries a test that fails without it; 19/19 suites.
+
+| Finding | Fix |
+|---|---|
+| B-01 critical - "Reset state" in live mode cancelled every real resting order and forgot every real position, no gate, no confirmation | `AutoTrader.reset()` and `MiniAuto.reset()` refuse in live mode (the settings-page reset already did); a reset deferred from a busy scan re-checks the mode at the boundary |
+| B-02 high - `KalshiAdapter.getPositions` never rejected; a failed read was "no positions" to the cap, the ledger reconcile, `trySettle` and the boot gate | the unscoped read rethrows; a shard read swallows only a 4xx (a shard the account lacks) and rethrows 429/5xx/timeouts, so a partial view is never mistaken for a complete one |
+| B-03 high - full exits and settlements persisted the booked P&L before removing the trade; a restart in that window resurrected the closed trade (three production occurrences) | `removeTrade` before `recordExit` in `closeTrade` and in all five of the mini's exit/settlement paths |
+| B-04 high - a submission the venue never created stayed `pending` forever, blocking the market's buys AND sells and holding a cap slot | `reconcileOrders` releases a row with no `submittedAt` after a minute (provably unsent), and a submitted row after three clean client-id searches spanning ten minutes (the venue's search covers open and historical orders); a search that throws never counts |
+| B-05 high - `orphanSweep`'s cancel of untracked resting orders matched only the legacy `ot-` prefix; every journaled order carries a UUID, so the safety net was dead | ownership is the journal (`engine.ownsOrder` by order id or client id) or the prefix; a hand-placed order is still left alone |
+| B-06 high - live dutch baskets keyed by EVENT ticker were dropped by the venue reconcile 25 min after entry (venue reports MARKET tickers) | a basket is held while any leg is held; the resolution probe uses a leg's ticker |
+| B-07 high - TWS completed-order rows carry no orderId/clientId, so the IBKR lab's `terminal()` could never be true (no live exit could submit) | the live record keeps the `orderRef` it submitted with (`entryRef`, `exitRefs`), open-order snapshots record `permId`, and `terminal()` matches on ref, permId, then the legacy id |
+| B-08 high - the panels wrote the whole config from a <=10 s-old snapshot on every control change, reverting ladder stops and nightly-review applies in the window | the panels send ONLY the changed keys; `setConfig` merges; the IPC types are `Partial<...>` |
+| B-09 high - a buy whose response was lost and was recovered by the journal was never adopted; the position sat unmanaged and the market could be bought again | `orphanSweep` adopts an untracked venue position that the journal explains (an acknowledged `auto:<strategy>:` buy on that market, same outcome) into `openTrades` under its strategy; a position the journal cannot explain is still only alerted |
+| B-34 low - the §127 fractional-fee fix stopped at the helper: `entryFeeDollars`/`netCentsOf` still rounded shares to whole contracts | fractional through the ledger; the invariant test now runs at 0.5, 1.075 and 1.49 contracts |
+| B-35 low - the §129 `closeFrom` fix covered only the reserved path; the cap-disabled path still recorded an exit as a buy of the opposite contract | both paths record a sell of the closed position |
+
+Not in this round, next: B-10 (a failed balance read silences the kill switch and the equity cap for that scan),
+B-11 (the mode-switch guard ignores the mini's resting orders), and the mediums in the report's order.

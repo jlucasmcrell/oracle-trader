@@ -196,7 +196,7 @@ function registerIpc(): void {
     return adapter.getOpenOrders()
   })
   ipcMain.handle(IPC.autoTraderGet, () => autoTrader.getConfig())
-  ipcMain.handle(IPC.autoTraderSet, (_e, cfg: AutoTraderConfig) => {
+  ipcMain.handle(IPC.autoTraderSet, (_e, cfg: Partial<AutoTraderConfig>) => {
     // Config flips (enabled / liveArmed / entry mode) were undiagnosable
     // after the fact - a mini came back enabled mid-demo with no trace.
     // Log the fields that change trading behaviour.
@@ -214,7 +214,7 @@ function registerIpc(): void {
     return m
   }
   ipcMain.handle(IPC.autoMiniGet, (_e, venue: VenueId) => requireMini(venue).getConfig())
-  ipcMain.handle(IPC.autoMiniSet, (_e, venue: VenueId, cfg: MiniAutoConfig) => {
+  ipcMain.handle(IPC.autoMiniSet, (_e, venue: VenueId, cfg: Partial<MiniAutoConfig>) => {
     console.log(`[main] mini ${venue} config set:`, JSON.stringify({ enabled: cfg.enabled, liveArmed: cfg.liveArmed, fadeEntryMode: cfg.fadeEntryMode }))
     return requireMini(venue).setConfig(cfg)
   })

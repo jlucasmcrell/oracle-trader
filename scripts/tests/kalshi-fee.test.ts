@@ -141,10 +141,11 @@ const cases: Array<[string, number]> = [
   ['NO', 0.35]
 ]
 for (const [outcome, entryPrice] of cases) {
-  for (const shares of [1, 2, 3, 10, 23, 50]) {
+  // Fractional counts too (audit 2026-09-19, B-34): the ledger helpers take the fractional count like the venue.
+  for (const shares of [0.5, 1, 1.075, 1.49, 2, 3, 10, 23, 50]) {
     const t = { outcome, entryPrice, shares, feeRate: R }
     const yesPx = outcome === 'YES' ? entryPrice : 1 - entryPrice
-    const C = Math.max(1, Math.round(shares))
+    const C = shares
     const feeTerm = kalshiFeeCentsPerContract(R, yesPx, C)
 
     // A win minus a loss is always the full 100c payout per contract.

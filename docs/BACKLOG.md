@@ -2010,3 +2010,46 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `maintenance.ps1` runs it first, pushes the DUE list to the alert webhook once a day, and the daily session reads
   `data/due-triggers.md` before anything else. A PASS a registration assigns to the maintainer is acted on without
   asking. Trigger: none - standing.
+
+## 2026-09-19 daily maintenance (see docs/reports/2026-09-19.md)
+
+- **129 DONE (read 2026-09-19 11:05Z, REVIEW-CHANGES §133).** 618 `scan` rows to 11:00Z: median **27.1 s**,
+  p90 38.1 s, against 11.9 s / 17.1 s over the whole of 09-18. Phase medians: universe **13.7 s**, exits 4.3 s,
+  data 3.3 s, signals 3.0 s, vetoes 1.4 s, pending 1.1 s. **Real HTTP 429s on the Kalshi lanes: 0** (09-16 0,
+  09-17 0, 09-18 8 and all of those Polymarket US `/v1/orders/open`, a different lane). The registered action
+  is conditioned on 429s and they did not rise, so the read lane is NOT lowered. The clock moved because
+  §128's `universeWindows` fix stopped the 48-72 h window truncating: `scanned` per scan went 2,000 -> 5,000
+  and the universe phase tracked it hour for hour. Continues as 169.
+- **134 DONE (read 2026-09-19 11:05Z, REVIEW-CHANGES §133) - PASS NOT REACHED, no action.** 22 `Kalshi leg
+  failed` lines since 2026-09-18T09:40Z against ~10,300 five-second cycles = **0.21%**, under the 1% bar. That
+  line is throttled to one per 60 s (`leadLag.ts:717`) so it is a floor; the unthrottled scan-note counter
+  gives **12 of 3,848 pair-legs (0.31%)** over 481 sampled cycles, and 6 of those cycles carried a failure
+  (1.25%, n=6, interval straddles 1%). Both leg measures are under the bar: the quote stays on the public
+  orderbook, nothing moves to the authenticated batched endpoint. Instrumentation gap continues as 170.
+  NOTE for whoever renumbers next: there are TWO item 134s in this file (line 1587, the nightly-review
+  venue-P&L sign disagreement, and line 1662, this one). This bullet retires the number for the trigger
+  parser; 1587 is not closed by it and needs its own number.
+- **66 DONE (read attempted and REPAIRED 2026-09-19, REVIEW-CHANGES §133).** The read was **not possible**:
+  `report-20260918-0800.txt` holds a header and 23 KB of progress ticks and no verdict, because the weekly
+  task's `ExecutionTimeLimit PT2H` killed the run at 39,750 of 41,047 (`schtasks` result 267014) and the one
+  cache write sat below the loop, so five weekly runs had persisted nothing and each restarted from zero.
+  Fixed in `scripts/cull-gate.mjs` (batched `/markets?tickers=` prefill, cache written per chunk,
+  `scripts/lib/cull-cache.mjs` + 10 tests). Re-run today; the verdict is in the report's section 4.
+  The favorite-longshot vs Wang question (68, 78) is answered there or re-triggered from there.
+- **169. Scan time is now universe-bound, not lane-bound (2026-09-19, from 129).** Median scan 27.1 s with
+  universe 13.7 s of it, because §128 recovered ~3,000 markets a scan the 25-page bound used to drop. This is
+  a good trade - a complete universe at 27 s beats a truncated one at 12 s - but it is a real cost and the
+  lever is backlog 41 (batch the exit quote fetch; `manageExits` calls `getPrice` per position while
+  `getOrderBooks` already chunks at 50). Trigger: build 41 when a full day's median `scan` exceeds **45 s**,
+  or when open positions reach 60, whichever first. Record the median every day until then.
+- **170. Lead-lag leg failures have no unthrottled counter (2026-09-19, from 134).** The `Kalshi leg failed`
+  line is capped at one per 60 s and the per-cycle `kalshiFail` figure survives only in the transient scan
+  note, so the registered "more than 1% of cycles" test can only be inferred from two biased proxies. Persist
+  a running `{cycles, cyclesWithLegFail, legs, legsFailed}` counter in `leadlag.json` state, rolled per UTC
+  day. Trigger: the next lead-lag round that touches the scan loop - it is four lines inside a function that
+  is already being edited, not a round of its own.
+- **171. The cull-gate report is written UTF-16 with the progress ticks in it (2026-09-19).** The task's
+  action is `node scripts/cull-gate.mjs *> data/cull-gate/report-<stamp>.txt`, and PowerShell's redirect
+  writes UTF-16LE, so the report needs `iconv` to read and 99% of it is `\r` progress ticks. Send the ticks to
+  stderr and let the redirect keep only the verdict. Trigger: next Friday's run (2026-09-25); trivial, fold it
+  into whatever else touches the script.

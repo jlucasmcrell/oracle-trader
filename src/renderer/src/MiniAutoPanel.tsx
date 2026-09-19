@@ -34,9 +34,10 @@ export default function MiniAutoPanel({ log, onChanged, venue }: Props) {
     return () => clearInterval(t)
   }, [load, venue])
 
+  // Only the changed keys (audit 2026-09-19, B-08): setConfig merges, and a stale full copy reverted ladder writes.
   const patch = async (p: Partial<MiniAutoConfig>) => {
     if (!cfg) return
-    const next = await window.api.autoMini.setConfig(venue, { ...cfg, ...p })
+    const next = await window.api.autoMini.setConfig(venue, p)
     setCfg(next)
     await load(venue)
   }

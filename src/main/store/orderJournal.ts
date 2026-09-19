@@ -33,6 +33,10 @@ export class OrderJournal {
   }
   pending(venue: VenueId): JournalOrder[] { return this.orders.filter(r => r.venue === venue && r.state === 'pending') }
   attribution(venue: VenueId, orderId: string): JournalOrder | undefined { return this.orders.find(r => r.venue === venue && r.orderId === orderId) }
+  /** The latest acknowledged submission on a market: the provenance of a venue position nothing local tracks. */
+  acknowledgedOn(venue: VenueId, marketId: string): JournalOrder | undefined { return this.orders.findLast(r => r.venue === venue && r.marketId === marketId && r.state === 'acknowledged') }
+  /** The row that generated a client id: how a resting venue order is recognised as OURS after a lost response. */
+  byClientId(venue: VenueId, clientOrderId: string): JournalOrder | undefined { return this.orders.find(r => r.venue === venue && r.clientOrderId === clientOrderId) }
   byRef(venue: VenueId, ref: string): JournalOrder | undefined { return this.orders.findLast(r => r.venue === venue && r.ref === ref) }
   begin(input: Pick<JournalOrder, 'venue' | 'marketId' | 'outcome' | 'side' | 'ref'>): JournalOrder {
     if (this.failure) throw new Error(this.failure)

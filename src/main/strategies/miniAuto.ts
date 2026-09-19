@@ -420,6 +420,10 @@ export class MiniAuto {
   }
 
   reset(): void {
+    // Paper only (audit 2026-09-19, B-01): a live reset cancels real resting orders and forgets real positions.
+    if (this.engine.getExecutionMode() === 'live') {
+      throw new Error('Reset is paper-only: switch execution mode to paper first. In live mode a reset would cancel real resting orders and forget real positions.')
+    }
     // Same mid-scan race as the main AutoTrader: never swap state during a
     // tick — defer to the next safe boundary.
     if (this.busy) {
@@ -430,6 +434,10 @@ export class MiniAuto {
   }
 
   private doReset(): void {
+    if (this.engine.getExecutionMode() === 'live') {
+      console.warn(`[mini ${this.venue}] deferred reset refused: execution mode is live`)
+      return
+    }
     // Live resting maker orders must not outlive the ledger that tracks them.
     const adapter = this.engine.getAdapter(this.venue)
     for (const p of this.state.pendingOrders) {
@@ -1167,8 +1175,9 @@ export class MiniAuto {
               this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason: `${reason} (partial)`, realized: Math.round(pnl * 100) / 100 })
             } else {
               const pnl = miniExitPnl(t, res)
-              this.recordExit(pnl, t.strategy, t)
+              // Remove before booking (audit 2026-09-19, B-03): recordExit persists.
               this.removeTrade(t.id)
+              this.recordExit(pnl, t.strategy, t)
               closed = true
               this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason, realized: Math.round(pnl * 100) / 100 })
             }
@@ -1261,16 +1270,16 @@ export class MiniAuto {
             if (this.engine.getExecutionMode() === 'paper') {
               const rec = this.engine.settlePaperPosition(this.venue, t.marketId, t.outcome, winPrice)
               if (rec) {
-                this.recordExit(rec.realizedPnl ?? 0, t.strategy, t)
                 this.removeTrade(t.id)
+                this.recordExit(rec.realizedPnl ?? 0, t.strategy, t)
                 this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason, realized: Math.round((rec.realizedPnl ?? 0) * 100) / 100 })
               } else {
                 this.removeTrade(t.id)
               }
             } else {
               const realized = (winPrice - t.entryPrice) * t.shares
-              this.recordExit(realized, t.strategy, t)
               this.removeTrade(t.id)
+              this.recordExit(realized, t.strategy, t)
               this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason, realized: Math.round(realized * 100) / 100 })
             }
           }
@@ -1282,8 +1291,8 @@ export class MiniAuto {
           if (this.engine.getExecutionMode() === 'paper') {
             const rec = this.engine.settlePaperPosition(this.venue, t.marketId, t.outcome, win)
             if (rec) {
-              this.recordExit(rec.realizedPnl ?? 0, t.strategy, t)
               this.removeTrade(t.id)
+              this.recordExit(rec.realizedPnl ?? 0, t.strategy, t)
               this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason: 'settled', realized: Math.round((rec.realizedPnl ?? 0) * 100) / 100 })
             } else {
               // No paper position left (closed manually before settlement).
@@ -1294,8 +1303,8 @@ export class MiniAuto {
             // silently deleting the trade (which biased the stats toward
             // survivors that exited early).
             const realized = (win - t.entryPrice) * t.shares
-            this.recordExit(realized, t.strategy, t)
             this.removeTrade(t.id)
+            this.recordExit(realized, t.strategy, t)
             this.emit('miniexited', { venue: this.venue, marketId: t.marketId, outcome: t.outcome, reason: 'settled', realized: Math.round(realized * 100) / 100 })
           }
         }

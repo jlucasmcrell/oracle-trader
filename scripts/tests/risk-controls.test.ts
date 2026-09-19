@@ -9,6 +9,7 @@ import { AutoTrader } from '../../src/main/strategies/autoTrader'
 import { Ladder, decideStage } from '../../src/main/ladder/ladder'
 import { HttpError } from '../../src/main/util/http'
 import { FillReconciler } from '../../src/main/store/fillReconciler'
+import { KalshiAdapter } from '../../src/main/venues/kalshi'
 
 const dir = mkdtempSync(join(tmpdir(), 'oracle-risk-'))
 const realNow = Date.now
@@ -38,6 +39,23 @@ const lead = (name: string): any => new LeadLagEngine(join(dir, name + '.json'),
 const sweep = (l: any, venue: any) => l.sweep(venue, row(), 'YES', 0.49, cfg)
 
 async function main(): Promise<void> {
+  // Audit 2026-09-19 B-02: a failed positions read resolved to [] and read as "no positions" downstream.
+  await test('a failed Kalshi positions read rejects; a missing shard does not', async () => {
+    const a: any = new KalshiAdapter()
+    a.requireAuth = () => {}
+    a.authGet = async () => { throw new HttpError(503, 'upstream') }
+    await assert.rejects(a.getPositions(), /upstream/)
+    a.authGet = async (path: string) => {
+      if (/exchange_index=3/.test(path)) throw new HttpError(404, 'no such shard')
+      return { market_positions: [{ ticker: 'KXA', position_fp: '1', market_exposure_dollars: '0.5' }] }
+    }
+    assert.equal((await a.getPositions()).length, 1, 'a 4xx shard contributes nothing and does not reject')
+    a.authGet = async (path: string) => {
+      if (/exchange_index=2/.test(path)) throw new HttpError(429, 'rate limited')
+      return { market_positions: [] }
+    }
+    await assert.rejects(a.getPositions(), /rate limited/, 'a throttled shard would make the merged view partial')
+  })
   await test('concurrent entries cannot share the last position slot', async () => {
     const placed: any[] = []
     const venue: any = { getPositions: async () => placed.slice(), getOpenOrders: async () => [],
@@ -71,6 +89,15 @@ async function main(): Promise<void> {
     assert.equal(recorded[0].side, 'sell')
     assert.equal(recorded[0].marketId, 'A')
     await assert.rejects(() => e.placeOrder({ venue: 'ibkr', marketId: 'C', outcome: 'YES', amount: 0.5 }), /max open positions/)
+    // Audit 2026-09-19 B-35: the cap-DISABLED path (the operator's default, maxOpenPositions 0) records the same sell.
+    const recorded2: any[] = []
+    const e2 = new TradingEngine({ get: () => venue } as any, { record: (r: any) => { recorded2.push(r) } } as any)
+    e2.setExecutionMode('live')
+    e2.setRiskLimits({ maxStakePerBet: 0, maxOpenPositions: 0 })
+    await e2.sellPosition({ venue: 'ibkr', marketId: 'A', outcome: 'YES', shares: 1 } as any)
+    assert.equal(recorded2.length, 1)
+    assert.equal(recorded2[0].side, 'sell')
+    assert.equal(recorded2[0].marketId, 'A')
   })
   await test('a rejected entry releases the queue for the next entry', async () => {
     let attempts = 0

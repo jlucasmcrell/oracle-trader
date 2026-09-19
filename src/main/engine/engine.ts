@@ -72,6 +72,8 @@ export class TradingEngine {
   private reservationSeq = 0
   private journal?: OrderJournal
   private recoveryChecks = new Map<string, number>()
+  /** Clean client-id searches that found nothing, per pending row (in memory; a restart just searches again). */
+  private recoveryMisses = new Map<string, number>()
 
   constructor(
     private readonly registry: VenueRegistry,
@@ -82,20 +84,50 @@ export class TradingEngine {
   }
 
   orderAttribution(venue: VenueId, orderId: string): JournalOrder | undefined { return this.journal?.attribution(venue, orderId) }
+  /** The latest acknowledged submission on a market (journal), for adopting a position no strategy ledger tracks. */
+  recoveredOrder(venue: VenueId, marketId: string): JournalOrder | undefined { return this.journal?.acknowledgedOn(venue, marketId) }
+  /** True when this process (or a previous one, via the journal) submitted the order: by venue order id or client id. */
+  ownsOrder(venue: VenueId, orderId: string, clientOrderId?: string): boolean {
+    if (!this.journal) return false
+    if (this.journal.attribution(venue, orderId)) return true
+    return clientOrderId !== undefined && this.journal.byClientId(venue, clientOrderId) !== undefined
+  }
   orderIntent(venue: VenueId, ref: string): JournalOrder | undefined { return this.journal?.byRef(venue, ref) }
   orderStrategy(venue: VenueId, orderId: string): string | undefined { return this.orderAttribution(venue, orderId)?.ref ?? this.history.orderStrategy(venue, orderId) }
 
   async reconcileOrders(venue: VenueId): Promise<void> {
+    if (!this.journal) return
+    const now = Date.now()
+    // A row the adapter never handed to the socket (no submittedAt) is provably unsent: nothing can exist at the
+    // venue, so it must not block the market's buys and sells or hold a cap slot (audit 2026-09-19, B-04).
+    for (const row of this.journal.pending(venue)) {
+      if (row.submittedAt === undefined && now - row.requestedAt >= 60_000) {
+        this.journal.update(row, { state: 'rejected' })
+        console.warn(`[orders] ${venue} submission on ${row.marketId} never reached the venue (no submittedAt); released`)
+      }
+    }
     const adapter = this.getAdapter(venue)
-    if (!this.journal || !adapter?.findOrderByClientId) return
-    const pending = this.journal.pending(venue).filter(row => Date.now() - row.requestedAt >= 60_000)
+    if (!adapter?.findOrderByClientId) return
+    const pending = this.journal.pending(venue).filter(row => now - row.requestedAt >= 60_000)
       .sort((a, b) => (this.recoveryChecks.get(a.clientOrderId) ?? 0) - (this.recoveryChecks.get(b.clientOrderId) ?? 0))
     for (const row of pending.slice(0, 4)) {
-      this.recoveryChecks.set(row.clientOrderId, Date.now())
+      this.recoveryChecks.set(row.clientOrderId, now)
       const found = await adapter.findOrderByClientId(row.clientOrderId, row.marketId, row.requestedAt)
       if (found) {
-        this.journal.update(row, { state: 'acknowledged', orderId: found.orderId, acknowledgedAt: Date.now() })
+        this.journal.update(row, { state: 'acknowledged', orderId: found.orderId, acknowledgedAt: now })
         console.log(`[orders] recovered ${venue} submission on ${row.marketId}`)
+        continue
+      }
+      // Searched and absent. Three clean searches (a throw above never counts) spanning ten minutes since the
+      // socket write mean the venue never created the order - its client-id search covers open and historical
+      // orders - so the row is released; until 2026-09-19 it stayed pending forever, blocking the stop-loss on
+      // that market for the life of the position and counting against the cap (B-04).
+      const misses = (this.recoveryMisses.get(row.clientOrderId) ?? 0) + 1
+      this.recoveryMisses.set(row.clientOrderId, misses)
+      if (misses >= 3 && now - (row.submittedAt ?? row.requestedAt) >= 10 * 60_000) {
+        this.journal.update(row, { state: 'rejected' })
+        this.recoveryMisses.delete(row.clientOrderId)
+        console.warn(`[orders] ${venue} submission on ${row.marketId} not found by client id in ${misses} searches over ${Math.round((now - row.requestedAt) / 60_000)} min; released as never created`)
       }
     }
   }
@@ -288,9 +320,10 @@ export class TradingEngine {
     // so the next strategy need not wait on two venue reads to see it.
     if (this.riskLimits.maxOpenPositions > 0 && (res.shares > 0 || res.venueStatus === 'resting')) this.settleSlot(order.venue, this.reserveSlot(order.venue))
     // Record live fills so real orders appear in the trade history (recordFill
-    // drops zero-share results, so unfilled IOCs stay out of the ledger).
+    // drops zero-share results, so unfilled IOCs stay out of the ledger). A closeFrom exit is a SELL of the
+    // position it closes here too (§129 covered only the reserved path; audit 2026-09-19, B-35).
     if (order.marketQuestion) this.questionCache.set(order.marketId, order.marketQuestion)
-    this.recordFill(order.venue, order.marketId, order.outcome, 'buy', res, order.ref, order.marketQuestion, order.answerId)
+    this.recordFill(order.venue, order.closeFrom ?? order.marketId, order.outcome, order.closeFrom ? 'sell' : 'buy', res, order.ref, order.marketQuestion, order.answerId)
     return res
   }
 

@@ -1114,6 +1114,11 @@ export class AutoTrader {
   }
 
   reset(): void {
+    // Paper only. In live mode this would cancel every real resting order and forget every real position (the
+    // settings-page reset has refused this since round 60; the panel's own button did not - audit 2026-09-19, B-01).
+    if (this.engine.getExecutionMode() === 'live') {
+      throw new Error('Reset is paper-only: switch execution mode to paper first. In live mode a reset would cancel real resting orders and forget real positions.')
+    }
     // NEVER swap state out from under an active scan: a reset landing
     // between a tick's awaits made every in-flight entry re-check against an
     // empty ledger — one burst of trades with ALL caps blind (observed
@@ -1126,6 +1131,11 @@ export class AutoTrader {
   }
 
   private doReset(): void {
+    // A reset deferred from a busy scan re-checks the mode at the boundary: the switch may have happened since.
+    if (this.engine.getExecutionMode() === 'live') {
+      console.warn('[auto-trader] deferred reset refused: execution mode is live')
+      return
+    }
     // Live resting maker orders would keep resting at the venue (up to their
     // 3-day expirations) after the ledger forgets them — cancel first.
     const adapter = this.engine.getAdapter(VENUE)
@@ -3488,8 +3498,13 @@ export class AutoTrader {
         fetchedClean = false
       }
       for (const o of open) {
+        // Ours = the order journal knows it (every journaled order carries a UUID client id since 2026-09-15) or the
+        // legacy 'ot-' prefix. The prefix alone made this branch dead code for four days: an untracked resting order
+        // after a lost response stayed resting and could fill beside a second entry (audit 2026-09-19, B-05).
+        // An order neither the journal nor the prefix recognises (placed by hand at the venue) is left alone.
+        const ours = o.clientOrderId?.startsWith('ot-') || this.engine.ownsOrder(VENUE, o.orderId, o.clientOrderId)
         // The thin quoter's resting orders are not in pendingOrders; they are not orphans.
-        if (o.clientOrderId?.startsWith('ot-') && !this.state.pendingOrders.some((p) => p.orderId === o.orderId) && !this.quoter.ownsOrder(o.orderId)) {
+        if (ours && !this.state.pendingOrders.some((p) => p.orderId === o.orderId) && !this.quoter.ownsOrder(o.orderId)) {
           await adapter.cancelOrder(o.orderId).catch(() => undefined)
           this.emit('orphanorder', { marketId: o.marketId, orderId: o.orderId })
           this.alert('Oracle Trader — orphan order canceled', `Untracked resting order on ${o.marketId} (lost response or crash mid-place) was canceled.`)
@@ -3507,6 +3522,34 @@ export class AutoTrader {
       const tracked =
         this.state.openTrades.some((t) => t.marketId === pos.marketId || t.legs?.some((l) => l.marketId === pos.marketId)) ||
         this.state.pendingOrders.some((p) => p.marketId === pos.marketId)
+      if (!tracked && pos.shares > 0) {
+        // A position the journal can explain - an acknowledged BUY of ours whose response was lost, recovered by
+        // reconcileOrders - is ADOPTED into the ledger under its strategy, so it is exited, graded and counted
+        // like any entry and the market cannot be bought a second time. Until 2026-09-19 it was only alerted
+        // (audit B-09). A position the journal cannot explain (a manual trade) is still only alerted.
+        const row = this.engine.recoveredOrder?.(VENUE, pos.marketId)
+        const strategy = row?.side === 'buy' && row.ref?.startsWith('auto:') ? row.ref.split(':')[1] : undefined
+        if (row && strategy && row.outcome === pos.outcome) {
+          const mk = await adapter.getMarket(pos.marketId).catch(() => undefined)
+          this.state.openTrades.push({
+            id: `recovered:${row.orderId ?? row.clientOrderId}`,
+            marketId: pos.marketId,
+            question: mk?.question,
+            outcome: pos.outcome,
+            shares: pos.shares,
+            amount: round2(pos.shares * pos.avgPrice),
+            entryPrice: pos.avgPrice,
+            strategy,
+            createdAt: row.acknowledgedAt ?? row.requestedAt,
+            closeTime: mk?.closeTime,
+            feeRate: mk?.feeRate
+          })
+          this.persist()
+          console.log(`[auto-trader] adopted recovered ${pos.outcome} x${pos.shares} on ${pos.marketId} for ${strategy} (journal ${row.clientOrderId.slice(0, 8)})`)
+          this.alert('Oracle Trader — recovered position adopted', `${pos.outcome} ×${pos.shares.toFixed(2)} on ${pos.marketId}: a ${strategy} buy whose response was lost is now tracked and managed.`)
+          continue
+        }
+      }
       if (!tracked && !this.orphanAlerted.has(pos.marketId)) {
         this.orphanAlerted.add(pos.marketId)
         this.emit('orphanposition', { marketId: pos.marketId, outcome: pos.outcome, shares: round2(pos.shares) })
@@ -3793,8 +3836,11 @@ export class AutoTrader {
       // entryFeeDollars x 100 / shares === netCentsOf fee term invariant in
       // scripts/tests/kalshi-fee.test.ts is what pins the two together.
       const pnl = res.realizedPnl !== undefined ? res.realizedPnl : (res.avgPrice > 0 ? res.avgPrice - t.entryPrice : quotePrice - t.entryPrice) * res.shares - (res.fee ?? 0) - entryFeeDollars(t)
-      this.recordExit(pnl, t.perfKey ?? t.strategy, t)
+      // Remove BEFORE booking: recordExit persists, and a restart between a persisted exit and the removal
+      // reloaded the closed trade as open (three times in production; audit 2026-09-19, B-03). trySettle
+      // already orders it this way.
       this.removeTrade(t.id)
+      this.recordExit(pnl, t.perfKey ?? t.strategy, t)
       this.emit('autoexited', { marketId: t.marketId, outcome: t.outcome, reason, pnlPct: round2(pnlPct), realized: round2(pnl) })
       return true
     } catch (err) {
@@ -3996,11 +4042,14 @@ export class AutoTrader {
     const now = Date.now()
     const pending = new Set(this.state.pendingOrders.map((p) => p.marketId))
     for (const t of [...this.state.openTrades]) {
-      if (held.has(t.marketId) || pending.has(t.marketId) || now - t.createdAt < 10 * 60_000) { this.venueMiss.delete(t.id); continue }
+      // A dutch basket is keyed by its EVENT ticker while the venue reports MARKET tickers: it is held when any leg
+      // is (audit 2026-09-19, B-06 - every live basket was being dropped 25 minutes after entry).
+      const legHeld = t.legs?.some((l) => held.has(l.marketId) || pending.has(l.marketId)) ?? false
+      if (held.has(t.marketId) || pending.has(t.marketId) || legHeld || now - t.createdAt < 10 * 60_000) { this.venueMiss.delete(t.id); continue }
       const misses = (this.venueMiss.get(t.id) ?? 0) + 1
       this.venueMiss.set(t.id, misses)
       if (misses < 3) continue
-      const mk = await adapter.getMarket(t.marketId).catch(() => undefined)
+      const mk = await adapter.getMarket(t.legs?.[0]?.marketId ?? t.marketId).catch(() => undefined)
       if (mk?.resolved || mk?.resolution !== undefined) continue   // settlement path will book it
       console.warn(`[auto-trader] ledger trade not held at venue on ${misses} checks, dropping: ${t.marketId} ${t.outcome} x${t.shares}`)
       this.episodes?.record('kalshi', 'orphan-ledger', { marketId: t.marketId, outcome: t.outcome, shares: t.shares, entryPrice: t.entryPrice, ageMin: Math.round((now - t.createdAt) / 60_000) })
@@ -4857,7 +4906,8 @@ export function calibratedYesRate(yesPrice: number): number {
 export function entryFeeDollars(t: { outcome: string; entryPrice: number; shares: number; feeRate?: number }): number {
   if (!t.feeRate || !(t.shares > 0)) return 0
   const yesPx = t.outcome === 'YES' ? t.entryPrice : 1 - t.entryPrice
-  const C = Math.max(1, Math.round(t.shares))
+  // Fractional, as the venue charges (§127); rounding to whole contracts here undid that fix for the ledger (B-34).
+  const C = t.shares
   return kalshiOrderFeeDollars(t.feeRate, yesPx, C)
 }
 /**
@@ -4872,7 +4922,7 @@ export function entryFeeDollars(t: { outcome: string; entryPrice: number; shares
  */
 export function netCentsOf(t: { outcome: string; entryPrice: number; shares: number; feeRate?: number }, win: 0 | 1): number {
   const yesPx = t.outcome === 'YES' ? t.entryPrice : 1 - t.entryPrice
-  const C = Math.max(1, Math.round(t.shares))
+  const C = t.shares > 0 ? t.shares : 1
   const feePerContract = kalshiFeeCentsPerContract(t.feeRate ?? 0, yesPx, C)
   return (win ? 1 - t.entryPrice : -t.entryPrice) * 100 - feePerContract
 }

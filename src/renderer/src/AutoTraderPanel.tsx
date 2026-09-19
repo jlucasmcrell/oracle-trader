@@ -88,9 +88,11 @@ export default function AutoTraderPanel({ log, onChanged }: Props) {
     return () => clearInterval(t)
   }, [load])
 
+  // Send ONLY the changed keys: setConfig merges. Spreading the panel's <=10 s-old copy over the top silently reverted
+  // ladder stops and nightly-review applies that landed in between (audit 2026-09-19, B-08).
   const patch = async (p: Partial<AutoTraderConfig>) => {
     if (!cfg) return
-    const next = await window.api.autoTrader.setConfig({ ...cfg, ...p })
+    const next = await window.api.autoTrader.setConfig(p)
     setCfg(next)
     await load()
   }

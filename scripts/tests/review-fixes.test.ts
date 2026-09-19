@@ -23,6 +23,7 @@ import { computeCandidate, MAX_ROWS_PER_DAY, midOf, momentumCandidateStats, mome
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs'
 import { killState } from '../lib/kill-state.mjs'
 import { isDnsFailure, makeResolverLookup, PUBLIC_RESOLVERS } from '../lib/dns-fallback.mjs'
+import { needsSettleFetch, settledCacheEntry } from '../lib/cull-cache.mjs'
 import { tmpdir } from 'node:os'
 import { join as joinPath } from 'node:path'
 import { GEMINI, geminiKey } from '../../src/main/intelligence/gemini'
@@ -849,6 +850,7 @@ eq('phases: a repeated name sums its slices', phaseDurations([['a', 100], ['b', 
 killStateTests()
 dnsFallbackTests()
 crossVenueBatchTests()
+cullCacheTests()
 
 await leadLagContainmentTests()
 await cancelOrderTests()
@@ -1301,4 +1303,26 @@ function crossVenueBatchTests(): void {
   eq('cross-venue: a cursor past the end is normalised, never out of range', crossVenueBatch(all, 97, 2, yes).batch, ['m17', 'm18'])
   eq('cross-venue: a negative cursor is normalised too', crossVenueBatch(all, -3, 2, yes).batch, ['m37', 'm38'])
   eq('cross-venue: a budget wider than the universe takes each market once', crossVenueBatch(['a', 'b'], 1, 12, yes).batch, ['b', 'a'])
+}
+
+/**
+ * cull-gate's settle cache (2026-09-19). The weekly run graded 41k culled markets one HTTP request at a
+ * time and was killed by the task's own 2 h limit at 97%, below the single cache write at the bottom of the
+ * loop - so no run ever produced a verdict and every run started from zero. The read is now batched and the
+ * cache is written per chunk; these are the rules that decide what goes in it.
+ */
+function cullCacheTests(): void {
+  const now = Date.UTC(2026, 8, 19, 12, 0, 0)
+  eq('cull-cache: an unseen ticker needs a request', needsSettleFetch(undefined, now), true)
+  eq('cull-cache: a settled result is never re-fetched', needsSettleFetch('yes', now), false)
+  eq('cull-cache: a fresh blank rests for 24 h', needsSettleFetch({ blankAt: now - 3600_000 }, now), false)
+  eq('cull-cache: a blank older than 24 h is re-checked', needsSettleFetch({ blankAt: now - 25 * 3600_000 }, now), true)
+
+  eq('cull-cache: a finalized YES caches the result', settledCacheEntry({ status: 'finalized', result: 'yes' }, now), 'yes')
+  eq('cull-cache: a settled NO caches the result', settledCacheEntry({ status: 'settled', result: 'no' }, now), 'no')
+  // The open case is the one that matters: caching "no answer" would freeze the row out of every later run.
+  eq('cull-cache: an open market caches nothing', settledCacheEntry({ status: 'active', result: '' }, now), undefined)
+  eq('cull-cache: a settled market with no result parks as a blank', settledCacheEntry({ status: 'settled', result: '' }, now), { blankAt: now })
+  eq('cull-cache: a row with no status caches nothing', settledCacheEntry({}, now), undefined)
+  eq('cull-cache: a missing row is not an error', settledCacheEntry(undefined, now), undefined)
 }

@@ -70,6 +70,42 @@ async function main() {
     assert.equal(fill.implementationVersion, '2026-09-15-r3'); assert.equal(fill.ref, 'venue-fill')
     assert.equal(new OrderJournal(join(home, 'order-journal.jsonl')).pending('kalshi').length, 0)
   })
+  // Audit 2026-09-19 B-04: a submission the venue never created stayed pending forever, blocking that market's
+  // buys and sells and holding a cap slot; an unsent row (no submittedAt) was never released either.
+  await test('a never-created submission is released after three clean searches over ten minutes; an unsent row at once', async () => {
+    const home = join(dir, 'never-created')
+    const history = new HistoryStore(join(home, 'history.json'))
+    let searches = 0
+    const adapter: any = {
+      placeOrder: async (o: any) => { o.onSubmit(); throw new Error('response lost after acceptance') },
+      findOrderByClientId: async () => { searches++; return undefined },
+      getFills: async () => []
+    }
+    const e = new TradingEngine({ get: () => adapter } as any, history, { paperStateDir: home })
+    e.setExecutionMode('live')
+    await assert.rejects(e.placeOrder(order), /response lost/)
+    const journal = () => new OrderJournal(join(home, 'order-journal.jsonl'))
+    assert.equal(journal().pending('kalshi').length, 1)
+    const oldNow = Date.now
+    const base = oldNow()
+    try {
+      Date.now = () => base + 61_000; await e.reconcileOrders('kalshi')
+      Date.now = () => base + 6 * 60_000; await e.reconcileOrders('kalshi')
+      assert.equal(journal().pending('kalshi').length, 1, 'two misses inside ten minutes keep the row')
+      Date.now = () => base + 11 * 60_000; await e.reconcileOrders('kalshi')
+    } finally { Date.now = oldNow }
+    assert.equal(searches, 3)
+    assert.equal(journal().pending('kalshi').length, 0, 'three clean misses over ten minutes release the row')
+    // The market accepts a submission again (no 'Unresolved submission' block).
+    await assert.rejects(e.placeOrder(order), /response lost/)
+    // An unsent row: the adapter never reached the socket (no submittedAt). Released on the first pass after a minute.
+    const j = journal()
+    j.begin({ venue: 'kalshi', marketId: 'UNSENT', outcome: 'YES', side: 'buy', ref: 'fade' })
+    const e2 = new TradingEngine({ get: () => adapter } as any, history, { paperStateDir: home })
+    e2.setExecutionMode('live')
+    try { Date.now = () => oldNow() + 61_000; await e2.reconcileOrders('kalshi') } finally { Date.now = oldNow }
+    assert.equal(journal().pending('kalshi').filter((r) => r.marketId === 'UNSENT').length, 0, 'an unsent row is released')
+  })
   await test('local preflight failure and explicit rejection do not strand capacity', async () => {
     let calls = 0
     const adapter: any = { placeOrder: async (o: any) => {

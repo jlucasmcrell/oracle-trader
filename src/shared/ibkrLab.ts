@@ -29,6 +29,8 @@ export interface IbkrLabLive {
   status:'submitting'|'open'|'closed'|'uncertain'; orderId?:string; exitOrderId?:string; message?:string
   filled:number; exitFilled:number; entryCost:number; exitCost:number; fees:number; net?:number
   exitOrderIds?:string[]; exitAttempt?:number; pendingRef?:string; lastExitAt?:number
+  /** The orderRef each order was submitted with: the one id a TWS completed-order row carries (audit B-07). */
+  entryRef?:string; exitRefs?:Record<string,string>
   executions?:Record<string,import('./types').VenueFill>
   paired?:number; pairRevenue?:number
   /** Per-contract exit value on the first fresh quote after the fill; price exits move from it, as paper does. Absent until one is fresh. */

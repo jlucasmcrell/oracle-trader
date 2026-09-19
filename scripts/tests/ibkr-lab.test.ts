@@ -124,7 +124,16 @@ async function main(){
   assert.equal(live.lab.status().config.mode,'live');await live.lab.configure({mode:'paper',liveStrategies:[]})
   // Empty/partial IOC lifecycle; definitive terminal evidence before retry, durable execution dedupe.
   const l=setup();const record={id:'L',strategy:'favorite',market:l.m,outcome:'YES',quantity:2,createdAt:now-120000,status:'open',orderId:'17091:1',filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0}
-  l.s.live=[record];(l.venue.reader as any).completed=async()=>[{order:{clientId:17091,orderId:1,filledQuantity:0},state:{status:'Cancelled'}}]
+  // A TWS completed-order row carries orderRef and permId but no orderId/clientId (audit 2026-09-19, B-07): the lab
+  // must recognise it by the ref it submitted with, or by the permId the open-order snapshot reported.
+  ;(record as any).entryRef='ibkr-lab:favorite:L:entry'
+  l.s.live=[record];(l.venue.reader as any).completed=async()=>[{order:{orderRef:'ibkr-lab:favorite:L:entry',permId:9001,filledQuantity:0},state:{status:'Cancelled'}}]
+  await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'closed','decoder-shaped completed row matched by orderRef');assert.equal(l.s.live[0].net,0)
+  record.status='open';delete (record as any).entryRef;(l.lab as any).permIds.set('17091:1',9001)
+  await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'closed','decoder-shaped completed row matched by permId')
+  record.status='open';(l.lab as any).permIds.clear()
+  await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'open','no ref and no permId: not terminal')
+  ;(l.venue.reader as any).completed=async()=>[{order:{clientId:17091,orderId:1,filledQuantity:0},state:{status:'Cancelled'}}]
   await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'closed');assert.equal(l.s.live[0].net,0)
   record.status='open';(l.venue.getFills as any)=async()=>[{id:'fill1',orderId:'17091:1',shares:1,price:.4,fee:.01}];(l.venue.reader as any).completed=async()=>[{order:{clientId:17091,orderId:1,filledQuantity:1},state:{status:'Cancelled'}}]
   await (l.lab as any).reconcileLive(now);assert.equal(record.filled,1);assert.equal(record.fees,.01)

@@ -371,6 +371,8 @@ export interface OpenOrder {
   orderId: string
   /** Caller-supplied id, when the venue echoes it (orphan detection). */
   clientOrderId?: string
+  /** IBKR's permanent order id: the only id a TWS completed-order row carries besides orderRef. */
+  permId?: number
   marketId: string
   /** Directional exposure the order adds when filled. */
   outcome: 'YES' | 'NO'

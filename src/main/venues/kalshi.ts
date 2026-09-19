@@ -1,5 +1,5 @@
 import { sign, constants } from 'node:crypto'
-import { HttpClient } from '../util/http'
+import { HttpClient, HttpError } from '../util/http'
 import { KALSHI_MAKER_FEE_COEF, KALSHI_TAKER_FEE_COEF } from '../util/kalshiFee'
 import { recordCulled, type CulledRow } from './cullRecorder'
 import type { VenueAdapter, VenueCapabilities } from '../../shared/venue'
@@ -829,18 +829,26 @@ export class KalshiAdapter implements VenueAdapter {
       }
       perShard.push(`${label}:${n}`)
     }
+    // A read that FAILS must reject, never resolve to "no positions": the engine cap's fail-closed branch, the
+    // ledger reconcile's three-miss drop, trySettle's stale-trade rule and the boot gate all treat a resolved
+    // empty list as the truth (audit 2026-09-19, B-02). Until then every failure here was a warn line and [].
     try {
       const d = await this.authGet<{ market_positions?: KalshiPosition[] }>('/portfolio/positions?limit=200')
       merge(d.market_positions, 'default')
     } catch (err) {
       console.warn('[kalshi] positions (default) failed:', err instanceof Error ? err.message : String(err))
+      throw err
     }
     for (const shard of shards) {
       try {
         const d = await this.authGet<{ market_positions?: KalshiPosition[] }>(`/portfolio/positions?limit=200&exchange_index=${shard}`)
         merge(d.market_positions, `shard${shard}`)
-      } catch {
-        // a shard the account does not have (or a rejected param) contributes nothing
+      } catch (err) {
+        // A shard the account does not have, or a rejected parameter, is a 4xx and contributes nothing. Anything
+        // else (5xx, 429, a timeout) means the merged view would be PARTIAL, which a caller cannot tell from complete.
+        if (err instanceof HttpError && err.status >= 400 && err.status < 500 && err.status !== 429) continue
+        console.warn(`[kalshi] positions (shard ${shard}) failed:`, err instanceof Error ? err.message : String(err))
+        throw err
       }
     }
     const sig = perShard.join(' ')

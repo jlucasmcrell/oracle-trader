@@ -1087,7 +1087,8 @@ export interface Api {
   }
   autoTrader: {
     getConfig(): Promise<AutoTraderConfig>
-    setConfig(cfg: AutoTraderConfig): Promise<AutoTraderConfig>
+    /** A PARTIAL config: the trader merges it. Sending a stale full copy reverted ladder writes (audit B-08). */
+    setConfig(cfg: Partial<AutoTraderConfig>): Promise<AutoTraderConfig>
     scan(): Promise<AutoScanResult>
     getStatus(): Promise<AutoStatus>
     reset(): Promise<void>
@@ -1095,7 +1096,7 @@ export interface Api {
   }
   autoMini: {
     getConfig(venue: VenueId): Promise<MiniAutoConfig>
-    setConfig(venue: VenueId, cfg: MiniAutoConfig): Promise<MiniAutoConfig>
+    setConfig(venue: VenueId, cfg: Partial<MiniAutoConfig>): Promise<MiniAutoConfig>
     scan(venue: VenueId): Promise<MiniScanResult>
     getStatus(venue: VenueId): Promise<MiniStatus>
     reset(venue: VenueId): Promise<void>

@@ -73,7 +73,7 @@ export class IbkrAdapter implements VenueAdapter {
   async getOpenOrders() {
     const s = await this.reader.snapshot()
     if (s.mode !== 'live') throw new Error('Live Gateway required')
-    return s.orders.filter(o=>o.instrument.exchange==='FORECASTX').map(o=>({orderId:`${o.clientId}:${o.id}`,clientOrderId:o.orderRef,marketId:String(o.instrument.conId),outcome:o.instrument.outcome!,yesPrice:o.instrument.outcome==='YES' ? o.limitPrice! : 1-o.limitPrice!,initialCount:o.quantity,fillCount:0,remainingCount:o.quantity,status:'resting' as const}))
+    return s.orders.filter(o=>o.instrument.exchange==='FORECASTX').map(o=>({orderId:`${o.clientId}:${o.id}`,clientOrderId:o.orderRef,permId:o.permId,marketId:String(o.instrument.conId),outcome:o.instrument.outcome!,yesPrice:o.instrument.outcome==='YES' ? o.limitPrice! : 1-o.limitPrice!,initialCount:o.quantity,fillCount:0,remainingCount:o.quantity,status:'resting' as const}))
   }
   private async prepare(req: OrderRequest): Promise<{preview:IbkrPreview; order:Order}> {
     if (req.venue !== this.id || req.postOnly || req.expirationTs || req.answerId || req.timeInForce === 'fill_or_kill') throw new Error('Unsupported IBKR order options')
