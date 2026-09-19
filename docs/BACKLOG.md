@@ -1960,7 +1960,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **159. Kill switch is settlement-only (§127, Minimax F-08). OPERATOR.** `dayRealizedForKill` sums settled P&L; a
   regime break held in 60 unsettled positions never trips it. Recommendation: add open mark-to-market losses at
   full weight to the daily kill. Loss limits are the operator's; nothing changes until Joe says so.
-- **160. OpenRouter spend (§127, Minimax F-28). OPERATOR.** Measured ~$25/day on 09-13/14 with no per-caller
-  metering; credit was low on 09-18. Recommendation: a hard monthly cap or Ollama-only for the nightly review.
+- **160. OpenRouter spend (§127, Minimax F-28). PARTLY DONE 2026-09-19 (§128).** Per-caller metering exists
+  (`model-usage`). The nightly review now runs on the operator's deepseek-flash endpoint with the router flash
+  model as first fallback; gpt-5.6-sol is no longer in its path. Remaining paid callers: hunch-challenger
+  (gpt-5.6-sol) and news vetting (deepseek-v4-pro) - operator's. Trigger: read `model-usage` on **2026-09-22**;
+  confirm `nightly-review` shows a flash model with status 200 and no frontier model.
 - **161. Lead-lag coin cohort forward window (§127, ChatGPT F-03).** Frozen from 2026-09-19 00:00Z; read at >= 400
   contracts and >= 5 day-clusters as one cohort (**2026-09-24** at the earliest). No membership change before then.

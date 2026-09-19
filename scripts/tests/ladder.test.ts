@@ -4,7 +4,7 @@
  */
 import { clusterT, clusteredMean, CONFIDENCE_Z, COOLDOWN_MS, LONG_COOLDOWN_MS, cooldownAfter, dayClusteredSe, decideConvergence, decideQuoter, decideSettlement, decideStage, isPromotion, meanCi, QUOTER_GATE, tradeSmallEntry } from '../../src/main/ladder/ladder'
 import { clusterT95, SCALE_Z } from '../../src/main/ladder/ladder'
-import { planParameterChanges, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
+import { planParameterChanges, REVIEW_CHEAP_MODEL, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../src/shared/ipc'
 
 let pass = 0
@@ -119,14 +119,17 @@ eq('day-clustered: a single trade has no SE', dayClusteredSe([{ n: 1, sum: -3 }]
 
 // ---- nightly review model chain ----
 const plansAll = reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: 'k', llmModel: 'deepseek-v4-pro' }, 'router')
-eq('review plans: router paid, then Gemini, then the app endpoint, then free', plansAll.map((p) => p.model), ['openai/gpt-5.6-sol', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3', ...REVIEW_GEMINI.models, 'deepseek-v4-pro', ...REVIEW_FREE_MODELS])
+// 2026-09-19: the operator's keyed endpoint leads; the cheap router model is the first fallback; frontier models after.
+eq('review plans: app endpoint, cheap router model, router chain, Gemini, free', plansAll.map((p) => p.model), ['deepseek-v4-pro', REVIEW_CHEAP_MODEL, 'openai/gpt-5.6-sol', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3', ...REVIEW_GEMINI.models, ...REVIEW_FREE_MODELS])
 // Assert that a key is PRESENT, never what it is: this ran with a real GEMINI_API_KEY in the environment and
 // an `eq` on the value printed the secret into the test output on failure.
-eq('review plans: Gemini carries a key and asks for JSON', [plansAll[3].base, plansAll[3].key.length > 0, plansAll[3].json], [REVIEW_GEMINI.base, true, true])
+const geminiPlan = plansAll.find((p) => p.model === REVIEW_GEMINI.models[0])!
+eq('review plans: Gemini carries a key and asks for JSON', [geminiPlan.base, geminiPlan.key.length > 0, geminiPlan.json], [REVIEW_GEMINI.base, true, true])
 // Found by model, not by index: the chain length moves whenever a provider's model list changes, and an
 // index-based assertion silently starts checking a different entry instead of failing honestly.
 const appPlan = plansAll.find((p) => p.model === 'deepseek-v4-pro' && !/openrouter/.test(p.base))
 eq('review plans: the app endpoint keeps its own base and key', [appPlan?.base, appPlan?.key === 'k'], ['https://api.deepseek.com/v1', true])
+eq('review plans: the cheap router fallback is a flash-tier model', /flash/.test(REVIEW_CHEAP_MODEL), true)
 const plansDirect = reviewModelPlans({ llmBaseUrl: 'http://localhost:11434/v1', llmApiKey: '', llmModel: 'qwen3' }, '')
 eq('review plans: no router key and a local endpoint', plansDirect.map((p) => p.model), [...REVIEW_GEMINI.models, 'qwen3'])
 const plansPaid = reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: 'k', llmModel: 'deepseek-v4-pro' }, '')

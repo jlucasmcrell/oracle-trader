@@ -4389,3 +4389,17 @@ few dollars a day. True, recorded, and the reason the program is research first.
 
 Tests: 18/18 (ladder and adversarial fixtures rewritten to supply >= 4 clusters and 95%-clearing evidence, with
 the doctrine date on each). Restarted 08:48:03Z on the 08:47:59Z bundle.
+
+## §128 - 2026-09-19 09:20Z: the nightly review runs on the operator's model first
+
+Operator: "use deepseek-flash for the nightly review, that's what I have set in the app already." It was set
+(`llmBaseUrl` api.deepseek.com, `llmModel` deepseek-flash) and ignored: `reviewModelPlans` placed the app's own
+endpoint FIFTH whenever an OpenRouter key existed, behind the intelligence chain, so `nightly-review` called
+`openai/gpt-5.6-sol` on 09-16, 09-17, 09-18 and 09-19 (model-usage log). Now the operator's keyed endpoint leads,
+`deepseek/deepseek-v4-flash` on the router is the first fallback (`REVIEW_CHEAP_MODEL`, $0.045/M in), then the
+intelligence chain, Gemini, the free tier; a keyless local endpoint still sits after Gemini. Tests updated
+(18/18); restarted. Known: the only direct DeepSeek calls on record (09-16, deepseek-v4-pro) returned 402 -
+the DeepSeek account had no credit; if it still has none, tomorrow's 06:00Z review lands on the router flash
+model at a fraction of a cent, which is the intended floor either way. The three-day paid callers are
+hunch-challenger (gpt-5.6-sol, 81 calls) and news vetting (deepseek-v4-pro); the critic already runs on Gemini
+flash. Those remain as configured (`hunchChallengerModel`, `intelligenceSecondaryModel`).

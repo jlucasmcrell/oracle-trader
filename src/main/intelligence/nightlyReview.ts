@@ -146,6 +146,8 @@ export interface ReviewModelPlan {
 }
 /** OpenRouter's free tier, JSON-mode capable as of 2026-09-07: the last resort when the paid balance is gone. */
 export const REVIEW_FREE_MODELS = ['minimax/minimax-m3:free', 'nvidia/nemotron-3-super-120b-a12b:free', 'google/gemma-4-31b-it:free']
+/** First router fallback for the nightly review: the flash tier ($0.045/M in, $0.09/M out on 2026-09-19), never a frontier model. */
+export const REVIEW_CHEAP_MODEL = 'deepseek/deepseek-v4-flash'
 /**
  * The free-first provider. Was the local Ollama instance until 2026-09-12; its models turned out to be
  * cloud-backed, metered and weekly-limited, and served 0 of 1,025 critic calls while the paid router
@@ -173,14 +175,18 @@ export function reviewModelPlans(
   const add = (p: ReviewModelPlan): void => {
     if (!plans.some((q) => q.base === p.base && q.model === p.model)) plans.push(p)
   }
+  // The operator's own keyed endpoint and model lead the chain. Until 2026-09-19 it came FIFTH behind the
+  // OpenRouter intelligence chain whenever a router key existed, so the review ran on gpt-5.6-sol every night
+  // (model-usage 09-16..09-19) while the app was set to deepseek-flash. A failure there falls through to the
+  // cheapest router model, then the intelligence chain, Gemini, and the free tier. A local endpoint without a
+  // key still sits after Gemini.
+  const directKeyed = Boolean(direct && !directIsRouter && cfg.llmModel && !/(localhost|127\.0\.0\.1)/.test(direct) && cfg.llmApiKey.trim())
+  if (directKeyed) add({ base: direct, key: cfg.llmApiKey.trim(), model: cfg.llmModel, json: true })
   if (useRouter && routerAuth) {
+    add({ base: router, key: routerAuth, model: REVIEW_CHEAP_MODEL, json: true })
     for (const model of new Set([cfg.intelligencePrimaryModel || 'openai/gpt-5.6-sol', cfg.intelligenceSecondaryModel || 'deepseek/deepseek-v4-pro', cfg.intelligenceFallbackModel || 'z-ai/glm-5.3'])) {
       add({ base: router, key: routerAuth, model, json: true })
     }
-  }
-  if (direct && !directIsRouter && cfg.llmModel && !/(localhost|127\.0\.0\.1)/.test(direct) && cfg.llmApiKey.trim() && !useRouter) {
-    // Without a router the app's own paid endpoint is the primary.
-    add({ base: direct, key: cfg.llmApiKey.trim(), model: cfg.llmModel, json: true })
   }
   // Gemini needs its key; with none configured it contributes nothing and OpenRouter carries the chain.
   const gkey = geminiKey()
