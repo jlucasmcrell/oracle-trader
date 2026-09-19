@@ -4636,3 +4636,72 @@ from the ledger's own per-booking value (7.477c/contract, $0.0815). Result: perf
 `exit` episodes stay (append-only, not evidence).
 
 Restart: build 15:14:10Z, electron start 15:14:33Z under `agent.lock`.
+
+## §136 - 2026-09-19 16:00Z: the duplicate recorders of 09-15, closed - and a dated grader amendment
+
+**Incident.** After the Windows Update reboot (down 01:29-06:14Z, 2026-09-15) two copies each of
+`crypto15-shadow.mjs`, `ladder15-shadow.mjs` and `mmsim.mjs` ran side by side from 06:20Z until the extra copies
+were stopped at 08:22Z.
+
+**Cause, from evidence.** `data/sentinel/state.json` holds `revived['ladder15-stale']` and
+`revived['crypto15-stale']` = 1789453201607 = 06:20:01.607Z, the tick that opened incident
+`2026-09-15T06-20-collector-stale` (heartbeats five hours old, because the box had been off). That tick ran
+`cmd /c start /min "" scripts\<recorder>.cmd` for all three: the `cmd.exe /K G:\...\scripts\*.cmd` windows of
+06:20:03Z are still alive and are the parents of the surviving node processes (21864 crypto15, 21560 ladder15).
+The Startup folder launched the same three at 06:20:07-16Z. Neither path knew about the other and none of the
+scripts refused a second copy. Note the order: the sentinel ran FIRST, so a process check in the sentinel alone
+would not have prevented this; the lock inside the scripts is what closes the race.
+
+**Damage, measured without reading an outcome** (sequence/ticker identity, `ts`, a hash of the line, and the
+NAMES of differing fields only). Every duplicated identity is a CONFLICTING copy, none is byte-exact, because
+the two copies ran on their own clocks: mmsim 1,060 rows under already-used sequence IDs (06:21:11-08:24:02Z,
+0 before, 0 since, through 09-19); crypto15 48 windows recorded twice (06:30-08:15Z); ladder15 40 (06:30-08:17Z).
+So the 09-15 grader change (exact duplicates count once, any conflict = INCONCLUSIVE) would have refused
+crypto15's verdict and mmsim's 10-17 verdict forever. No raw file was rewritten, then or now.
+
+**What 09-15 already did** (08:09-08:22Z, recorded only in the handbook and the viability review until now):
+the later copies stopped, originals kept; `scripts/recorder-lock.mjs` (exclusive `recorder.lock` beside the data,
+dead-pid replacement, plus a command-line scan so a writer from before the lock is respected) called first thing
+in all three `main()`s; `scripts/unique-observations.mjs` in `crypto15-gate.mjs` and `mmsim-grade.mjs`.
+
+**This round.**
+1. `recorder-lock.mjs`: a live pid only holds the lock while it is still this recorder (the scan is now the
+   exported `recorderPids(script)`). A hard reboot runs no exit handler, the lock file survives, and Windows
+   reuses the number - the old rule would then have refused every launch for as long as some unrelated process
+   held it, i.e. the fix for this incident could have silenced a recorder after the next reboot. An unreadable
+   lock is left alone for a minute (another launch is mid-write) and replaced after that (a reboot tore it).
+2. `sentinel.mjs`: a stale recorder whose process is alive is reported (`... with its process alive (pid N); not
+   relaunched`), not relaunched - the launch would be refused by the lock and leave a `cmd /K` window behind.
+3. Graders - **AMENDMENT, dated 2026-09-19, 28 days before mmsim's read, decided without reading any P&L.**
+   The duplicate-writer window is `2026-09-15T06:20:00Z..08:25:00Z` by row `ts`
+   (`inDuplicateWriterWindow`, `unique-observations.mjs`). A conflict whose rows all lie inside it is this
+   incident; a conflict anywhere else is unexplained and still exits INCONCLUSIVE (2), exactly as before.
+   - `crypto15-gate.mjs` (key = `ticker`, one row per window): the first-written row is kept. Both copies were
+     valid observers of the same window; which one wrote first is independent of the outcome.
+   - `mmsim-grade.mjs` (key = `runId:seq`): BOTH rows of every conflicting ID are dropped, with every row that
+     shares a `fillId` with one. Keep-first is wrong here: each copy loaded the same `state.json` once at launch
+     and then ran its own book, so the file is two interleaved histories and no row says which copy wrote it;
+     keeping one row per ID would splice them (one public trade filled in both books counts twice, a fill kept
+     while its markout is dropped). This is the rule the `--exploratory` read has used since 09-16 (§105); that
+     read was the operator's and showed one rule only, so no alternative was chosen by its result. Cost: about two
+     hours of one day out of 35. `--interim` is untouched and still counts raw rows.
+   - ladder15 has no grader. The rule for whoever writes one: key on `ticker`, keep first-written, same window
+     (BACKLOG).
+4. Tests. New `scripts/tests/recorder-lock.test.mjs` (`test:recorder-lock`, 7 scenarios on a throwaway fixture
+   in a temp directory: held, second launch refused, pre-lock writer respected, dead owner replaced, clean exit
+   releases, reused pid, torn lock fresh/old); mutants without the pid-reuse line and without the torn-lock line
+   fail `a live pid that is not this recorder does not hold the lock` and `an old unreadable lock is replaced`.
+   `collection-integrity.test.mjs` 7 -> 11 scenarios (conflict inside the window: verdict proceeds / first row
+   kept; one row outside: exit 2); against the pre-fix graders it fails on both new blocks.
+
+**Verified.** One process per shadow (21864, 21560), heartbeats advancing; a real second launch of each prints
+`[recorder] existing writer(s): <pid>; new launch skipped`, exits 0 and leaves no lock behind; `recorderPids` finds
+both by script path; `sentinel.mjs --dry` clean. mmsim had no process when the work started (halted 13:35Z, see
+below); the sentinel's 15:50:01Z tick relaunched it through the new lock: pid 37600, `recorder.lock` names it,
+rows and `state.json` written 16:00:00Z, 0 repeated sequence IDs on 09-16..09-19. 20/20 suites and typecheck
+pass (`tmp/testout/*-r136.txt`). No app restart (no `src/` change, no build). `agent.lock` 15:24-16:01Z.
+
+**Seen, not fixed (out of scope).** mmsim halts itself on `429-storm` (3 throttles in an hour) about every
+2.5-3 h since 09-17 16:04Z - ten halts in two days - and stays down until the sentinel's 3-hourly relaunch, so
+the pre-registered run is dark for a large part of each day; each relaunch also leaves a `cmd /K mmsim.cmd`
+window open (ten at 15:17Z). BACKLOG.

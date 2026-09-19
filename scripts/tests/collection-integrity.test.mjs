@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { cursorPages } from '../cursor-pages.cjs'
-import { uniqueObservations } from '../unique-observations.mjs'
+import { uniqueObservations, inDuplicateWriterWindow } from '../unique-observations.mjs'
 
 let pages = 0
 const complete = await cursorPages(async () => ({ orders: [{ n: ++pages }], cursor: pages < 65 ? String(pages) : '' }), '/orders', 'orders')
@@ -26,5 +26,25 @@ try {
   ].map(JSON.stringify).join('\n'))
   const early = spawnSync(process.execPath, [resolve('scripts/mmsim-grade.mjs'), '--exploratory'], {encoding:'utf8',env:{...process.env,MMSIM_DIR:dir},windowsHide:true})
   assert.equal(early.status,0);assert.match(early.stdout,/1 conflicting sequence IDs/);assert.match(early.stdout,/EXPLORATORY READ/);assert.doesNotMatch(early.stdout,/--- VERDICT ---/)
+
+  // Amendment 2026-09-19: conflicts wholly inside the 2026-09-15 duplicate-writer window are excluded and the
+  // verdict proceeds; one row outside it and the verdict is still refused. Stop date in the past = verdict path.
+  assert.equal(result.conflictRows.length, 2)
+  assert.equal(inDuplicateWriterWindow({ ts: '2026-09-15T07:00:00Z' }), true); assert.equal(inDuplicateWriterWindow({ ts: '2026-09-15T08:25:01Z' }), false); assert.equal(inDuplicateWriterWindow({}), false)
+  writeFileSync(join(dir, 'prereg-fixture.json'), JSON.stringify({ runId: 'fixture', params: {}, stopAtIso: '2026-09-16T00:00:00Z' }))
+  const grade = (rows) => { writeFileSync(join(dir, 'fixture.jsonl'), rows.map(JSON.stringify).join('\n')); return spawnSync(process.execPath, [resolve('scripts/mmsim-grade.mjs')], {encoding:'utf8',env:{...process.env,MMSIM_DIR:dir},windowsHide:true}) }
+  const pair = (a, b) => [{runId:'fixture',seq:1,event:'fill',fillId:'copyA',ts:a}, {runId:'fixture',seq:1,event:'fill',fillId:'copyB',ts:b}, {runId:'fixture',seq:2,event:'markout15',fillId:'copyA',ts:'2026-09-15T09:00:00Z'}, {runId:'fixture',seq:3,event:'cycle',ok:true,ts:'2026-09-15T09:01:00Z'}]
+  const inside = grade(pair('2026-09-15T07:00:00Z', '2026-09-15T07:00:12Z'))
+  assert.match(inside.stdout, /amendment 2026-09-19\): 1 conflicting sequence IDs.* 3 rows/); assert.match(inside.stdout, /fills 0 /); assert.match(inside.stdout, /--- VERDICT ---/); assert.doesNotMatch(inside.stdout, /conflicting sequence records/)
+  const outside = grade(pair('2026-09-15T07:00:00Z', '2026-09-15T09:30:00Z'))
+  assert.equal(outside.status, 2); assert.match(outside.stdout, /INCONCLUSIVE: 1 conflicting sequence records/); assert.doesNotMatch(outside.stdout, /--- VERDICT ---/)
+
+  const cdir = join(dir, 'crypto15'); mkdirSync(cdir)
+  const gate = (rows) => { writeFileSync(join(cdir, 'observations-2026-09.jsonl'), rows.map(JSON.stringify).join('\n')); return spawnSync(process.execPath, [resolve('scripts/crypto15-gate.mjs')], {encoding:'utf8',env:{...process.env,CRYPTO15_DIR:cdir},windowsHide:true}) }
+  const twice = (a, b) => [{ticker:'KXFIX15M-W1',ts:a,signal:false,secondsToClose:60}, {ticker:'KXFIX15M-W1',ts:b,signal:false,secondsToClose:48}]
+  const kept = gate(twice('2026-09-15T07:00:00Z', '2026-09-15T07:00:12Z'))
+  assert.equal(kept.status, 0); assert.match(kept.stdout, /second-writer copies .* excluded: 1/); assert.match(kept.stdout, /windows recorded\s+1\b/)
+  const refused = gate(twice('2026-09-15T07:00:00Z', '2026-09-16T07:00:12Z'))
+  assert.equal(refused.status, 2); assert.match(refused.stdout, /INCONCLUSIVE: 1 conflicting window records/)
 } finally { rmSync(dir, { recursive: true, force: true }) }
-console.log('collection integrity: 7 scenarios passed (synthetic data only; early exploratory read cannot issue a verdict)')
+console.log('collection integrity: 11 scenarios passed (synthetic data only; early exploratory read cannot issue a verdict)')

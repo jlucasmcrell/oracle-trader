@@ -27,6 +27,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
+import { recorderPids } from './recorder-lock.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
 const UD = path.join(process.env.APPDATA ?? '', 'oracle-trader')
@@ -192,6 +193,17 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
     }
   }
 }
+// A relaunch beside a live writer is refused by the recorder's own lock and leaves a cmd window behind, so a
+// stale recorder whose process is still alive is reported, not relaunched. (2026-09-15: this tick and the
+// Startup folder launched all three recorders within seconds of each other; the lock is what stops that race.)
+const liveRecorder = (script) => {
+  try {
+    return recorderPids(path.join(REPO, 'scripts', script)) ?? []
+  } catch {
+    return []
+  }
+}
+
 // The 15-minute commodity ladder shadow. It writes a heartbeat every 10s while it lives, so a stale one
 // means the PROCESS died, not that the markets are shut (it reports a weekend stand-down in the heartbeat
 // and keeps writing). It is not a Scheduled Task - registering one needs elevation this account does not
@@ -201,7 +213,10 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
   const hb = mtime(path.join(REPO, 'data/ladder15-shadow/heartbeat.json'))
   if (hb !== undefined && now - hb > 20 * MIN) {
     const last = state.revived['ladder15-stale'] ?? 0
-    if (now - last > 3 * H) {
+    const live = liveRecorder('ladder15-shadow.mjs')
+    if (live.length) {
+      add('ladder15-stale', 'notify', `ladder15 shadow stale (${ageMin(hb)} min) with its process alive (pid ${live.join(', ')}); not relaunched`, `data/ladder15-shadow/heartbeat.json last written ${iso(hb)}`)
+    } else if (now - last > 3 * H) {
       state.revived['ladder15-stale'] = now
       add('ladder15-stale', 'revive-task', `ladder15 shadow stale (${ageMin(hb)} min); relaunching`, `data/ladder15-shadow/heartbeat.json last written ${iso(hb)}`)
       if (!DRY) {
@@ -224,7 +239,10 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
   const hb = mtime(path.join(REPO, 'data/crypto15-shadow/heartbeat.json'))
   if (hb !== undefined && now - hb > 20 * MIN) {
     const last = state.revived['crypto15-stale'] ?? 0
-    if (now - last > 3 * H) {
+    const live = liveRecorder('crypto15-shadow.mjs')
+    if (live.length) {
+      add('crypto15-stale', 'notify', `crypto15 shadow stale (${ageMin(hb)} min) with its process alive (pid ${live.join(', ')}); not relaunched`, `data/crypto15-shadow/heartbeat.json last written ${iso(hb)}`)
+    } else if (now - last > 3 * H) {
       state.revived['crypto15-stale'] = now
       add('crypto15-stale', 'revive-task', `crypto15 shadow stale (${ageMin(hb)} min); relaunching`, `data/crypto15-shadow/heartbeat.json last written ${iso(hb)}`)
       if (!DRY) {
@@ -248,7 +266,10 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
       const newest = js.length ? Math.max(...js) : undefined
       if (newest !== undefined && now - newest > 20 * MIN) {
         const last = state.revived['mmsim-stale'] ?? 0
-        if (now - last > 3 * H) {
+        const live = liveRecorder('mmsim.mjs')
+        if (live.length) {
+          add('mmsim-stale', 'notify', `mmsim stale (${ageMin(newest)} min) with its process alive (pid ${live.join(', ')}); not relaunched`, `newest mmsim row file written ${iso(newest)}`)
+        } else if (now - last > 3 * H) {
           state.revived['mmsim-stale'] = now
           add('mmsim-stale', 'revive-task', `mmsim stale (${ageMin(newest)} min); relaunching`, `newest mmsim row file written ${iso(newest)}`)
           if (!DRY) {

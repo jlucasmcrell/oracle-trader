@@ -15,7 +15,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { uniqueObservations } from './unique-observations.mjs'
+import { uniqueObservations, inDuplicateWriterWindow } from './unique-observations.mjs'
 
 const DIR = process.env.CRYPTO15_DIR ?? 'G:/PROJECTS/oracle-trader/data/crypto15-shadow'
 
@@ -87,10 +87,14 @@ for (const f of files) {
     }
   }
 }
+// AMENDMENT 2026-09-19 (REVIEW-CHANGES §136): one row per window, the first written. The two recorders that ran
+// side by side on 2026-09-15 each observed the same windows on their own clocks; which of them wrote first is
+// independent of the outcome. A conflict outside that window is unexplained and still refuses a verdict.
 const integrity = uniqueObservations(rows, r => r.ticker)
-if (integrity.conflicts) { console.log(`INCONCLUSIVE: ${integrity.conflicts} conflicting window records; raw observations preserved for integrity review.`); process.exit(2) }
+const unexplained = integrity.conflictRows.filter(r => !inDuplicateWriterWindow(r)).length
+if (unexplained) { console.log(`INCONCLUSIVE: ${integrity.conflicts} conflicting window records, ${unexplained} rows of them outside the 2026-09-15 duplicate-writer window; raw observations preserved for integrity review.`); process.exit(2) }
 rows = integrity.rows
-console.log(`Exact duplicate windows excluded: ${integrity.duplicates}`)
+console.log(`Exact duplicate windows excluded: ${integrity.duplicates}; second-writer copies from the 2026-09-15 duplicate-writer window excluded: ${integrity.conflicts}`)
 const sig = rows.filter((r) => r.signal && typeof r.netCents === 'number')
 const days = new Set(sig.map((r) => r.day))
 let hb = {}

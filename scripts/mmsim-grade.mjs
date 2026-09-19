@@ -21,7 +21,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { uniqueObservations } from './unique-observations.mjs'
+import { uniqueObservations, inDuplicateWriterWindow } from './unique-observations.mjs'
 
 const DIR = process.env.MMSIM_DIR ?? path.join(process.env.APPDATA ?? '.', 'oracle-trader', 'mmsim')
 const INTERIM = process.argv.includes('--interim')
@@ -123,17 +123,31 @@ if (!EXPLORATORY && now < stopAt) {
   process.exit(2)
 }
 
-if (EXPLORATORY) {
+// AMENDMENT 2026-09-19 (REVIEW-CHANGES §136), fixed 28 days before the read and without reading an outcome.
+// On 2026-09-15 06:20-08:22Z a second copy of the simulator ran beside the first. Both loaded the same state file
+// at start and then ran their own books (state is read once, at launch), so the file holds two interleaved
+// histories under the same sequence IDs and no row says which copy wrote it. Keeping either row of a pair would splice the two (one public trade filled in both
+// books counts twice). So BOTH rows of every conflicting ID are dropped, with every row that shares a fill ID with
+// one - the rule the exploratory read has used since 2026-09-16. It applies to the verdict only when every
+// conflicting row lies inside that window; a conflict anywhere else is unexplained and still refuses a verdict below.
+{
   const byKey = new Map(), conflicts = new Set()
+  let unexplained = 0
   for (const r of rows) {
     const key = `${r.runId}:${r.seq}`, prior = byKey.get(key)
-    if (prior && JSON.stringify(prior) !== JSON.stringify(r)) conflicts.add(key)
-    else byKey.set(key, r)
+    if (prior && JSON.stringify(prior) !== JSON.stringify(r)) {
+      conflicts.add(key)
+      if (!inDuplicateWriterWindow(prior) || !inDuplicateWriterWindow(r)) unexplained++
+    } else byKey.set(key, r)
   }
-  const ambiguousFills = new Set(rows.filter(r => conflicts.has(`${r.runId}:${r.seq}`)).map(r => r.fillId).filter(Boolean))
-  const before = rows.length
-  rows = rows.filter(r => !conflicts.has(`${r.runId}:${r.seq}`) && !ambiguousFills.has(r.fillId))
-  console.log(`EXPLORATORY integrity exclusion: ${conflicts.size} conflicting sequence IDs; ${before - rows.length} rows and all associated fill IDs excluded. Raw files unchanged; this subset cannot qualify the registered run.`)
+  if (EXPLORATORY || (conflicts.size && !unexplained)) {
+    const ambiguousFills = new Set(rows.filter(r => conflicts.has(`${r.runId}:${r.seq}`)).map(r => r.fillId).filter(Boolean))
+    const before = rows.length
+    rows = rows.filter(r => !conflicts.has(`${r.runId}:${r.seq}`) && !ambiguousFills.has(r.fillId))
+    console.log(EXPLORATORY
+      ? `EXPLORATORY integrity exclusion: ${conflicts.size} conflicting sequence IDs; ${before - rows.length} rows and all associated fill IDs excluded. Raw files unchanged; this subset cannot qualify the registered run.`
+      : `Integrity exclusion (amendment 2026-09-19): ${conflicts.size} conflicting sequence IDs, all inside the 2026-09-15 duplicate-writer window; ${before - rows.length} rows and all associated fill IDs excluded. Raw files unchanged.`)
+  }
 }
 const integrity = uniqueObservations(rows, r => r.runId && Number.isSafeInteger(r.seq) ? `${r.runId}:${r.seq}` : undefined)
 if (integrity.conflicts) { console.log(`INCONCLUSIVE: ${integrity.conflicts} conflicting sequence records; raw data preserved for integrity review.`); process.exit(2) }

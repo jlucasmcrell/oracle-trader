@@ -1123,10 +1123,15 @@ the daily report to the operator.
 
 Verified on 2026-09-15 unless marked otherwise.
 
-1. **Duplicate recorders repaired at 08:22 UTC September 15; historical integrity remains open.** One original writer
-   remains for crypto15, ladder15 and mmsim. Only the extra copies were stopped. New startup locks detect the existing
-   Windows writers; run IDs, raw files and deadlines were preserved. Crypto15/mmsim graders deduplicate exact observations
-   and refuse a verdict on conflicting identities. They do not silently repair diverging simulator histories.
+1. ~~**Duplicate recorders.**~~ Fixed: extra copies stopped 08:22 UTC September 15, closed 2026-09-19
+   (`REVIEW-CHANGES` §136). Cause: the sentinel's 06:20:01Z stale-heartbeat relaunch and the Startup folder both
+   launched all three after the reboot. `scripts/recorder-lock.mjs` (exclusive `recorder.lock`, dead/reused-pid and
+   torn-lock detection, command-line scan for pre-lock writers) is the first call in each recorder; the sentinel
+   reports, and does not relaunch, a stale recorder whose process is alive. Raw files, run IDs and deadlines are
+   untouched. Every duplicated row was a conflicting copy (mmsim 1,060 rows, crypto15 48 windows, ladder15 40), so
+   the graders carry a dated amendment: conflicts wholly inside `2026-09-15T06:20..08:25Z` are resolved
+   (crypto15 keeps the first-written row; mmsim drops both rows and their fill IDs); any other conflict still
+   refuses a verdict. ladder15 has no grader yet (backlog 176). mmsim's self-halts on 429 storms are backlog 175.
 2. **Windows Update restarts.** 2026-09-09 (5 h 26 min) and 2026-09-15 (4 h 51 min). Everything recovers at logon; the
    collector's gap cannot be rebuilt. Active hours are the operator's setting.
 3. ~~**No git.**~~ Closed 2026-09-18: the tree is a git repository, public at

@@ -91,6 +91,18 @@ open is folded in here with its reason. Done items are removed, not ticked.
 
 ## Recently done (so nobody re-does them)
 
+2026-09-19 (§136): the duplicate recorders of 2026-09-15 are closed. Cause proven from the sentinel's own state
+(its 06:20:01Z tick and the Startup folder both launched crypto15, ladder15 and mmsim after the reboot). The
+09-15 repair had stopped the extra copies and added `recorder-lock.mjs`; this round made the lock survive pid
+reuse and a torn lock file after a hard reboot, made the sentinel report rather than relaunch a stale recorder
+whose process is alive, and recorded a dated grader amendment: every duplicated row is a CONFLICTING copy
+(mmsim 1,060 rows, crypto15 48 windows, ladder15 40 - none byte-exact), so the 09-15 "any conflict =
+INCONCLUSIVE" rule would have refused both verdicts forever. Conflicts wholly inside
+`2026-09-15T06:20..08:25Z` are now resolved (crypto15: first-written row; mmsim: both rows and their fill IDs
+dropped); a conflict anywhere else still refuses. Decided without reading P&L; raw files untouched. Tests:
+`test:recorder-lock` (new, 7 scenarios) and `test:collection` (7 -> 11), both shown to fail without the fix;
+20/20 suites and typecheck pass. Follow-ups: 175 (mmsim's 429 halts), 176 (ladder15 grader rule).
+
 2026-09-17 (repair session, incident 2026-09-17T03-50): the IBKR paper lab backs off after a FAILED contract
 discovery instead of repeating it every 30 s. IB Gateway went down at 03:45Z (no process, 4001 and 4002 both
 closed) and at 03:53Z the 6-hourly discovery window opened: `discoveryAt` is only written on success, so every
@@ -2070,3 +2082,15 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md` are untouched. Trigger: after 24 h of clean operation on
   the §134 build (**2026-09-20 18:00Z**: no new `.corrupt-` files, no recovered-exit or dutch-unwind alerts
   that were wrong), take them in report order in one round.
+- **175. mmsim is dark for a large part of each day (2026-09-19, seen in §136).** It exits on `429-storm` (3
+  throttles in an hour) about every 2.5-3 h since 09-17 16:04Z - ten halts in two days, `"event":"halt"` rows in
+  `%APPDATA%\oracle-trader\mmsim\33249be26379-*.jsonl` - and waits for the sentinel's 3-hourly relaunch; each
+  relaunch also leaves a `cmd /K mmsim.cmd` window open (`start` runs a .cmd under `cmd /K`). The run's
+  parameters are pre-registered and must not change; the questions are operational: what shares the public
+  Kalshi endpoints with it since 09-17 (the books/in-play recorders of §117/§124/§131?) and whether the relaunch
+  wait can be shorter. Trigger: **2026-09-21**, run `node scripts/mmsim-grade.mjs --interim` (halts, throttles,
+  days with a fill - no P&L) and decide then.
+- **176. A ladder15 grader does not exist yet (2026-09-19, §136).** Trigger: whenever one is written. It must
+  read through `uniqueObservations(rows, r => r.ticker)` and keep the first-written row, refusing a verdict on
+  any conflict outside `inDuplicateWriterWindow` - the 40 windows recorded twice on 2026-09-15 06:30-08:17Z are
+  all conflicting copies, none byte-exact.
