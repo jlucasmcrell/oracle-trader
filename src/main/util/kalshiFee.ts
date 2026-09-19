@@ -109,14 +109,16 @@ export function kalshiMakerRate(multiplier?: number | null): number {
 }
 
 /**
- * Kalshi trades in whole contracts; the app frequently holds a fractional
- * share count because it sizes by dollar amount. Round to the nearest whole
- * contract and never below one, so a fractional position cannot produce a
- * zero-cost order that then gets charged at the venue.
+ * The fee is charged on the FRACTIONAL contract count. Kalshi has traded fractional contracts on every
+ * active market since its 2026-04-17 API change, and the app sizes by dollars (a $1 NO at 93c is 1.075
+ * contracts). Measured 2026-09-19 on the fills archive (§127): of 596 fractional fills carrying a fee, the
+ * venue's fee equals ceil-4dp of rate x C x P(1-P) with the fractional C on 536 and with the rounded C on 2.
+ * Rounding here (the rule until 2026-09-19) understated a 1.49-contract order's fee by a third.
+ * Non-finite or non-positive counts fall back to one contract so a bad input cannot price a free order.
  */
 export function kalshiNormaliseContracts(contracts: number): number {
-  if (!Number.isFinite(contracts)) return 1
-  return Math.max(1, Math.round(contracts))
+  if (!Number.isFinite(contracts) || contracts <= 0) return 1
+  return contracts
 }
 
 /**

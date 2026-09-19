@@ -3,6 +3,7 @@
  * Run: npm run test:ladder
  */
 import { clusterT, clusteredMean, CONFIDENCE_Z, COOLDOWN_MS, LONG_COOLDOWN_MS, cooldownAfter, dayClusteredSe, decideConvergence, decideQuoter, decideSettlement, decideStage, isPromotion, meanCi, QUOTER_GATE, tradeSmallEntry } from '../../src/main/ladder/ladder'
+import { clusterT95, SCALE_Z } from '../../src/main/ladder/ladder'
 import { planParameterChanges, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../src/shared/ipc'
 
@@ -47,13 +48,26 @@ eq('stage: stop at -$10 x2', decideStage(S(3, -10, -3, 1), 2, 0).kind, 'stop')
 eq('stage: stop scales with the stake (3 x $5)', decideStage({ ...S(3, -12, -4, 1), stake: 5 }, 1, 0).kind, 'hold')
 eq('stage: stop at three stakes', decideStage({ ...S(3, -15, -5, 1), stake: 5 }, 1, 0).kind, 'stop')
 eq('stage: before the first checkpoint', decideStage(S(19, 1, 5, 1), 1, 0), { kind: 'hold', checkpoint: 0, reason: '19 settled since stage start, net $1.00; next checkpoint at 20' })
-eq('stage: checkpoint win scales up', decideStage(S(20, 1, 5, 2), 1, 0).kind, 'scale-up')
-eq('stage: checkpoint records itself', decideStage(S(20, 1, 5, 2), 1, 0).checkpoint, 1)
+// 2026-09-19 (§127): scaling up needs the same cluster floor as a stop and the 95% band, not the 80% one.
+eq('stage: checkpoint win on unverifiable clusters holds', decideStage(S(20, 1, 5, 2), 1, 0).kind, 'hold')
+eq('stage: checkpoint win scales up on enough clusters', decideStage(xC(S(20, 1, 5, 2)), 1, 0).kind, 'scale-up')
+eq('stage: checkpoint records itself', decideStage(xC(S(20, 1, 5, 2)), 1, 0).checkpoint, 1)
+eq('stage: a held win leaves the checkpoint unjudged', decideStage(S(20, 1, 5, 2), 1, 0).checkpoint, 0)
+eq('scale: 80% clears but 95% does not - hold', decideStage(xC(S(20, 1, 2, 1.5)), 1, 0).kind, 'hold')
+eq('scale: and says which band failed', /not 95%/.test(decideStage(xC(S(20, 1, 2, 1.5)), 1, 0).reason), true)
+eq('scale: 95% clears - scale-up', decideStage(xC(S(20, 1, 5, 1)), 1, 0).kind, 'scale-up')
+eq('scale: three clusters hold a winner', decideStage(xC(S(20, 1, 5, 1), 3), 1, 0).kind, 'hold')
+eq('scale: four clusters scale a winner', decideStage(xC(S(20, 1, 5, 1), 4), 1, 0).kind, 'scale-up')
+eq('scale: t95 on one cluster-df is 6.314', clusterT95(1), 6.314)
+eq('scale: t95 on five df is 2.015', clusterT95(5), 2.015)
+eq('scale: t95 never drops under the normal 1.645', clusterT95(200) >= SCALE_Z, true)
 eq('stage: same checkpoint not re-judged', decideStage(S(25, -1, -3, 1), 1, 1).kind, 'hold')
 eq('stage: checkpoint loss stops', decideStage(xC(S(20, -1, -3, 1)), 1, 0).kind, 'stop')
 eq('stage: inconclusive keeps testing', decideStage(S(20, 0.5, 1, 2), 1, 0).kind, 'hold')
 eq('stage: positive net but unproven holds', decideStage(S(40, 0.4, 0.5, 1), 1, 1).kind, 'hold')
-eq('stage: 100 trades and net positive wins', decideStage(S(100, 0.4, 0.2, 1), 1, 4).kind, 'scale-up')
+eq('stage: 100 trades and net positive wins on enough clusters', decideStage(xC(S(100, 0.4, 0.2, 1)), 1, 4).kind, 'scale-up')
+eq('stage: 100 trades and net positive on two clusters holds', decideStage(xC(S(100, 0.4, 0.2, 1), 2), 1, 4).kind, 'hold')
+eq('stage: 100 trades and net positive on unverifiable clusters holds', decideStage(S(100, 0.4, 0.2, 1), 1, 4).kind, 'hold')
 eq('stage: 100 trades and net zero stops', decideStage(S(100, 0, 0, 1), 1, 4).kind, 'stop')
 eq('stage: max size holds on a win', decideStage(S(20, 3, 5, 1), 4, 0).kind, 'hold')
 eq('stage: win needs net positive too', decideStage(S(20, -0.2, 1, 0.5), 1, 0).kind, 'hold')
@@ -162,11 +176,11 @@ eq('stage: and says why', /downside is unsampled/.test(decideStage(SD(20, 2.65, 
 // Deferral, not judgement: the checkpoint stays unjudged so the next run re-tries it the moment a loss lands.
 eq('stage: the checkpoint stays unjudged', decideStage(SD(20, 2.65, 5.23, 0.589, 3.1), 1, 0).checkpoint, 0)
 eq('stage: and it is retried on the following run', decideStage(SD(21, 2.65, 5.23, 0.589, 3.1), 1, 0).kind, 'hold')
-eq('stage: a loss at trade 25 unblocks it without waiting for 40', decideStage(SD(25, 2.65, 3.0, 0.589, 8), 1, 0).kind, 'scale-up')
-eq('stage: dispersion above the mean scales up normally', decideStage(SD(20, 2.65, 5.23, 0.589, 6), 1, 0).kind, 'scale-up')
-eq('stage: sd exactly at the mean is two-sided enough', decideStage(SD(20, 2.65, 5.23, 0.589, 5.23), 1, 0).kind, 'scale-up')
-eq('stage: no sd reported leaves the old behaviour', decideStage(S(20, 1, 5, 2), 1, 0).kind, 'scale-up')
-eq('stage: past the thorough review the guard lifts', decideStage(SD(100, 2.65, 5.23, 0.589, 3.1), 1, 0).kind, 'scale-up')
+eq('stage: a loss at trade 25 unblocks it without waiting for 40', decideStage(xC(SD(25, 2.65, 3.0, 0.589, 8)), 1, 0).kind, 'scale-up')
+eq('stage: dispersion above the mean scales up normally', decideStage(xC(SD(20, 2.65, 5.23, 0.589, 6)), 1, 0).kind, 'scale-up')
+eq('stage: sd exactly at the mean is two-sided enough', decideStage(xC(SD(20, 2.65, 5.23, 0.589, 5.23)), 1, 0).kind, 'scale-up')
+eq('stage: no sd reported leaves the old behaviour', decideStage(xC(S(20, 1, 5, 2)), 1, 0).kind, 'scale-up')
+eq('stage: past the thorough review the guard lifts', decideStage(xC(SD(100, 2.65, 5.23, 0.589, 3.1)), 1, 0).kind, 'scale-up')
 // Asymmetric by design: a one-sided sample must still be allowed to stop and to hard-stop.
 eq('stage: one-sided losing sample still stops', decideStage(xC(SD(20, -3.72, -1.8, 0.218, 0.5)), 1, 0).kind, 'stop')
 eq('stage: the hard stop ignores the guard', decideStage(SD(3, -5, -1.7, 1, 0.1), 1, 0).kind, 'stop')
@@ -195,8 +209,9 @@ eq('clusters: the 100-trade sign rule ignores the guard (hi<0, 3 clusters)', dec
 eq('clusters: the 100-trade sign rule ignores the guard (hi<0, 1 cluster)', decideStage({ ...SD(100, -3, -3, 0.5, 5), clusters: 1 }, 1, 4).kind, 'stop')
 eq('clusters: the 100-trade sign rule ignores the guard (undefined clusters)', decideStage(SD(100, -3, -3, 0.5, 5), 1, 4).kind, 'stop')
 eq('clusters: under 100 trades the guard still holds a 3-cluster loser', decideStage({ ...SD(60, -3, -3, 0.5, 5), clusters: 3 }, 1, 2).kind, 'hold')
-// And it must not block a WIN: scaling up was never gated on clusters.
-eq('clusters: one cluster still scales up a winner', decideStage({ ...SD(20, 2.65, 5.23, 0.589, 6), clusters: 1 }, 1, 0).kind, 'scale-up')
+// Since 2026-09-19 a WIN is gated on clusters too (§127, F-01): one day cannot add size.
+eq('clusters: one cluster no longer scales up a winner', decideStage({ ...SD(20, 2.65, 5.23, 0.589, 6), clusters: 1 }, 1, 0).kind, 'hold')
+eq('clusters: and the hold says so', /day-cluster/.test(decideStage({ ...SD(20, 2.65, 5.23, 0.589, 6), clusters: 1 }, 1, 0).reason), true)
 
 eq('clusteredMean reports the sample sd', Math.round(clusteredMean([{ v: 1, g: 'a' }, { v: 5, g: 'b' }, { v: 3, g: 'c' }]).sd * 1000) / 1000, 2)
 eq('clusteredMean sd is zero on one row', clusteredMean([{ v: 4, g: 'a' }]).sd, 0)
@@ -213,15 +228,15 @@ eq('adverse: and says what it saw',
 eq('adverse: it is a deferral, so the checkpoint stays unjudged',
   decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADV(78, -0.6, -0.89, -0.3)), 1, 0).checkpoint, 0)
 eq('adverse: a band straddling zero does not veto',
-  decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADV(78, -0.6, -1.4, 0.2)), 1, 0).kind, 'scale-up')
+  decideStage(withAdv(xC(SD(20, 2.65, 5.23, 0.589, 6)), ADV(78, -0.6, -1.4, 0.2)), 1, 0).kind, 'scale-up')
 eq('adverse: a positive markout does not veto',
-  decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADV(78, 0.9, 0.3, 1.5)), 1, 0).kind, 'scale-up')
+  decideStage(withAdv(xC(SD(20, 2.65, 5.23, 0.589, 6)), ADV(78, 0.9, 0.3, 1.5)), 1, 0).kind, 'scale-up')
 eq('adverse: too few observations to judge entry quality',
-  decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADV(14, -2, -3, -1)), 1, 0).kind, 'scale-up')
+  decideStage(withAdv(xC(SD(20, 2.65, 5.23, 0.589, 6)), ADV(14, -2, -3, -1)), 1, 0).kind, 'scale-up')
 eq('adverse: exactly at the minimum it does veto',
   decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADV(15, -2, -3, -1)), 1, 0).kind, 'hold')
 eq('adverse: an arm with no markout history is unaffected',
-  decideStage(SD(20, 2.65, 5.23, 0.589, 6), 1, 0).kind, 'scale-up')
+  decideStage(xC(SD(20, 2.65, 5.23, 0.589, 6)), 1, 0).kind, 'scale-up')
 eq('adverse: it also holds the 100-trade review',
   decideStage(withAdv(SD(120, 2.65, 0.2, 0.9, 6), ADV(78, -0.6, -0.89, -0.3)), 1, 0).kind, 'hold')
 // It must never turn a stop into a hold: an arm that is losing still stops, adversely selected or not.
@@ -238,11 +253,11 @@ const ADVC = (n, mean, lo, hi, coverage) => ({ n, mean, lo, hi, coverage })
 eq('coverage: a well-covered adverse band still vetoes',
   decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADVC(78, -0.6, -0.89, -0.3, 0.94)), 1, 0).kind, 'hold')
 eq('coverage: a thin sample may not veto',
-  decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADVC(20, -0.6, -0.89, -0.3, 0.33)), 1, 0).kind, 'scale-up')
+  decideStage(withAdv(xC(SD(20, 2.65, 5.23, 0.589, 6)), ADVC(20, -0.6, -0.89, -0.3, 0.33)), 1, 0).kind, 'scale-up')
 eq('coverage: exactly at the threshold it vetoes',
   decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADVC(20, -0.6, -0.89, -0.3, 0.8)), 1, 0).kind, 'hold')
 eq('coverage: just under the threshold it does not',
-  decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADVC(20, -0.6, -0.89, -0.3, 0.79)), 1, 0).kind, 'scale-up')
+  decideStage(withAdv(xC(SD(20, 2.65, 5.23, 0.589, 6)), ADVC(20, -0.6, -0.89, -0.3, 0.79)), 1, 0).kind, 'scale-up')
 eq('coverage: unknown coverage behaves as before',
   decideStage(withAdv(SD(20, 2.65, 5.23, 0.589, 6), ADVC(78, -0.6, -0.89, -0.3, undefined)), 1, 0).kind, 'hold')
 
@@ -254,10 +269,11 @@ eq('clusterT: it decays toward the normal quantile', clusterT(200) < 0.85 && clu
 eq('clusterT: never below the normal quantile', clusterT(100000) >= CONFIDENCE_Z, true)
 eq('clusterT: degenerate df falls back to the widest', clusterT(0), 1.376)
 // The same evidence must read as inconclusive at two clusters and conclusive at many.
-const EV = (clusters) => ({ n: 20, netDollars: 2, mean: 1.0, se: 0.8, sd: 5, clusters })
+// se 0.5 (was 0.8): since 2026-09-19 a scale-up needs the 95% band, and 1.0 - 1.796 x 0.8 is under zero even on twelve clusters.
+const EV = (clusters) => ({ n: 20, netDollars: 2, mean: 1.0, se: 0.5, sd: 5, clusters })
 eq('stage: two clusters cannot carry a scale-up on this evidence', decideStage(EV(2), 1, 0).kind, 'hold')
 eq('stage: the same numbers over twelve clusters can', decideStage(EV(12), 1, 0).kind, 'scale-up')
-eq('stage: no cluster count keeps the old normal multiplier', decideStage({ n: 20, netDollars: 2, mean: 1.0, se: 0.8, sd: 5 }, 1, 0).kind, 'scale-up')
+eq('stage: no cluster count cannot add size (2026-09-19)', decideStage({ n: 20, netDollars: 2, mean: 1.0, se: 0.5, sd: 5 }, 1, 0).kind, 'hold')
 
 console.log(`ladder: ${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

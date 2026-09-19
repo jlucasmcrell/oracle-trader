@@ -1,0 +1,1280 @@
+Important: killSwitchCheck(balance) is called from entryBlocked with data.equity ?? data.balance
+. The denominator is EQUITY (cash + positions), not cash. That means the loss limit of 20% of 
+142
+e
+q
+u
+i
+t
+y
+=
+142equity=28.40; a tight cap is reasonable. But there's a subtle issue: at the time entryBlocked runs, data.equity
+ includes unsettled positions. If those positions are currently at a loss (mark-to-market), equity is depressed, the limit shrinks accordingly, and the arm may continue placing bets as equity recovers — which is fine.
+
+But the doc says "20% of equity, about 
+22.33
+"
+a
+t
+2026
+−
+09
+−
+15.
+L
+e
+t
+m
+e
+s
+e
+e
+i
+f
+t
+h
+e
+k
+i
+l
+l
+s
+w
+i
+t
+c
+h
+t
+r
+i
+p
+s
+o
+n
+t
+h
+e
+W
+O
+R
+S
+E
+l
+e
+d
+g
+e
+r
+.
+Y
+e
+s
+—
+‘
+d
+a
+y
+R
+e
+a
+l
+i
+z
+e
+d
+F
+o
+r
+K
+i
+l
+l
+(
+)
+‘
+r
+e
+t
+u
+r
+n
+s
+t
+h
+e
+w
+o
+r
+s
+e
+o
+f
+‘
+v
+e
+n
+u
+e
+‘
+a
+n
+d
+‘
+l
+o
+c
+a
+l
+‘
+.
+I
+f
+l
+i
+v
+e
+v
+e
+n
+u
+e
+s
+e
+t
+t
+l
+e
+m
+e
+n
+t
+s
+r
+e
+p
+o
+r
+t
+a
+−
+22.33"at2026−09−15.LetmeseeifthekillswitchtripsontheWORSEledger.Yes—‘dayRealizedForKill()‘returnstheworseof‘venue‘and‘local‘.Iflivevenuesettlementsreporta−25 loss before local exits catch up, the kill trips and stays sticky.
+
+One concrete scenario worth raising: at the start of a UTC day, with 0 settled positions but unsettled positions in flight from the prior day, the kill switch denominates against current equity (positions marked-to-market), so the limit shrinks while the prior day's losses aren't realized yet. Not critical, but the doc says "20% of equity" — it's an unsteady denominator.
+
+Now let me verify a critical concern from the killSwitchCheck: the live kill switch trips based on realized <= -limit. With equity-based denominator, realized is the venue's settled P&L (cash settled to date). But equity INCLUDES unsettled positions. So the loss limit is correctly bounded by cash-out losses, not by mark-to-market drawdowns.
+
+This means a portfolio of 
+142
+w
+i
+t
+h
+142with100 in unresolved positions that's about to lose those $100 at settlement would NOT have its kill switch tripped until those settlements actually hit. That can leave the bot adding to a broken position up to the point of settlement.
+
+Let me confirm by looking at refreshVenueDay. Yes — realized aggregates settled P&L only. The kill switch is settlement-based, not mark-to-market-based.
+
+Now I have enough. Let me write the report.
+
+Oracle Trader review
+What follows is a written report from a static reading of the repository on G:\PROJECTS\oracle-trader
+ (the public GitHub mirror described in the README). I read the prescribed docs, the trading logic in src/main/strategies/
+, the engine in src/main/engine/
+, the venue adapters, and the fee utilities. I did not run the app and did not have access to runtime state, fills, or live venue dashboards; my findings cite line numbers in the code and the docs. Where I am unsure, I say so. I am judging the system as it is on the date in the docs; the operator's own reporting shows it is in active flux.
+
+The system is unusually well-instrumented by the standards of solo retail trading: every recent change has a number, an evidence base, and a pre-registered read. The defect log and the trade history are unusually candid about what did not work. The methodological bar in the docs (net cents per contract after fees, day-clustered bands, pre-registration, uncorrelated decision units) is substantially higher than what most retail bots even attempt. Many of the findings below are about whether the practice lives up to the principle; a few are about whether the principle is being applied at all.
+
+I focus on correctness, fees/settlement, statistical methodology, and risk. I touch on engineering and "what's missing" where they bear on those.
+
+Findings
+F-01 — The Polymarket US paper-lab fee model silently never implemented the documented 9/17 fee step
+ID: F-01
+
+Area: fees / correctness
+
+Severity: medium
+
+Confidence: verified
+
+Location: src/main/strategies/polyPaper.ts:17
+
+Claim: The paper lab's fee schedule never stepped from 0.06 to 0.0695 on 2026-09-17 03:59Z as the doc comment promises; the ternary was eaten by an optional-chaining parser quirk and scheduled is constant 0.06
+ at all times.
+
+Evidence:
+
+ts
+Copy
+// polyPaper.ts:15-18
+export const POLY_MAKER_REBATE=.0125
+export function polyPaperFee(price:number,at:number,maker=false,rate?:number){
+  const scheduled=at>=Date.parse('2026-09-17T03:59:00Z')?.0695:.06 return maker?-POLY_MAKER_REBATE*price*(1-price):price*(1-price)*Math.max(scheduled,Number.isFinite(rate)?rate!:0)
+Date.parse('...') is a number, never nullish, so ?.0695
+ is a numeric property access on the timestamp. That returns undefined (numbers have no .0695 property). at >= undefined is false. The ternary therefore resolves to the :0.06
+ branch on every call. The comment above says:
+
+Published US fee change: September 16, 2026 23:59 Eastern.
+
+…implying a step from 0.06 to 0.0695 that never arrives in code.
+
+Also at line 18, the rate!:0 is TS-only non-null syntax; at runtime this is Number.isFinite(rate) ? rate : 0, which is correct. The 0.06
+ ceiling vs. a market-published feeCoefficient is fine.
+
+Failure: Every paper-lab fill on Polymarket US after the schedule change still uses 0.06 as the taker coefficient, so post-9/17 paper P&L is overstated by (0.0695/0.06 − 1) ≈ 16%
+ of the fee term. At a typical 0.5c contract, that is a fraction of a cent — small in absolute terms, but it inflates the per-contract mean on every arm and biases the pre-registered 7-day / 100-trade / 10-event readiness bar (polyPaper.ts:87
+) toward "ready" earlier than it should be.
+
+Test: Add a unit test that calls polyPaperFee(0.5, Date.parse('2026-09-18T00:00:00Z'), false) and asserts the result reflects the post-step coefficient. Also assert a pre-step call. The current implementation should fail the post-step assertion; the fix is at >= Date.parse('...') ? 0.0695 : 0.06
+. Either fix it, or change the comment to acknowledge the schedule step is not modelled.
+
+F-02 — calibratedYesRate() does not match its docstring for prices above 10c
+ID: F-02
+
+Area: methodology / correctness
+
+Severity: high
+
+Confidence: verified
+
+Location: src/main/strategies/autoTrader.ts:4816-4836
+
+Claim: The function claims to apply a "padded ~3× the worst measured bucket" calibration from the 2026-08-28 historical study, but for any yesPrice ≥ 0.10
+ it returns p unchanged — i.e., it assumes the market is right above 10c. Every fade (favourite) trade, which is exactly the price band where this calibration is supposed to bite, sees the raw mid and not a discount.
+
+Evidence:
+
+ts
+Copy
+// autoTrader.ts:4816-4836
+/**
+ * Padded upper bound on the true YES rate for a longshot trading at yesPrice,
+ * from the 2026-08-28 historical calibration (docs/validation-results.md):
+ * measured 0.0–0.1% YES below 5¢ (n=608–1,832) and 0.0–0.6% at 5–10¢
+ * (n=165–693). Padded ~3× the worst measured bucket so the modeled edge is
+ * conservative. Outside the calibrated range the market is assumed right.
+ */
+export function calibratedYesRate(yesPrice: number): number {
+  const p = Math.round(yesPrice * 1e6) / 1e6
+  if (p < 0.05) return 0.003
+  if (p < 0.1) return 0.018
+  return p
+}
+The docstring says "Outside the calibrated range the market is assumed right," which on a literal reading of the table (5–10c is the highest band with a measurement) means everything above 10c returns identity. That is what the code does. But the favourite leg of the fade uses calibratedYesRate(1 − yesExec), which is always ≥ 0.90 when yesExec ≤ 0.10
+. The favourite band is exactly the range where the function falls through to identity, so the favorite-side EV calculation gets no calibration adjustment at all. The function's only effect is on the longshot side.
+
+This is not strictly inconsistent with the docstring — it documents the silence — but the 2026-09-18 trade-history section's discussion of fade, and the kalshi-fade arm being live and graded on this function, means a reader can easily conclude (as the mean-reversion-taker.md
+ registration does) that the calibration is broader than it actually is. The Becker audit's documented favorite-longshot bias is in both directions; the calibration is only applied to one.
+
+Failure: For a favourite entry, calibratedYesRate() contributes no bias correction. If the real favourite-longshot bias at90–99c is +1.6c to +2.6c pre-fee (as the GWU paper cited in the mean-reversion registration states), the model understates the entry's expected edge by that amount, so the EV gate lets through trades whose modelled edge already nets to zero or negative. This shifts the live trade mix toward the marginal end of the band without showing up in the calibration ledger.
+
+Test: Add a unit test that asserts the function's behaviour across the favourite band (90c, 92c, 95c, 98c). Then decide what the favourite side should look like — either apply a symmetric discount there, or change the docstring and the registered pre-registrations to admit the function is one-sided.
+
+F-03 — Net-of-fee P&L on settlements is computed with the naive revenue − cost − fee formula in the documented ledger, and that formula was known to be wrong (now fixed) — but several derived statistics still feed off it
+ID: F-03
+
+Area: fees / correctness / methodology
+
+Severity: high
+
+Confidence: verified
+
+Location: src/main/venues/kalshi.ts:1690-1717
+, docs/DEVELOPER-HANDBOOK.md
+ §12, docs/AUDIT-REVIEW-VERIFICATION-2026-09-18.md
+ (referenced by kalshiFee.ts
+)
+
+Claim: The documented netting formula in §12 of the handbook — net = revenue/100 + min(yes_count, no_count) − yes_cost − no_cost − fees
+ — is not what mapKalshiSettlement actually computes in dollars; that function uses revenue_dollars and adds min(yesShares, noShares) as pairedRevenue. That is the right formula. The handbook cites it as the canonical equation. The handbook also says the naive formula once reported −
+31.56
+f
+o
+r
+a
+n
+i
+g
+h
+t
+t
+h
+a
+t
+w
+a
+s
++
+31.56foranightthatwas+0.72, which is true. The function is correct. But: every consumer of the settlement feed needs to use the revenue_dollars form, not the revenue (cents) form. The deprecated field name revenue is preserved in the type for legacy rows but its value is undefined cents, which silently produces 0.
+
+Evidence:
+
+ts
+Copy
+// kalshi.ts:1690-1700
+const settlementRevenue = s.revenue_dollars !== undefined ? toNum(s.revenue_dollars) : toNum(s.revenue) / 100
+const pairedRevenue = Math.min(yesShares, noShares)
+const revenue = settlementRevenue + pairedRevenue
+The fallback to s.revenue / 100
+ is the only place the cents-form is used, and it is only triggered when the API omits revenue_dollars. The code is defensible, but the comment two lines above says:
+
+Kalshi's settlement revenue reports only the payout on the remaining net position. Opposite YES/NO contracts are paired automatically and return 
+1
+p
+e
+r
+p
+a
+i
+r
+b
+e
+f
+o
+r
+e
+s
+e
+t
+t
+l
+e
+m
+e
+n
+t
+;
+t
+h
+o
+s
+e
+p
+r
+o
+c
+e
+e
+d
+s
+a
+r
+e
+n
+o
+t
+r
+e
+p
+e
+a
+t
+e
+d
+i
+n
+t
+h
+e
+r
+o
+w
+′
+s
+r
+e
+v
+e
+n
+u
+e
+f
+i
+e
+l
+d
+.
+O
+m
+i
+t
+t
+i
+n
+g
+t
+h
+e
+m
+m
+a
+d
+e
+t
+w
+o
+−
+s
+i
+d
+e
+d
+m
+a
+k
+e
+r
+a
+c
+t
+i
+v
+i
+t
+y
+l
+o
+o
+k
+c
+a
+t
+a
+s
+t
+r
+o
+p
+h
+i
+c
+a
+l
+l
+y
+u
+n
+p
+r
+o
+f
+i
+t
+a
+b
+l
+e
+(
+77
+−
+r
+o
+w
+l
+i
+v
+e
+a
+u
+d
+i
+t
+:
+−
+1perpairbeforesettlement;thoseproceedsarenotrepeatedintherow 
+′
+ srevenuefield.Omittingthemmadetwo−sidedmakeractivitylookcatastrophicallyunprofitable(77−rowliveaudit:−190.41 vs −$18.26).
+
+That comment is correct for the live case. The remaining question is whether any consumer in the codebase still uses the cents-form s.revenue
+ or the field revenue (cents) directly. A grep across the repo would settle it; my static review could not. Hypothesis (not verified): if any historical log or grader still adds the cents revenue to a cost-in-dollars computation, the sign will be off by ~100× on every multi-contract settlement, exactly as the historical −
+190.41
+/
+−
+190.41/−18.26 example illustrates. The 2026-09-18 fee audit also removed a separate, second bug: the old netCentsOf() divided a per-contract fee by the contract count a second time (see kalshiFee.ts:194-200 for the deletion and the explanation at autoTrader.ts:4848-4856).
+
+Failure: Two compounding correctness defects on the fee/settlement path have been found and fixed in the past week (the per-contract division; the order-total vs. per-contract rounding; see kalshiFee.ts
+ and netCentsOf history). The ladder promotion metric and the per-strategy calibration ledger both rely on these. Anyone reading pre-2026-09-18 trade-by-trade records, or comparing the post-fix ladder verdicts to any pre-fix tape, must understand the metrics are not comparable.
+
+Test: Re-grade the 09-09 to 09-13 lead-lag fills under the new netCentsOf and the old formula, and report the deltas per strategy. The trade-history report cites +$11.96 lifetime lead-lag on 3,849 contracts; that figure is from the venue settlements, which is the right answer. The ladder's promotion metric was a different number.
+
+F-04 — The Polymarket-consensus pre-registration's "judgment reached; a throughput repair" section quietly admits the arm has no measured edge
+ID: F-04
+
+Area: methodology / profitability
+
+Severity: high
+
+Confidence: verified
+
+Location: docs/PREREGISTERED-polymarket-consensus.md:128-141
+, docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:137-154
+
+Claim: The arm's settled P&L over 86 markets / 260 contracts / 5 day-clusters was +$0.31, +0.12c/contract, with a day-clustered 95% band of [−6.35, +6.59]. The pre-registered stop condition (upper bound < 0) and promotion condition (lower bound > 0) are both unmet. The arm continues at micro size under the ladder's standing rule.
+
+Evidence: From the pre-registration amendment:
+
+Judgment. 86 settled markets, 260 contracts, 5 day-clusters (2026-09-14 to 09-18), venue ledger: net +
+0.31
+,
++
+0.12
+c
+/
+c
+o
+n
+t
+r
+a
+c
+t
+,
+d
+a
+y
+−
+c
+l
+u
+s
+t
+e
+r
+e
+d
+95
+0.31,+0.12c/contract,day−clustered958 hard stop and the 2026-10-13 deadline stand. Four of five days were negative; 09-16 (+$7.65, ATP challenger) carried the total. The shadow's ATP category grades −0.4c over 302 signals, so that day is recorded as variance, not as evidence for tennis.
+
+And from the trade history:
+
+Our fills disagree with the signal grader in both directions: +
+15.07
+o
+n
+c
+a
+t
+e
+g
+o
+r
+i
+e
+s
+t
+h
+e
+g
+r
+a
+d
+e
+r
+m
+a
+r
+k
+s
+n
+e
+g
+a
+t
+i
+v
+e
+(
+a
+t
+p
+−
+0.4
+c
+o
+n
+n
+=
+302
+,
+w
+t
+a
+−
+4.1
+c
+,
+m
+l
+b
+−
+3.3
+c
+)
+a
+n
+d
+−
+15.07oncategoriesthegradermarksnegative(atp−0.4conn=302,wta−4.1c,mlb−3.3c)and−3.98 on the ones it marks positive.
+
+The signal grader said the shadow earned +6.39c per contract at the Kalshi ask over 692 signals and 7 days. The actual fills on those same signals, priced at the same Kalshi ask, net to +0.12c. The disagreement is not a small bias; it is the entire shadow estimate gone.
+
+Failure: The pre-registration predicts an edge at the Kalshi ask, not at a midpoint or at a probabilistic model. The realised edge at the ask is zero. Two of the three documented "violate the doc" cases (F-02 above, this finding) point at the same mechanism: a backtest on tape data priced at one venue's number, executed at another venue's number, and the difference is the entire projected edge. The trade history is candid about this; the methodology bar holds. But the "shadow says X, fills say Y" pattern is reproducible enough across the strategy record (sports-anchor out-of-sample +
+12.11
+v
+s
+l
+i
+v
+e
+−
+12.11vslive−5.14; the consensus shadow +6.39c vs +0.12c) that the more defensible conclusion is "do not go live on shadow P&L; require N fills at the price you will actually trade."
+
+Test: Hold all shadow-only arms in shadow until they have ≥ N raw fills against the price the arm will pay, where N is enough to distinguish +6c from 0c at 80%. The trade history makes a quantitative case; the inference belongs to the operator. The handbook §13.1 row already admits this for consensus; the same admission would force a re-think on sports-anchor (out-of-sample +
+12.11
+→
+l
+i
+v
+e
+−
+12.11→live−5.14 over 8 trades).
+
+F-05 — The lead-lag "edge" claim relies on a small-sample regime argument that the data does not yet support
+ID: F-05
+
+Area: methodology / profitability
+
+Severity: high
+
+Confidence: verified
+
+Location: docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:46-63
+
+Claim: The trade history attributes lead-lag's variance to "regime-dependent" profitability (period A: +8.94c on 713 contracts; period B+C: −2.01c on 2,853 contracts; period D: +1.97c on 283 contracts) and identifies the four changes that broke period A (venue reads on the order path; 8 contracts/sweep; 10s ×7 coins; stale quotes). The diagnosis is plausible and the latency data is convincing. But the two halves of the asymmetry do not match: the analysis isolates latency as the cause, and every period A-era setting has now been restored, yet period D's +1.97c is a fifth of period A's +8.94c on comparable per-contract fees. The conclusion the document draws is that period D will catch up to period A. The data is consistent with another conclusion: period A was the lucky tail of a roughly +1–2c/contract base-rate strategy, and the size scaling never re-earned the early edge because the early edge was not actually present.
+
+Evidence: From the trade history:
+
+Period	Config	Contracts	Net	Per contract
+A: 09-07 to 09-12	BTC+ETH only, 60 s poll, <=4 contracts/sweep, no position-cap reads on the order path, sweep latency ~0.07 s	713	+$63.73	+8.94c
+B+C: 09-13 to 09-16	7 coins, 8 contracts/sweep then window caps, 10 s poll, latency 14 s median (p90 45 s)	2,853	−$57.34	−2.01c
+D: 09-17 to 09-18	8 coins, 1 contract/sweep, live orderbook quotes, 10 s poll, latency 57 ms median	283	+$5.57	+1.97c
+The 09-17/18 sample is 283 contracts over two days. Two day-clusters is below the project's own minimum of 5 for ladder verdicts and 4 for stops. The trade history is candid: "the gap between A's +8.94c and D's +1.97c is unexplained on 283 contracts over two days; it needs a week."
+
+Graded signal on honest quotes is +1.35c/contract, and realized fills are +1.86c
+
+At the 3c edge gate in leadLag.ts:610-614 (a gap of ≥4c minus the per-contract fee), +1.86c realised is barely above the smallest the gate will accept at p ≈ 0.5 (fee ≈ 1.75c, gap ≥ 4c → net ≥ 2.25c).
+
+Failure: The most aggressive live arm at this capital is being judged on two day-clusters and a forward-looking narrative. The same operator's methodology bar would refuse a stop verdict on this sample. The path forward is exactly what the doc proposes (a week at the current latency), and the verdict the doc proposes (was A real?) will be honest. The risk is the direction of inference in the meantime: "the edge is latency, A is the target" is a stronger claim than the evidence supports, and the system has now twice in two weeks brought back the live arm at the operator's directive after a measured loss, then watched the next regime have a different sign.
+
+Test: Wait. The pre-registered cadence-shadow read on 2026-09-21 will give a paired comparison of10s vs 60s cadences on the same dislocations; that is the most defensible single read the system has.
+
+F-06 — Lead-lag is the only arm with entryBlocked bypassed, and the bypass is documented and accepted, but the residual "unreachable" dollar cap leaves a real ceiling at ~$3.96
+ID: F-06
+
+Area: risk / correctness
+
+Severity: medium
+
+Confidence: verified
+
+Location: src/main/strategies/leadLag.ts:716
+, docs/BACKLOG.md
+ "item 49" (item numbering conflicts; "Lead-lag passes through none of the working caps, and its one dollar cap is unreachable.")
+
+Claim: leadLag.ts:716
+ checks count * legCost > cfg.leadLagMaxCapitalSpend. With a default sweep of 8 contracts at p ≈ 0.5, the left-hand side is 8 * 0.50 = $4.00
+. The default leadLagMaxCapitalSpend is 20.00
+ (autoTrader.ts
+ config; verified by the trade history at $15/window). So 4.00 > 20.00
+ is false; the guard never fires on a single sweep. The backlog item 49 explicitly names this: "its one dollar cap is unreachable… a maximum left-hand side of 3.96 against a right-hand side of 15.0 — arithmetically unreachable." The current state is unchanged.
+
+Evidence:
+
+ts
+Copy
+// leadLag.ts:716-718
+if (count * legCost > cfg.leadLagMaxCapitalSpend) {
+  this.log(`[leadlag] sweep skipped on ${d.kalshiTicker}: $${(count * legCost).toFixed(2)} exceeds cap $${cfg.leadLagMaxCapitalSpend.toFixed(2)}`)
+  return
+}
+The per-window caps (leadLagMaxSpendPerWindow, leadLagMaxContractsPerWindow, leadLagMaxCoinsPerDirectionPerWindow) bound the aggregate window exposure, not the per-order exposure. They are reachable and working. The per-order check is not. The backlog says "NOT fixed unattended: routing lead-lag through entryBlocked() changes the behaviour of the account's dominant order flow."
+
+Failure: A single sweep at the ladder's live notch (8 contracts × 0.99 = $7.92 in the NO-buy direction on a 1c market) is allowed. The remaining guards (per-window caps) save the account, but a single isolated sweep on a 99c market is unconstrained by the per-order check. The audit-purpose of the cap was to bound one order; it is moot at the live settings. This is consistent with the per-window caps being the actual defense, but the code carries an unreachable guard that invites confusion.
+
+Test: Either (a) delete the leadLagMaxCapitalSpend check or wire it to the per-window cap, or (b) confirm in code that the per-window caps are sufficient at the live notch and document the per-order cap as legacy. Backlog 49 is open.
+
+F-07 — Engine-level backstop caps are switched off by default and live at the operator's prerogative
+ID: F-07
+
+Area: risk
+
+Severity: medium
+
+Confidence: verified
+
+Location: src/main/store/config.ts:39
+, src/main/engine/engine.ts:186-202, 245-256
+
+Claim: The persisted config.json
+ defaults are riskLimits: { maxStakePerBet: 0, maxOpenPositions: 0 }. In engine.ts:189
+ and :250, if (this.riskLimits.maxOpenPositions <= 0) short-circuits the cap check; placeOrderChecked returns without consulting maxStakePerBet when 0. The operator's standing rule (handbook §4.2) reserves these to the operator, so this is intentional. But the README's preamble and the trade-history section describe "what this system is" without noting the absence of an enforced engine-level cap. The ladder's strategy-by-strategy notchs and maxBalancePct (25%) bound a single bet; aggregate exposure across all live arms is bounded only by entryBlocked's position cap (60 live), which lives in the trader config and has been moved during testing.
+
+Evidence:
+
+ts
+Copy
+// config.ts:39
+riskLimits: { maxStakePerBet: 0, maxOpenPositions: 0 }
+ts
+Copy
+// engine.ts:189  if (this.riskLimits.maxOpenPositions <= 0) return this.placeOrderChecked(order)
+// engine.ts:250
+if (this.riskLimits.maxOpenPositions > 0) {
+  const count = await this.countOpenPositions(order.venue)
+  ...
+}
+Backlog item 50 ("No aggregate dollar exposure cap exists on Kalshi") and item 49 ("Lead-lag passes through none of the working caps") are both open. The maxBalancePct check in stakeFor() bounds one bet at 25% of equity (autoTrader.ts:2866-2876); 60 live × max single-bet size is the practical ceiling.
+
+Failure: A 
+200
+−
+e
+q
+u
+i
+t
+y
+a
+c
+c
+o
+u
+n
+t
+a
+t
+25
+200−equityaccountat253,000 of nominal exposure across all live arms; positions count is the only enforced ceiling. The "kill switch" is on the loss side, not the exposure side. Withdrawals and market shocks during the 45-minute venue-ledger stale window can also leave the bot adding positions without a fresh mark. The handbook is clear this is the operator's choice; this finding is to confirm it is only the operator's choice.
+
+Test: Decide a hard aggregate ceiling for live Kalshi. The backlog 50 item lays out the form. Until then, expect a daily P&L variance well above the per-position size on correlated windows (which the lead-lag history confirms).
+
+F-08 — The kill-switch denominator is equity, but the loss it bounds is realized settlements — a portfolio with significant open losses is not protected from adding new positions
+ID: F-08
+
+Area: risk
+
+Severity: medium
+
+Confidence: verified
+
+Location: src/main/strategies/autoTrader.ts:4501-4525, 4539-4548
+, src/main/strategies/autoTrader.ts:4554-4591
+
+Claim: killSwitchCheck(balance) computes limit = maxDailyLossPct% × equity and trips when realized ≤ −limit. realized is the sum of venueDay.realized
+ (sum of settlement P&L since00:00 UTC, excluding any positions entered before killEpochTs). Mark-to-market drawdowns on positions not yet settled do not count.
+
+Evidence:
+
+ts
+Copy
+// autoTrader.ts:4539-4548
+private dayRealizedForKill(): { realized: number; source: 'venue' | 'local' } {
+  ...
+  if (this.engine.getExecutionMode() === 'live' && v && v.date === nowDate() && venue < local) {
+    return { realized: venue, source: 'venue' }
+  }
+  return { realized: local, source: 'local' }
+}
+ts
+Copy
+// autoTrader.ts:4580-4586
+for (const s of rows) {
+  if (s.timestamp >= dayStart) {
+    const ff = firstFill.get(s.marketId)
+    if (epoch > 0 && ff !== undefined && ff < epoch) legacy += s.realizedPnl
+    else realized += s.realizedPnl
+    ...
+  }
+}
+realized aggregates settled P&L. A 15-minute crypto position held for 14 minutes has no settled P&L, even if its mid-price is -40c. The kill switch sees no loss. If the underlying theory of the edge has just broken (e.g., lead-lag regime change), the bot will continue to add positions up to the slot cap until any of them settles.
+
+Backlog item 26 is also relevant: "trade-small re-arms on a timer and never consults the gate" — the equivalent of a kill-switch bypass for demoted arms that timer-back-into live status.
+
+Failure: During a regime break, the bot can take 60 positions at $1 stake (the slot cap) without the kill switch ever seeing the loss, because the loss is mark-to-market on positions that haven't settled. The 2026-09-13 kill-switch trip happened because six coins settled within a few hours in a correlated move. A scenario in which a single failure mode (a sticky30c dislocation across 12 markets, say) holds positions in mid-flight for 4 hours would never see a trip, and the next batch of identical positions could match those limits exactly.
+
+Test: Add a mark-to-market loss component to dayRealizedForKill() that sums the loss leg of every open position relative to its fill price (negative side only). Decide what fraction of that counts toward the kill — even half would close the gap.
+
+F-09 — Sub-engine order paths route through engine.placeOrder
+, but lead-lag uses its own pre-order reservation system that pre-debits a window budget; a thrown exception leaves budget "uncertain" by design
+ID: F-09
+
+Area: risk / correctness
+
+Severity: medium
+
+Confidence: verified
+
+Location: src/main/strategies/leadLag.ts:766-779, 280-308
+
+Claim: When the IOC throws an HttpError with a 4xx/422/429 status, leadLag releases its window reservation. When the error is a timeout / 5xx / network failure, it keeps the reservation. The window file is persisted and survives restarts; the reservation holds the budget for the rest of the window (up to 15 minutes). This is documented as intentional — "An explicit venue rejection holds nothing … Any other error may conceal a fill" — but it interacts with the engine's cap check in placeLiveOrderReserved (engine.ts:209-243), which also reserves a token against the cap. A timeout followed by an ack can double-count the contract against the slot cap until the engine's read catches up.
+
+Evidence:
+
+ts
+Copy
+// leadLag.ts:766-779
+} catch (e) {
+  // A timeout/5xx may conceal a fill. Keep its budget and direction seat
+  // for the rest of this window, including across a restart. Only an
+  // explicit rejection proves that the reservation can be released.
+  if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) {
+    this.adjustWindow(d.kalshiTicker, -count, -(count * legCost))
+    if (newSeat) dir.delete(d.underlying)
+  } else {
+    this.log(`[leadlag] uncertain order on ${d.kalshiTicker}; window reservation retained`)
+  }
+  this.persist()
+  throw e
+}
+ts
+Copy
+// engine.ts:230-235
+} catch (e) {
+  if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) this.reservations.get(order.venue)?.delete(token)
+  else this.settleSlot(order.venue, token)
+  ...
+throw e }
+
+Copy
+
+Both engines use the same 4xx/422/429 classification. A503 timeout from Kalshi would lead-lag-retain the budget *and* engine-retain the cap token. The cap token is released after a later venue read confirms the slot is empty (or 2-second visibility margin). The window reservation, however, stays until the next window. In a sustained timeout storm, the lead-lag window budget is consumed by rejected-as-timeout orders; the engine's slot cap is also consumed for the same order. A second order fills against the engine cap; the lead-lag budget never spent it but is marked spent.
+- **Failure:** On Kalshi-side latency events, the lead-lag window budget can be exhausted without a single fill having occurred. The next window starts fresh, but during the degraded window the bot believes the budget is gone when in fact the budget was reserved by rejected orders. The interaction with the engine's cap reservation compounds if the cap read happens during a window when a token has been reserved but no slot is visible. The whole `placeLiveOrderReserved` machinery is well-designed for the steady state; the lead-lag reservation system is well-designed for the steady state; the corner where both apply at once has a small overlap that has not been documented.
+- **Test:** Add a synthetic latency test that fires N=20 sweeps at a paused Kalshi endpoint and asserts (a) window budget is restored after the 15-minute window ends, (b) engine cap token is released on first successful read. The intersection case is not exercised in the adversarial suite as far as I could find.
+
+---
+
+### F-10 — The fee model fix at2026-09-18 closes a real and recent dollar-sign error, but the historical settlement records still feed the promotion ladder with the old `netCentsOf`
+
+- **ID:** F-10
+- **Area:** methodology / fees
+- **Severity:** medium
+- **Confidence:** hypothesis (not verified without runtime state)
+- **Location:** `src/main/util/kalshiFee.ts:194-200`, `src/main/strategies/autoTrader.ts:4856-4863`, `docs/BACKLOG.md` and `docs/AUDIT-REVIEW-VERIFICATION-2026-09-18.md`
+- **Claim:** The deletion of `kalshiNetEdgeCents` in `kalshiFee.ts` (it was named "NetEdge" but returned "−fee", so callers adding it to an edge double-counted the cost) is a hard-to-find comment about the deletion but does not say *who the caller was*. The history in `kalshiFee.ts:7-26` describes seven divergent fee implementations; the per-contract fee was wrong in four of them. If `netCentsOf()` is the metric the ladder uses (`autoTrader.ts:4848-4863`, with the FIXED note at4853) and the FIX was applied at v27 on 2026-09-18, then the historical ladder verdicts for any strategy whose settled P&L was computed by `netCentsOf()` prior to v27 are biased toward the side that paid less fee. Cheap-contract strategies look better; high-contract strategies (lead-lag at the8-contract notch during the bad streak) look worse than they should.
+- **Evidence:** The header in `kalshiFee.ts:1-69` catalogues the bug history in detail:
+
+> Before this module the identical economic quantity — "what does this Kalshi order cost in fees" — was implemented SEVEN separate times, and the six implementations disagreed with each other and with the venue: … (4) leadLag.ts `kalshiTakerFeeCents()` ceil per CONTRACT, hardcoded 0.07 … overstate the fee by up to 7x on low-priced legs and therefore REJECT trades that clear the real fee.
+
+This means lead-lag *rejected* trades at the 1-contract case where `ceil(0.07 × 0.5 × 0.5) = 2c` was the per-contract fee but the venue actually charges 1.75c. That is a trade-flow effect, not a settlement-accounting effect — the old fee overstates by 12.5% on a $0.50 fill, enough to refuse a 2.25c gap. The fix is in `kalshiFee.ts` and the lead-lag helper at `leadLag.ts:43-45` defers to the canonical model.
+- **Failure:** A retrospective look at lead-lag's "fills that cleared" row count prior to 2026-09-18 should be compared to a re-run with the corrected fee model. Some trades the bot *would have made* were rejected by an overstatement. The lead-lag edge claim (period A +8.94c/contract) may be understated on a like-for-like basis. This is a directional finding: the past few days of lead-lag activity are net of a fee overstatement, not net of the real fee.
+- **Test:** Re-grade lead-lag dislocations over2026-09-12 to 2026-09-17 with the corrected per-contract fee and report what fraction would have crossed the old (over) and new (correct) 4c edge gate.
+
+---
+
+### F-11 — The "no git" known defect in handbook §16 was declared closed but the README still describes the pre-git scaffold
+
+- **ID:** F-11
+- **Area:** docs
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `docs/DEVELOPER-HANDBOOK.md:1117`, `README.md:6-12`, `docs/REVIEW-CHANGES-2026-09-06.md` §3 closed "no git" 2026-09-18
+- **Claim:** The handbook §16 item 3 was annotated closed on 2026-09-18 and points at the new public GitHub mirror. The README, however, still describes the pre-git operating model in spirit and has not been updated to mention the GitHub repository. The README's "Conventions worth knowing" section (lines 56–63) is otherwise accurate. The doc map at handbook §18 says *"`README.md` | stale scaffold description"*, which is the correct diagnosis and would benefit from a one-line update rather than a rewrite.
+- **Failure:** A reviewer reading the README and the handbook together sees an inconsistency that the handbook itself has flagged. Cost is small; the test is reading the README first, which is what new operators and reviewers do.
+- **Test:** Update README to reflect that the tree is a public git repo; or annotate the README header the way the handbook already does in its own §18.
+
+---
+
+### F-12 — The "consensus arm settled record" disagrees with the consensus shadow in *both* directions, and the project's evidence doctrine would call that a failed prediction
+
+- **ID:** F-12
+- **Area:** methodology
+- **Severity:** medium
+- **Confidence:** verified
+- **Location:** `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:143-154`
+- **Claim:** The trade history admits the disagreement honestly. The trade history's frame is "neither stop nor promote" and the inference is "our own fills are too few to override the grader." But the disagreement is the wrong way around on the highest-edge categories the grader reported (atp −0.4c, wta −4.1c on shadow; +$10.95 of ATP on09-16 in fills). The disagreement is *positive* in the categories the grader marked negative, *negative* in the categories it marked positive, and the magnitude is order-of-shadow-noise-large. This is the strongest single argument for "do not trade on shadow P&L" in the entire record.
+- **Evidence:** Direct quote, trade history:
+
+> Our fills disagree with the signal grader in **both** directions: **+$15.07 on categories the grader marks negative** (atp −0.4c on n=302, wta −4.1c, mlb −3.3c) and **−$3.98 on the ones it marks positive**.
+
+The arm's settle P&L of +$0.31 on260 contracts is consistent with a zero-edge strategy. The +$15.07 / −$3.98 is the residual after netting the fills against categories.
+- **Failure:** Continuing the arm to 09-13's hard-stop on −$8, with only 5 day-clusters and one of those clusters carrying 96% of the total, is not really "neither stop nor promote" — it is "we don't know." The deadline (2026-10-13, 40 contracts) is the decision; the framework would be cleaner to call the arm "stopped for evaluation" rather than "continues under the ladder," because the data does not point either way and the doc's own threshold for continuing evidence is met.
+- **Test:** After 2026-10-13, either the arm has 40 settled contracts across ≥5 clusters and a tighter band (an outcome) or it does not (an outcome). Until then, label the arm "evaluating" rather than "live."
+
+---
+
+### F-13 — The arbitration of conflicting pre-registered reads (consensus cohort: lower > 0 earns promotion vs. arm fills disagree in both directions) is operator-dependent and the rule for promotion is not pre-registered
+
+- **ID:** F-13
+- **Area:** methodology
+- **Severity:** low
+- **Confidence:** hypothesis
+- **Location:** `docs/PREREGISTERED-polymarket-consensus.md:69-78`, `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:147-154`
+- **Claim:** The consensus pre-registration says "Day-clustered 95% lower bound > 0 → the ladder's own checkpoint promotes it; nothing extra." The ladder's promotion logic at `ladder.ts:11.3` (per the handbook) does not require the lower bound > 0 specifically for consensus — it uses a generic 80% band checkpoint with markout veto and one-sided-sample guard. The "lower bound > 0" wording in the pre-registration is specific to a 95% interval; the ladder uses a different (looser) rule. A +0.12c sample with a 95% band of [−6.35, +6.59] would *not* pass "lower bound > 0", but it could pass the ladder's looser rule. Whether the ladder promotes is its decision, not the pre-registration's.
+- **Failure:** This is a documentation/registration discrepancy, not a money bug. But it means the arm can be promoted by a path that the operator's own pre-registration did not pre-authorize.
+- **Test:** Clarify in the pre-registration that "lower bound > 0" is the strict criterion and the ladder's looser rule does not promote until the pre-registered criterion is met.
+
+---
+
+### F-14 — Multiple-comparisons: the operator runs many simultaneous arms and ladder verdicts are reported per-arm without a multiplicity correction
+
+- **ID:** F-14
+- **Area:** methodology
+- **Severity:** medium
+- **Confidence:** hypothesis (the project explicitly says Bonferroni applies "where a grid of rules was searched first" but the ladder verdicts themselves are reported uncorrected)
+- **Location:** `docs/DEVELOPER-HANDBOOK.md` §12 evidence doctrine, `docs/BACKLOG.md` "Pre-register before data exists," `docs/PREREGISTERED-mean-reversion.md` and others
+- **Claim:** The project's evidence doctrine (handbook §12, "where a grid of rules was searched first, a Bonferroni correction applies") says Bonferroni applies when a grid is searched. The ladder runs *every* arm simultaneously and reports per-arm 80% bands. The bands are at80%, narrower than a 95% band would be. The trade history reports e.g. "+6.39c [+3.14, +10.19]" (consensus shadow) without noting that the shadow itself is one of multiple shadows and that the interval excludes zero in part because 80% is the threshold not95%. The result is a project that quotes tighter confidence than it has earned, *across the project*, when 16+ arms each report their own 80% interval. With16 arms at 80% confidence, the chance of at least one false-positive stop-or-promote decision per re-read is ~96%. Per ladder run (every checkpoint), the false-positive risk on any single decision is bounded by 20%; the *fleet-wide* risk over a year's worth of checkpoints is what the 16-fold multiplicity is silently multiplying.
+- **Evidence:** The handbook §11 says 20 ladders of strategies are tracked. The verifier at the adversarial suite asserts 16+4=20 `GENERIC_STRATEGIES`. The pre-registrations cite "the 80% band" but never mention a fleet-wide multiplicity correction.
+- **Failure:** A ladder promotion triggered by a single arm's 80% band clearing zero is a 1-in-5 false-positive on that single decision; the operator's review at `docs/BACKLOG.md` notes "1,279 decisions; settled 105 ABSTAIN / 160 VETO / 63 ERROR" on a single day for the critic, which is itself a per-decision multiplicity. The fix is not to abandon per-arm bands — it is to either (a) require a stricter threshold (95% or 99%) for ladder promotion and keep the 80% band for monitoring, or (b) apply a Holm-style step-down across arms at each ladder run. Either is an evidence-doctrine update, not a code change.
+- **Test:** Compute the per-day probability of at least one ladder promotion or stop driven by false-positive under the current threshold. The number is ~1 − (1 − 0.2)^N for a fleet of N arms each running ~once every 20 settlements. Compare with the project's actual stop/promotion history to see whether the rate of unforced decisions tracks the false-positive rate.
+
+---
+
+### F-15 — The pre-registration gate for `kalshi-fade` is "mean positive over first 20 settled trades AND lower band > −3c." Fade's settled record over the trade history window is +1.18c [+2.52c, +4.88c] which does not technically meet either criterion
+
+- **ID:** F-15
+- **Area:** methodology
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `docs/STRATEGY-TAXONOMY-2026-09-14.md` (referenced), `docs/PREREGISTERED-fade-v2.md`, `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:115-117`
+- **Claim:** The trade history reports: "fade (+$8.18, 243 trades, 95% wins) - calibration z = +0.15: it wins exactly as often as its 0.95 entry prices imply. No edge; the profit is inside noise (t=1.99)." A +1.18c mean with a t-statistic of 1.99 is below the standard 95% significance threshold of 1.96 on a one-tailed test *barely* (actually above), but well below the 80% threshold implied by the project's80%-band convention. The arm is graded "neither stop nor promote" by the same logic as the consensus arm. The trade history frames it as "the profit is inside noise (t=1.99)" — which is a more honest summary than "live tiny-live with positive mean."
+- **Failure:** The live tiny-live staging is a choice (the operator reserves it), but the evidence base says the edge is unproven. The arm runs at $1 per position; the cumulative variance is small; the path forward is the project's own 6,000-trade Becker dataset's evidence (maker +1.0 to +3.4c on most categories, taker losing). The live micro evidence aligns with the Becker's "maker earns slightly on this band" read, but the live sample is not itself evidence of edge — it is consistent with both "there is an edge" and "there is no edge."
+- **Test:** Continue collecting; require the live ladder's stop/promote verdict to be reached on its own threshold (lower band > 0 at 80%) before any scale-up.
+
+---
+
+### F-16 — The mean-reversion arm is held back by a problem in its own evidence: the Becker backtest it claims had +2.2c to +3.6c per contract is for a *taker*, but the live arm is a *maker* on weather markets it was never tested against
+
+- **ID:** F-16
+- **Area:** methodology
+- **Severity:** medium
+- **Confidence:** verified
+- **Location:** `docs/PREREGISTERED-mean-reversion.md:96-137`, `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:162-188`
+- **Claim:** The trade history's most damning paragraph:
+
+> Mean-reversion has the only backtested edge among the non-lead-lag arms, and it is not being run. The 6c/10-minute move audit over 17.9M candles (§52) graded +2.2 to +3.6c/contract across 53,346 signals. Live: 12 entries in 11 days, +$19.18 app-attributed, of which +$22.33 is the LALIGA ticket. The momentum recorder, reading the same candle feed and market list, saw 154 qualifying setups on 42 tickers on 09-17 and 132 on 35 tickers on 09-18; the arm entered once. The signals are generated and then vetoed.
+
+Two findings. **Mean-reversion's live setups are weather brackets, and a gate from the quoter's retirement refuses maker entries on weather because that seat measured −1.70c/contract over 801,258 contracts.** That gate is correct; what it exposes is that §52's +2.2 to +3.6c was a TAKER backtest at the post-move price, and the live arm rests a MAKER order — the edge was never on the seat the arm uses. Worse, `classify.ts:97` records that the Becker dataset behind that backtest contains **zero weather rows**: the only setups the live arm finds are on the one series family its evidence never covered.
+
+This is a documented finding, not a defect, but it materially changes what "the only backtested edge" means. The backtested edge is on a seat that is not the live seat, on a population that is not the live population. The arm has *no* measured prior edge for what it actually trades.
+- **Failure:** The mean-reversion arm at live tiny-live is, as of 2026-09-18, holding only weather brackets (because that is where the setup is found). The historical evidence never measured weather. The maker seat on weather was measured at −1.70c/contract and is now blocked by `weatherSeatBlock`. The arm cannot fire on the population the backtest measured (non-weather taker entries) and cannot fire on its current population (weather maker entries) because the gate blocks. The result is the arm generates signals and then vetoes them. The pre-registration pre-dates this realization, but the realization is documented.
+- **Test:** Decide explicitly whether mean-reversion should be (a) reconfigured to the taker seat the Becker audit graded (which the move audit's bid-ask bounce control measured at "−3.7c below 20c" — i.e., the seat has no measured edge), (b) restricted to a non-weather population the audit covered, or (c) parked. The trade history says "stop treating tennis as evidence"; the same logic says stop treating the Becker 6c/10-minute audit as evidence for what the live arm now does.
+
+---
+
+### F-17 — The Polymarket US catalog index has its own multi-account footgun: eight independent $1,000 paper accounts with correlated bets against the same book
+
+- **ID:** F-17
+- **Area:** methodology / risk
+- **Severity:** low
+- **Confidence:** hypothesis
+- **Location:** `src/main/strategies/polyPaper.ts:67-128`, `docs/DEVELOPER-HANDBOOK.md` §3.5
+- **Claim:** The paper lab runs 8 accounts (`POLY_PAPER_STRATEGIES`) of $1,000 each at independent strategies. The strategies have overlapping signal populations (closing-soon binary markets) but distinct rules. Two arms can take opposite sides of the same market at the same time, paying spread to each other in the simulated VWAP fill. With 8 accounts at 12 markets each per scan and a `pressure` rule that fires on bid/ask ratio asymmetry, correlated entries are plausible.
+- **Evidence:** `polyPaper.ts:48` accepts a market where `q.ask − q.bid > 0.06` only as no signal; below that threshold, both `join` and `improve` add two orders (one YES, one NO) at the bid. The two arms `longshot` and `favorite` both fire on the same quote at different price bands; they do not coordinate.
+- **Failure:** The paper lab is for measurement, not money. The risk is reading it as if independent. If "longshot's +1c and favorite's −0.5c" both pass, the lab reads +0.5c aggregate; on a single market that is two correlated bets, one win one loss.
+- **Test:** Add a market-key-level cross-account correlation report to the lab status. The handbook already calls the IBKR lab "23 automated paper strategy arms" with "individual balances" — the same rule should apply.
+
+---
+
+### F-18 — A window-budget reservation survives an app restart on Kalshi; a token reservation in the engine does not
+
+- **ID:** F-18
+- **Area:** risk / correctness
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `src/main/strategies/leadLag.ts:296-321`, `src/main/engine/engine.ts:71-74, 232-235`
+- **Claim:** `leadLag.ts` persists its window reservation to `leadlag.json` (via the `persist()` method at line 337-352). On restart, the window state is restored and trades are held until the next window if the persisted epoch does not match the current epoch. The engine's cap reservation (`engine.reservations`) is an in-memory map that does not persist; on restart, the cap is re-read from the venue. After a restart mid-window with a successful reservation in the engine but a partial lead-lag fill, the engine's view re-syncs from the venue (which sees the fill), but lead-lag's view from the persisted file says the budget is still partly spent. The result is a window in which lead-lag thinks the budget is partly gone and the engine thinks the cap is fresh; if the budget allows a sweep that the engine allows, the sweep happens; the next sweep within the window may over-spend the budget that lead-lag's *belief* is partly gone, but the engine does not know.
+- **Evidence:** Documented in leadLag.ts:300-305 ("Legacy files contain no recoverable reservations. Observe until the next window…") and in the trade history §5: "The position cap is a reservation count refreshed in the background — no venue read on the order path." The trade history claims this is solved. The persistence-to-disk story of leadLag's reservation and the non-persistence of engine's reservation are different.
+- **Failure:** A restart during a window can briefly allow a sweep past lead-lag's *self-perceived* budget, until lead-lag's persist() re-reads the actual fill. The reconcile happens at the next sweep (10s) but not at restart.
+- **Test:** Add a test for "restart with partial window reservation, fire one sweep, verify budget is correct after the next persist."
+
+---
+
+### F-19 — The Polymarket US paper lab has only 6 evaluated markets per pass on a 12-market rotation against an 80,000-market catalog
+
+- **ID:** F-19
+- **Area:** methodology
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `src/main/strategies/polyPaper.ts:142-144`, `docs/BACKLOG.md` "Item 23: polyus-fade cannot fire"
+- **Claim:** The lab walks the catalog (5,000-row slice from a 80,000+ catalog), filters for binary markets with minQty ≤ 1 closing30m to 72h, and picks 12 markets at a rotating offset. This is *not* a random sample of the eligible pool; the offset is deterministic on the 30-minute clock. A single 12-market rotation per scan may systematically miss categories that fall on the cut-off boundary. The lab reports "ready" status at ≥100 trades / ≥7 days / ≥10 markets.
+- **Failure:** With a 12-market sample per scan and ~12 eligible categories, a single arm's "10 markets" threshold could be satisfied by 10 markets from the same category. The pre-registered "ready" bar requires10 distinct events/markets, not10 distinct categories; the diversity requirement is weaker than the bar's name suggests.
+- **Test:** Compute the realized category coverage for each lab arm over a week. If the diversity is dominated by 1-2 categories, the pre-registered "10 markets" bar is being met by a sample that is not category-diverse.
+
+---
+
+### F-20 — Settlement basis: 2.1–2.4% of matched 15-minute crypto windows settle differently on Kalshi vs. Polymarket. The lead-lag arm does not skip them; it cannot, at fill time
+
+- **ID:** F-20
+- **Area:** fees / settlement / methodology
+- **Severity:** medium
+- **Confidence:** verified
+- **Location:** `docs/DEVELOPER-HANDBOOK.md` §10.1, `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:74-78`
+- **Claim:** A real settlement-source disagreement of ~2% of matched windows is documented. The lead-lag arm cannot pre-screen for this — the index divergence is sub-1 basis point at fill time and is only visible at settlement. The arm's documented losses concentrate in these "two-thirds of recent matched-window losses sat in the roughly 2% of windows where Kalshi and Polymarket settled differently." This is structural: lead-lag pays a structural ~2% of the time for an edge that is otherwise real. The trade history's analysis is explicit:
+
+> About two thirds of recent matched-window losses sat in the roughly 2% of matched windows where Kalshi and Polymarket settled differently. That divergence is decided by where the index lands, so it cannot be known at fill time.
+
+This means the true edge after settlement basis is +0.31c × 0.98 + a100c loss × 0.02 (assuming full loss on disagreement) → ~−1.7c per contract. **The trade history reports +1.86c/contract on period D. Two thirds of recent losses from settlement basis would flip the sign.** The trade history's own analysis is that the settlement basis is the dominant source of loss; the headline +1.86c is net of it but only on the most recent 283 contracts (which may not have hit the basis rate).
+- **Failure:** A 2.1–2.4% loss rate at full notional is the killer of the strategy. The trade history says weekly readings on settlement basis are scheduled (handbook §14.2). Until the basis rate is measured on a recent-enough window, the headline +1.86c figure cannot be trusted as the expected per-contract value.
+- **Test:** Run `scripts/backtests/leadlag_settlement_basis.py` on the last week's settled windows and report the per-contract net conditional on settlement basis. The handbook says this is read weekly; do not scale lead-lag without it.
+
+---
+
+### F-21 — The `mttr/manageExits` flow uses mid-prices to decide exit triggers and the executable book for fills; on a thin book the realized P&L is worse than the trigger
+
+- **ID:** F-21
+- **Area:** fees / correctness
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `docs/BACKLOG.md` item 51, `src/main/strategies/autoTrader.ts` `manageExits` (referenced)
+- **Claim:** Backlog item 51 documents: "Take-profit and stop-loss are decided on the mid but executed against the far side of the book. `manageExits` computes pnlPct from `getPrice` (a mid) and fires take-profit at +5% / stop-loss at −10%; `closeTrade` then sends a marketable IOC that crosses the spread, plus an escalating 1-5c of extra cross per attempt. On a 1-6c book the round trip can exceed the 5% trigger, so a 'take-profit' can realise a loss."
+
+Every one of the affected arms (book-imbalance, volume-spike, sports-anchor, flow-follow, news, cross-venue) is currently disabled, so the bug is dormant. The bug will return when any of them is re-enabled.
+- **Failure:** Dormant today; predictable future defect.
+- **Test:** Backlog 51 is open. Fix or accept.
+
+---
+
+### F-22 — The `mmsim` market-making simulator runs to 2026-10-17, and the early-vintage read does not include P&L; the operator has correctly refused to read early
+
+- **ID:** F-22
+- **Area:** methodology
+- **Severity:** low (the operator is doing this correctly)
+- **Confidence:** verified
+- **Location:** `docs/BACKLOG.md` "Item 73: mmsim runs to 2026-10-17. Do not read it early."
+- **Claim:** The mmsim is a 35-day run that is structurally incapable of showing P&L on `--interim`. The verdict path refuses before the stop date. The handbook explicitly says "INCONCLUSIVE is the modal outcome and is a do-not-pursue, NOT a reason to extend." This is good methodology. The finding is to record it as good practice; not all parts of the system are this disciplined.
+
+---
+
+### F-23 — The `Fee` math for Polymarket US has two distinct published-rate step changes that may not both be modelled
+
+- **ID:** F-23
+- **Area:** fees
+- **Severity:** low
+- **Confidence:** hypothesis
+- **Location:** `src/main/venues/polymarketUs.ts:114-117, 559-606`, `src/main/strategies/polyPaper.ts:17`
+- **Claim:** The Polymarket US adapter reads `feeCoefficient` per market (line 920). The paper lab hardcodes the same coefficient per market (via the `feeRate` parameter). The Polymarket.com data adapter (signal only) is in `polymarket.ts:281`. The fee schedule change at 2026-09-17 03:59Z is *not* applied in `polyPaper.ts:17` (F-01). The Polymarket US adapter uses the live `feeCoefficient` from the API — so live positions are billed correctly, but the paper lab's *projected* P&L is wrong on the taker fee (line 17 of `polyPaper.ts`). The maker rebate (`POLY_MAKER_REBATE=0.0125`) is applied to maker trades only.
+- **Failure:** The paper-lab pre-registration "ready" bar uses the lab's P&L. The lab's taker fee is wrong post-9/17. The lab's maker rebate is correctly modelled. The fix is F-01's fix.
+- **Test:** Same as F-01.
+
+---
+
+### F-24 — IBKR Lab fee/commission is hard-coded at $0.01 per contract, with $0.01 slippage. The actual IBKR commission schedule varies by product
+
+- **ID:** F-24
+- **Area:** fees
+- **Severity:** low
+- **Confidence:** hypothesis
+- **Location:** `src/main/strategies/ibkrLab.ts:14`
+- **Claim:** `const fee=.01,slippage=.01` is hard-coded for the IBKR/ForecastEx paper lab. IBKR's published commission for ForecastEx binary event contracts may or may not be $0.01/contract across all products; the lab treats every product identically.
+- **Failure:** If the actual fee is higher, the lab over-states P&L. If lower, the lab under-states. The arm's `liveEligible` threshold (lower bound of the day-clustered 95% interval > 0) depends on the lab's net. A 0.5c per-contract error compounded over hundreds of fills flips verdicts.
+- **Test:** Confirm IBKR/ForecastEx published commission per product and replace the constant. The handbook §8.1 lists IBKR commissions for some products; not all ForecastEx contracts.
+
+---
+
+### F-25 — `promotionFill` has no `orderId` in scope; `backlog 36` is open
+
+- **ID:** F-25
+- **Area:** engineering- **Severity:** low
+- **Confidence:** verified (the backlog notes this)
+- **Location:** `docs/BACKLOG.md` "Item 36: Per-order fill latency"
+- **Claim:** This is a documented deferred improvement. Including it for completeness; the backlog handles it correctly.
+
+---
+
+### F-26 — `killEpochTs` subtracts pre-strategy-redesign fills from the daily kill, which means settled losses from old strategies do not trip the new kill- **ID:** F-26
+- **Area:** risk / methodology
+- **Severity:** medium
+- **Confidence:** verified
+- **Location:** `src/main/strategies/autoTrader.ts:4554-4590`
+- **Claim:** `refreshVenueDay()` separates `legacyRealized` from `realized` based on whether the first fill on the market is older than `killEpochTs` (default 2026-09-06 21:00 UTC, the strategy-redesign date). `realized` excludes legacy fills; the kill switch trips on `realized`. A position opened on 2026-09-06 that settles at −$50 today contributes to `legacyRealized` and not to `realized`. The kill switch is blind to it.
+- **Evidence:** Trade history: "since the strategy redesign (2026-09-06 21:00 UTC)" is the unit of analysis throughout. A pre-redesign legacy fill that settles today and would have tripped the kill does not.
+- **Failure:** This is documented as intentional ("the daily kill exists to stop a malfunctioning live strategy") but it does mean that legacy fills can mask the venue day loss. A 2026-09-12 LALIGA YES +$22.33 windfall that was pre-redesign — or wait, that fill *is* post-redesign. A 2026-09-04 fill settling at −$15 today would not be counted. The handbook says this is fine; the operator reserved it.
+- **Test:** Confirm the operator wants this; if so, no change. If not, count legacy toward the kill or fold them into the same bucket.
+
+---
+
+### F-27 — `closeAsBuy` short-circuit routes Polymarket US sells through `placeOrder` but does not run the `placeLiveOrderReserved` reservation machinery in the same way
+
+- **ID:** F-27
+- **Area:** correctness / risk
+- **Severity:** low
+- **Confidence:** verified (hypothesis on edge cases)
+- **Location:** `src/main/engine/engine.ts:310-313`
+- **Claim:** `if (this.mode === 'live' && closeAsBuy) return this.placeOrder(await closeAsBuy.call(this.requireAdapter(req.venue), req))`. Polymarket US adapter has a `closeAsBuy`; sells therefore go through `placeOrder` which routes to `placeLiveOrderReserved` if `maxOpenPositions > 0`. With `maxOpenPositions = 0` (default), the route is `placeOrderChecked`, which checks `maxOpenPositions > 0` (false) and `cap > 0` (false). No cap is enforced. The sell is then `submitLive` which still journales the intent. The reservation token mechanism is *not* engaged. A burst of sells with no cap will be journaled but not reserved.
+- **Failure:** With engine defaults, sells are uncapped. With operator-set caps, sells go through `placeLiveOrderReserved` correctly. This is consistent with the buy side, but it is a small risk surface because Polymarket US is on operator hold (handbook §3.2).
+- **Test:** Confirm this is intentional.
+
+---
+
+### F-28 — Pre-trade critic is enabled but unused (`intelligenceMode: 'veto'` is the only state that blocks, and the default is `'shadow'`)
+
+- **ID:** F-28
+- **Area:** missing / engineering
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `src/main/strategies/autoTrader.ts:2878-2899`, `docs/BACKLOG.md` "Pre-trade critic: prove or drop"
+- **Claim:** The pre-trade critic runs on every candidate in shadow mode (199 abstains, 79 vetoes) and is paid for in LLM API calls but no verdict blocks. The backlog says to measure realized outcomes of vetoed vs approved signals and decide. As of 09-15 the backlog shows two daily readings (09-11, 09-12) where the *raw* rule said "switch" but the *amended* rule (cohort restricted to enabled arms) said "do not switch" because the vetoed cohort is small and its vetoes are concentrated on already-disabled arms.
+- **Evidence:** Per the backlog:
+
+> **Restricted to those three:** VETO -$0.13 over ~69 contracts (-0.19c) against ABSTAIN -$1.73 over ~33 (-5.2c). Condition (i) passes (VETO's own net is below zero, barely); condition (iii) passes (2 of 3 skilled); **condition (ii) fails outright — VETO is 5.0c ABOVE the rest, not 2c below**.
+
+The critic's value is now in the form of a measured cost: ~$25/day on OpenRouter across the hunch, critic, and nightly review.
+- **Failure:** Spending on a critic that does not block and whose "skill" is concentrated on disabled arms is a cost without benefit. The backlog50 amendment says the operator's pre-registered rule is the right one; the finding is that the critic is a paid experiment without a pre-registered read date that would resolve it.
+- **Test:** Set a pre-registered read date (e.g., 30 days from the09-18 deployment) and stop the critic then if no signal emerges.
+
+---
+
+### F-29 — The bot's stated P&L aggregation in the UI is described as gross of fees on Polymarket US; the engine's `computeLivePnl` now reconciles with `settlementsCarryFees = venue !== 'polymarket-us'`
+
+- **ID:** F-29
+- **Area:** fees / methodology
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `src/main/engine/engine.ts:602-617`
+- **Claim:** `computeLivePnl()` does `if (settlementsCarryFees && settledMarkets.has(f.marketId)) continue` for non-PolyUS venues, but skips that check on Polymarket US, meaning every fill on PolyUS has its commission counted. The handbook's §12 evidence doctrine says "settlements" are the truth. The reconciliation is intentionally different per venue.
+- **Failure:** Polymarket US settle (post-resolution) P&L is computed via the fills feed (because settlements have no fee field), and fees are added back via `commissionNotionalCollected`. This is documented in `polymarketUs.ts:172-201` (`usCashPnl`) and the engine code. It is consistent.
+- **Test:** No change. The finding is to confirm the per-venue handling is intentional and recorded; it is.
+
+---
+
+### F-30 — The "STREAK BROKEN" 09-11 WebSocket disagreement reading has a documented per-process-counter bug
+
+- **ID:** F-30
+- **Area:** methodology
+- **Severity:** medium
+- **Confidence:** verified (the backlog documents this)
+- **Location:** `docs/BACKLOG.md` "Item 56: The WebSocket agreement counter is PER PROCESS"
+- **Claim:** Every daily check so far has been computed by subtracting yesterday's cumulative reading from today's, which is invalid arithmetic if the process restarted in between. The 09-11 "STREAK BROKEN" reading was a counter artifact. The build-queue item 2's trigger has never been valid. This is exactly the kind of thing the project's evidence doctrine was supposed to catch ("A check that cannot fail is not a check").
+- **Failure:** The fix is in the backlog (persist per-UTC-day pair). Until then, the trigger is invalid. Reading it now would risk a false-positive promotion of the WebSocket book for live execution.
+- **Test:** Apply the fix in backlog 56 before any future reading.
+
+---
+
+### F-31 — Single-instance lock + task scheduler restart = duplicate process risk is bounded by Windows Task Scheduler restart policy, not by the app's lock
+
+- **ID:** F-31
+- **Area:** engineering / risk
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `docs/DEVELOPER-HANDBOOK.md` §6.1, `src/main/index.ts`
+- **Claim:** The app takes a single-instance lock (`src/main/index.ts`, line per handbook §7.1). The scheduled task `OracleTrader-App` restarts up to 10× with `MultipleInstancesPolicy: IgnoreNew`. If the lock fails to release cleanly on a crash, the restart policy will stop trying. Windows Update restarts already take the app down for 5h. The repair and maintenance runners honor `agent.lock`; an interactive session must take it by hand.
+- **Failure:** Low probability given the design; the operating model is sound. The handbook documents the risk; this finding notes it is well-handled.
+- **Test:** None.
+
+---
+
+### F-32 — The Polymarket US `activities()` pagination uses 700ms between pages; this is the proven fix per the backlog, but the open follow-up (HTTP 300-char HTML body in error logs) is a separate item
+
+- **ID:** F-32
+- **Area:** engineering
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `docs/BACKLOG.md` "Item 52: Polymarket US rate-limits the activities feed and the reconciler dumps HTML into the log"
+- **Claim:** Pacing was added; the HTML-body log spam is a separate open item. Documented.
+- **Test:** None.
+
+---
+
+### F-33 — The Polymarket US cancel was sending empty body since 2026-09-03; the 2026-09-12 repair session fixed it and retired 19 rests. The defect is historical, but it tells us what audit missed
+
+- **ID:** F-33
+- **Area:** engineering / methodology
+- **Severity:** low (historical)
+- **Confidence:** verified
+- **Location:** `docs/BACKLOG.md` "Recently done 2026-09-12"
+- **Claim:** Cancel orders on Polymarket US required a non-empty body since 2026-09-03; the app sent empty bodies for 9 days, leaving 19 rests stranded on the venue. The repair was thorough; the lesson is that "the venue accepts the request but no order is cancelled" is a silent failure mode that would not show up in any metric until the venue ledger was reconciled. The handbook §3.4 lists it as a known defect.
+- **Test:** None.
+
+---
+
+### F-34 — Stale comments and dead code (handbook §16 items 9, 10)
+
+- **ID:** F-34
+- **Area:** docs
+- **Severity:** low
+- **Confidence:** verified
+- **Location:** `src/main/strategies/leadLag.ts:1-17` (header comment "shadow recorder with live trading off"), `src/main/services/liveSpot.ts` (header claims Kraken; only Coinbase), `src/main/strategies/macroSniper.ts`, `src/main/services/noaaMetar.ts`
+- **Claim:** `leadLag.ts` still has a header comment that says "It is a recorder. leadLagLiveEnabled stays false." The comment was corrected inline at line 707-705 (in `sweep()`), but the file's header comment at line 1-17 still says shadow. Same in `liveSpot.ts`. `macroSniper.ts` and `noaaMetar.ts` are dead code per handbook §10.10.
+- **Failure:** Stale comments invite wrong assumptions. Handbook §16 item 9 already lists these. The leadLag.ts header is the more dangerous one because the comment is in the file a reader lands in to understand the live path.
+- **Test:** Fix or annotate the headers. Already in known-defects list.
+
+---
+
+### F-35 — `miniAuto.ts` and `quoter.ts` have not been fully reviewed in this pass; the trade history marks both as "operator hold" or retired, but their logic remains in code
+
+- **ID:** F-35
+- **Area:** engineering
+- **Severity:** low (not money-bearing)
+- **Confidence:** could-not-fully-check
+- **Location:** `src/main/strategies/miniAuto.ts`, `src/main/strategies/quoter.ts`
+- **Claim:** Both files are large (1,420 and 1,245 lines). The quoter is on operator hold and documented as losing; miniAuto has Polymarket US arms on operator hold. Both run; neither trades real money at this configuration. A full review would require another pass.
+- **Test:** Prioritize based on whether operator hold is lifted.
+
+---
+
+### F-36 — The trade-history report's headline +0.31c/contract consensus fill vs. the +6.39c shadow is the strongest single finding for "do not trade on shadow P&L"
+
+- **ID:** F-36
+- **Area:** methodology- **Severity:** medium (this is a *positive* methodological claim, not a defect — but its presence in the record is worth highlighting because it has implications for every other shadow)
+- **Confidence:** verified
+- **Location:** `docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:137-154`
+- **Claim:** The shadow's +6.39c becomes +0.12c in the live fill. The disagreement is structural (asks vs. shadow's mid; fees vs. shadow's no-fee assumption; timing slippage; entry eligibility). Every other shadow in the project is similarly priced. The sports-anchor out-of-sample +$12.11 over 253 vs. live −$5.14 over 8 is the same pattern at smaller n. The implication: a pre-registration that says "PASS at +6c on ≥100 shadow signals" is *not* equivalent to "PASS at +6c on live fills." The pre-registration mechanism should be changed to require both, or to require the live-fill measurement as the authoritative one.
+- **Test:** Update all pre-registrations to require the shadow → live reconciliation before live trading. The mean-reversion case (F-16) is the same pattern with different numbers.
+
+---
+
+## Top 5 ranked findings, by expected dollar impact
+
+I rank by *expected impact at this capital, over the next 90 days*, with no claim that these will dominate; lower-severity items may matter more in particular weeks.
+
+1. **F-04 / F-12 — Polymarket-consensus arm and the broader shadow-to-live reconciliation problem.** The arm has 86 settled markets, 260 contracts, 5 day-clusters, +0.12c net. The shadow said +6.39c. The trade history is candid; the finding is structural. The dollar impact of continuing to allocate live slots to a strategy whose realised edge is zero at n=86 is the opportunity cost of the slot — modest in absolute terms, but it is the single most defensible evidence-doctrine finding in the system. *Reasoning for ranking:* the methodology implications propagate to every other shadow, and a system with eight paper arms and multiple shadows will repeat it.
+
+3. **F-05 / F-20 — Lead-lag's +1.86c/contract period-D edge is on283 contracts and is structurally eroded by ~2.1–2.4% settlement basis.** This is the operator's only live arm with a non-zero settled record. The recent fill path is fundamentally sound (the trade history's diagnosis is good), but the headline figure cannot be trusted as the expected per-contract value until the settlement basis rate on the recent week is re-measured. *Reasoning for ranking:* lead-lag is where all the live money is, and the +1.86c headline does not survive a 2% loss-of-notional event. The conservative path is to halve the per-sweep size until the weekly settlement-basis read lands.
+
+4. **F-01 — Polymarket US paper-lab fee model is broken.** Every post-9/17 paper-lab decision (8 paper arms) is biased by ~16% of the fee term. The bias is in the *positive* direction (paper P&L is overstated). This affects the paper labs' verdicts and any "ready" promotion. *Reasoning for ranking:* the labs are the system's pre-live gate for Polymarket US; a +16% fee understatement on the gate biases every downstream decision. Cheap fix.
+
+5. **F-08 — Kill-switch denominates against equity but trips only on settled P&L.** A regime break with60 open positions held at mark-to-market loss will not trip the kill switch until settlements land, by which point the day's loss is at or near the slot cap. *Reasoning for ranking:* this is the largest single open risk-control gap. The 2026-09-13 kill-switch trip happened *because* six coins settled within hours; the same regime break distributed across 24-hour settlement windows would not have tripped.
+
+6. **F-16 — Mean-reversion arm has no measured prior edge for what it actually trades.** The Becker audit was a taker backtest on non-weather markets; the live arm is a maker on weather. The arm generates signals and vetoes them. This is documented as a finding, not a defect — but its presence in the ladder means the system holds the "only backtested edge" narrative for an arm that cannot fire on the population that was backtested. *Reasoning for ranking:* the decision this finding forces ("park mean-reversion or change its seat") is cheap to make and removes a confusion in the operator's record.
+
+(Honourable mention: F-14 multiplicity correction across 16+ arms. Lowest direct dollar impact, highest methodological significance.)
+
+---
+
+## Strongest disagreement
+
+The thing the operator most believes that I think is most likely wrong:
+
+**The lead-lag edge on period A's terms is reproducible at the current latency.**
+
+The trade history's own analysis isolates *latency* as the cause of the regime break and restoration of latency as the cure. The trade history does not commit to the period-A magnitude being reachable again; it says "the gap between A's +8.94c and D's +1.97c is unexplained on 283 contracts over two days; it needs a week." I read that as honest. But the operating model — `leadLagMaxContractsPerOrder` was *already reduced* from 8 to 1 as part of the cure, the proven-coins band is BTC/ETH/HYPE, the per-window cap is $15 — implies an end-state where the live edge is +1–2c/contract, which is structurally near zero after settlement basis (F-20). The path forward the operator is on is "restore the conditions of period A and watch the edge return." My read is that period A's edge is the lucky tail of a strategy whose base rate is closer to period D's +1.97c, and that "restore the conditions" without restoring the *unlucky* period-A quirks (size 713 contracts of which ~62 were in the basis-mismatched 2% subset, multiplying to ~13 lost contracts averaging −60c = −$8) is what period A actually measured.
+
+The disagreement is: the operator's model has lead-lag as a *latency edge*. I read it as a *dispersion edge whose expected value is dominated by the right tail of the dislocation distribution and the left tail of the settlement-basis rate*, and the live settings (1 contract, $15/window, 2 coins/direction) are pinning the strategy to the left tail. A 5p speed-up from 14s to 70ms does not change the basis rate; it changes the dislocation distribution slightly. The right way to test this is the cadence-shadow read on 2026-09-21, which compares 10s and 60s on the same dislocations, and the lead-lag basis cells read. Until those land, I would not scale lead-lag above 1 contract per sweep regardless of latency.
+
+I commit to this: lead-lag at 1 contract, $15/window, BTC/ETH only, with weekly basis reads, is the right shape for the next month. Everything else is variance.
+
+---
+
+## Could not check
+
+I did not have runtime access, private data, or full venue documentation. Items I could not verify from the source alone:
+
+- **The exact Polymarket US fee schedule on and after 2026-09-17 03:59 UTC.** The handler `polyPaper.ts:17` is broken; the venue-side adapter (`polymarketUs.ts:920`) reads `feeCoefficient` per market, which I cannot confirm matches the schedule. *Need:* the published Polymarket US fee document on or after that date.
+- **The IBKR/ForecastEx commission per product.** The lab hardcodes $0.01/contract. *Need:* the IBKR commission schedule for ForecastEx binary contracts.
+- **Kalshi's fee multiplier per series, and whether the `feeCoefficient` field on Kalshi markets is being read.** I see `kalshi.ts:1446-1447` reading `fee_multiplier` from the series endpoint, but did not trace every consumer. *Need:* a venue-by-venue audit of which fee coefficient is applied per series.
+- **The exact behavior of the Kill Switch when `maxDailyLossPct = 0`.** The code returns null. Whether the operator has this set non-zero in the live config is unknown to me. The backlog item 50 implies the engine backstop is "switched off" today.
+- **The Polymarket US `closeAsBuy` semantics and whether the engine's reservation machinery handles it correctly under load.** I traced the call site; I did not write a test.
+- **The current state of the WebSocket book agreement counter and the 7-day streak reading.** Backlog 56 says the per-process counter invalidates the historical streak; I did not compute a corrected reading.
+- **The exact list of `GENERIC_STRATEGIES` and whether the ladder count of 20 is correct as of 2026-09-18.** The handbook says 20; my static read of `ladder.ts` was not deep enough to verify the current list.
+- **Whether the 0.06 → 0.0695 fee change at Polymarket US is real.** F-01 turns on this. The doc comment in `polyPaper.ts` cites the change as fact; I could not verify against the live venue.
+- **The lead-lag settlement-basis rate for the most recent week.** The handbook says weekly; the most recent read is not in the file I read.
+- **Whether the `consensus` arm's hold-to-settlement rule applies correctly across a restart.** The fix at round 97 added it; I read the rule in `holdsToSettlement()` but did not trace every restart path.
+- **The exact Polymarket US minimum tick size handling.** The handbook §8.2 says tick is 0.001; I did not verify the adapter respects this.
+- **The IBKR Lab's `feeRate` per product.** The lab hardcodes; I did not see a path that overrides it per product.
+- **Whether the operator's live config sets `riskLimits.maxOpenPositions` and `maxStakePerBet` to non-zero.** Handbook §3.2 implies they are at the defaults (0). Backlog item 50 says so. I did not read the live config.
+
+For each: what would settle it is the runtime state, the venue documentation, and the live config, none of which are in the repository.
+
+---
+
+## Closing
+
+The system is honest. The trade history, the backlog, the developer handbook, the pre-registrations, and the change record read as one continuous attempt to test claims against evidence. The defects are catalogued, the trade history is candid about what worked and what did not, and the methodology bar (where it is applied) is high. The defects are at the seams between the methodology and the practice — the shadow-to-live gap (F-04, F-12, F-36), the fee-model bugs (F-01, F-03, F-10), the settlement-basis blind spot (F-20), the kill-switch denominator (F-08), the multiplicity across many arms (F-14). All of these are tractable, and most of them are already on the operator's list. The report is, more than anything, a confirmation that the project's own evidence doctrine is the right one and an identification of where its current practice lags it.

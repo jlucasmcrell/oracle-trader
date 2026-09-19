@@ -62,3 +62,9 @@ winning era and +0.45c over 93 in the honest-quote era. If our fills under the f
 Prior stats stay in `perfByStrategy` under `leadlag:pre-6c-20260918`; the ladder baseline for
 `kalshi-leadlag` restarts at this registration. Positions open at the switch (at most one 15-minute
 window's worth) settle into the new bucket; that is noted and immaterial at 1 contract.
+
+**Amendment 2026-09-19 (§127, review M-01).** The 6c and 3-minute cut points were chosen from the bucket table
+of the same 3,883-contract sample, so this file is a documented rule change, not a blind pre-registration; the
+counterfactual table cannot be evidence for the rule. Only fills placed under the rule (`kalshi-leadlag` baseline
+from 2026-09-18 19:50Z) judge it, and at the read the rule must also be positive on orderbook-quoted rows alone
+(`kalshiSource == 'orderbook'`), the only regime that resembles the forward one.

@@ -288,6 +288,19 @@ export function clusterT(df: number): number {
   if (df >= TABLE.length) return Math.max(CONFIDENCE_Z, 0.866 - (0.866 - CONFIDENCE_Z) * Math.min(1, (df - TABLE.length) / 45))
   return TABLE[df - 1]
 }
+/**
+ * One-sided 95% Student-t quantile on `df` degrees of freedom: the bar for adding SIZE. The 80% band above
+ * is a screening threshold - with ~18 arms each tested at repeated checkpoints, a fifth of zero-edge arms
+ * clear it at any one look, so it may admit an arm to tiny-live but must not scale one (external review
+ * 2026-09-19, five of five reports; §127). Stops keep the 80% band: stopping early costs time, not money.
+ */
+export function clusterT95(df: number): number {
+  const TABLE = [6.314, 2.92, 2.353, 2.132, 2.015, 1.943, 1.895, 1.86, 1.833, 1.812, 1.796, 1.782, 1.771, 1.761, 1.753]
+  if (!Number.isFinite(df) || df < 1) return TABLE[0]
+  if (df >= TABLE.length) return Math.max(SCALE_Z, 1.753 - (1.753 - SCALE_Z) * Math.min(1, (df - TABLE.length) / 45))
+  return TABLE[df - 1]
+}
+export const SCALE_Z = 1.645
 export const MAX_NOTCH = 4
 /** Markout observations needed before entry quality can veto a scale-up. */
 export const ADVERSE_MIN_N = 15
@@ -383,6 +396,8 @@ export function dayClusteredSe(groups: { n: number; sum: number }[], n: number, 
  * what bounds the cost of waiting for a fourth cluster.
  */
 export const MIN_STOP_CLUSTERS = 4
+/** When the v27 fee-model fix cleared every strategy's net-cents accumulator (main.log, 2026-09-18). */
+export const CALIB_CLEARED_AT = Date.parse('2026-09-18T13:34:23Z')
 
 export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: number): StageDecision {
   // Hard stop: -$5 per size notch, or three per-trade stakes, whichever is larger.
@@ -396,9 +411,19 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
   const z = ev.clusters !== undefined && ev.clusters >= 2 ? clusterT(ev.clusters - 1) : CONFIDENCE_Z
   const lo = ev.mean - z * ev.se
   const hi = ev.mean + z * ev.se
+  // Scaling up needs the 95% band AND the same cluster floor a stop needs. Until 2026-09-19 the positive
+  // branch had no cluster floor at all, so one correlated day could double an arm's size while the
+  // handbook said "a one-cluster band is never a verdict, in any tool" (§127, F-01).
+  const z95 = ev.clusters !== undefined && ev.clusters >= 2 ? clusterT95(ev.clusters - 1) : SCALE_Z
+  const lo95 = ev.mean - z95 * ev.se
+  const fewClusters = ev.clusters === undefined || ev.clusters < MIN_STOP_CLUSTERS
   const u = ev.unit ?? ''
   const at = `checkpoint ${ev.n} trades, net $${ev.netDollars.toFixed(2)}, mean ${ev.mean.toFixed(2)}${u} (80% band ${lo.toFixed(2)}..${hi.toFixed(2)})`
-  const up = (why: string): StageDecision => (notch >= MAX_NOTCH ? { kind: 'hold', checkpoint, reason: `${why}; already at max size x${MAX_NOTCH}` } : { kind: 'scale-up', checkpoint, reason: why })
+  const up = (why: string): StageDecision => {
+    if (notch >= MAX_NOTCH) return { kind: 'hold', checkpoint, reason: `${why}; already at max size x${MAX_NOTCH}` }
+    if (fewClusters) return { kind: 'hold', checkpoint: lastCheckpoint, reason: `${why}; but on ${ev.clusters ?? 'unverifiable'} day-cluster(s) - under ${MIN_STOP_CLUSTERS} the band measures one day, not the edge; held at this size` }
+    return { kind: 'scale-up', checkpoint, reason: why }
+  }
   // A band on the mean says nothing until the sample has observed its own downside. kalshi-fade buys NO
   // at 0.89-0.98, so a win pays 2-11c and a loss costs 89-98c; twenty straight wins is a 36% event at a
   // true rate of exactly the entry price, i.e. at zero edge. On 2026-09-09 that produced a band of
@@ -437,7 +462,10 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
         reason: `${at}: making money, but the price moves against us right after we enter (5-min markout ${ev.adverse!.mean.toFixed(2)}c, 80% band ${ev.adverse!.lo.toFixed(2)}..${ev.adverse!.hi.toFixed(2)} over ${ev.adverse!.n}) - not adding size to an arm that pays the spread to get in`
       }
     }
-    return up(`${at}: making money with 80% confidence`)
+    if (lo95 <= 0) {
+      return { kind: 'hold', checkpoint: lastCheckpoint, reason: `${at}: making money with 80% confidence but not 95% (lower ${lo95.toFixed(2)}${u}) - the screening band admits an arm, the confirmatory band adds size; keep testing at this size` }
+    }
+    return up(`${at}: making money with 95% confidence`)
   }
   if (hi < 0) {
     // Undefined fails this too: `clusters` is undefined exactly when the per-day buckets do not account for
@@ -1078,6 +1106,18 @@ export class Ladder {
     const p = st.perfByStrategy?.[key]
     const c = st.calib?.byStrategy?.[key] as unknown as { netN?: number; netSum?: number; netSq?: number; byDay?: Record<string, { n: number; sum: number }> } | undefined
     const b = s.baseline ?? {}
+    // A baseline captured before a calibration clear (v27, 2026-09-18) holds counts the accumulator no longer
+    // has, so the delta clamps to zero and the arm can never reach a checkpoint (§127, M-04: fade 17,
+    // volume-spike 23, sports-anchor 7 against post-clear counts of 19, 4, 0). Everything counted since the
+    // clear belongs to the current stage: reset the baseline to zero once and say so.
+    // The count test misses an arm whose accumulator has since overtaken its stale baseline (fade: 19 vs 17), so
+    // a stage that began before the clear is re-baselined by date as well; a baseline recaptured after the
+    // clear (any scale-up since) has since >= CALIB_CLEARED_AT and is left alone.
+    if ((c?.netN ?? 0) < (b.netN ?? 0) || (s.since < CALIB_CLEARED_AT && (b.netN ?? 0) > 0)) {
+      console.log(`[ladder] ${s.id}: baseline netN ${b.netN} predates the 2026-09-18 calibration clear (accumulator ${c?.netN ?? 0}); re-baselining to zero`)
+      for (const k of Object.keys(b)) if (k === 'netN' || k === 'netSum' || k === 'netSq' || k.startsWith('dayN:') || k.startsWith('daySum:')) b[k] = 0
+      s.baseline = b
+    }
     const n = Math.max(0, (c?.netN ?? 0) - (b.netN ?? 0))
     const sum = (c?.netSum ?? 0) - (b.netSum ?? 0)
     const sq = (c?.netSq ?? 0) - (b.netSq ?? 0)

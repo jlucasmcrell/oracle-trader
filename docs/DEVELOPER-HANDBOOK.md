@@ -424,9 +424,11 @@ Panels (`src/renderer/src`): `App.tsx` (shell, paper/live toggle, manual orders,
 - **Prices**: dollar strings (`yes_bid_dollars`); sizes are fixed-point strings (`_fp`). **Orders are priced on the
   YES leg** even for NO orders. Getting this wrong made NO entries that never filled and exits that swept the book
   (fixed 2026-08-28).
-- **Taker fee**: `ceil(7 × P × (1 − P))` cents per contract (0.07 × series multiplier × C × P × (1−P), rounded up).
-  Maker fee applies only on maker-fee series, coefficient 0.0175. Both are implemented in code
-  (`kalshiOrderFeeCents` in `autoTrader.ts`, `kalshiTakerFeeCents` in `leadLag.ts`).
+- **Taker fee**: `ceil` to $0.0001 of `0.07 × series multiplier × C × P × (1−P)` on the ORDER total, with C the
+  FRACTIONAL contract count (`kalshiOrderFeeDollars` in `util/kalshiFee.ts`, the only fee path). Maker fee applies
+  only on maker-fee series, coefficient 0.0175. The per-contract cent-ceil this line used to state overstated the
+  aggregate fee 1.42× (D1, 2026-09-18), and rounding C to a whole contract understated a 1.49-contract order by a
+  third (§127, 2026-09-19); both are gone.
 - **Shards**: Kalshi runs several matching-engine shards (`exchange_index`). Collateral is held **per shard**; an
   order on an unfunded shard is rejected even when the aggregate balance covers it. Weather markets settle on
   shard 0. Order groups (circuit breakers) are per shard. Cancel and amend must be routed to the order's shard.
@@ -893,6 +895,20 @@ These rules came from specific incidents. Breaking one has cost money or produce
 12. **A test must be shown to fail without its fix** (mutation check), and a reviewer's empty result is not a pass until
     its own probes are explained.
 13. **Every deferred decision gets a checkable trigger** in `docs/BACKLOG.md`.
+14. **Screening and confirmatory bands are different bars** (2026-09-19, §127). The ladder's one-sided 80% band is a
+    screen: it may admit an arm to tiny-live. Adding size needs the one-sided 95% band on a day-clustered SE AND
+    the same ≥4-cluster floor a stop needs (`clusterT95`, `decideStage`). With ~18 arms at repeated checkpoints a
+    fifth of zero-edge arms clear an 80% screen at any one look; no fleet-wide correction is applied, the -$5 stop
+    bounds each arm, and the honest check is a block-resampled zero-edge simulation of the ladder (backlog).
+15. **The estimand is net per contract; clustering changes the variance, never the mean.** Averaging daily means
+    let six +10c single-trade days outvote one 94-trade -1c day. The labs now weight every contract equally and
+    cluster the standard error by day.
+16. **Shadow P&L does not promote; fills at the price the arm will pay do.** Consensus graded +6.39c/contract at
+    the ask in shadow and settled +0.12c on 260 real contracts; sports-anchor +$12.11 out-of-sample, -$5.14 live.
+    A pre-registration's PASS earns a tiny-live proposal; the live read at that size is the evidence.
+17. **A winning era is a regime, not a target.** Lead-lag's +8.94c/contract (09-07..12) was measured against the
+    stale quote that generated the trade, on a partition drawn after the fact. The forward planning number is
+    +1.5c/contract until a five-cluster read at the current configuration says otherwise.
 
 ---
 

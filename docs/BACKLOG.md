@@ -1946,3 +1946,21 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   permanent once pushed, and orphaned objects stay reachable by SHA; (2) when external reports come back, triage
   each finding against `docs/DEVELOPER-HANDBOOK.md` §16 and this backlog before acting, and record accepted
   findings as numbered rounds with their own triggers. Trigger: on the operator handing back any external report.
+- **156. Ladder false-promotion rate under a zero-edge null (§127, ChatGPT F-02).** Block-resample the day clusters of
+  every arm's settled history with the sign randomised, run `decideStage` exactly as production does at every
+  checkpoint, and report how often at least one null arm reaches each notch. Trigger: **2026-09-26**, when >= 5 arms
+  have >= 20 post-v27 settlements.
+- **157. Executable-bound lead-lag regrade (§127, ChatGPT F-07).** Regrade `leadlag-dislocations.jsonl` orderbook rows
+  against the adverse Polymarket side (ask for a Kalshi YES buy, bid for a sell) instead of the mid, stratified by
+  Polymarket spread. Trigger: with the cadence read on **2026-09-21**. If the edge lives only in wide spreads the
+  trigger is partly book noise.
+- **158. Settlement-basis tail per sweep size (§127, DS-Pro S-01).** In the 2026-09-25 basis read, compute expected
+  daily edge = alpha x N x P(win) - fullPosition x P(divergent fill) at 1, 2, 4 and 8 contracts. Any size above 1
+  needs that number positive.
+- **159. Kill switch is settlement-only (§127, Minimax F-08). OPERATOR.** `dayRealizedForKill` sums settled P&L; a
+  regime break held in 60 unsettled positions never trips it. Recommendation: add open mark-to-market losses at
+  full weight to the daily kill. Loss limits are the operator's; nothing changes until Joe says so.
+- **160. OpenRouter spend (§127, Minimax F-28). OPERATOR.** Measured ~$25/day on 09-13/14 with no per-caller
+  metering; credit was low on 09-18. Recommendation: a hard monthly cap or Ollama-only for the nightly review.
+- **161. Lead-lag coin cohort forward window (§127, ChatGPT F-03).** Frozen from 2026-09-19 00:00Z; read at >= 400
+  contracts and >= 5 day-clusters as one cohort (**2026-09-24** at the earliest). No membership change before then.

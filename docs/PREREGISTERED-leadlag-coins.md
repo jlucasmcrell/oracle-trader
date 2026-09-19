@@ -158,3 +158,9 @@ reached, not to raise size early.
 **Amendment 2026-09-17 09:56Z (REVIEW-CHANGES §111).** Dislocation rows before 09:40Z priced Kalshi from a cached
 list endpoint, 20-40 s stale. Any per-coin graded-signal comparison in this registration uses only rows with
 `kalshiSource == 'orderbook'`. Fill-based per-coin results are unaffected.
+
+**Amendment 2026-09-19 (§127, review F-03).** Coin membership was changed after reading outcomes (HYPE retained
+on 09-16 for a positive six-hour ledger; ETH/HYPE given their own 100-row test after being the two negative
+coins). Everything in this file up to 2026-09-19 00:00Z is therefore labelled EXPLORATORY. One forward window
+starts at 2026-09-19 00:00Z with the coin set frozen at the ladder's proven list and the cohort rule as written
+(>= 400 contracts, >= 5 day-clusters, judged as one cohort); no coin leaves or joins before that read.

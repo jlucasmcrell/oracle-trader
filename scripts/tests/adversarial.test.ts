@@ -389,7 +389,8 @@ async function main(): Promise<void> {
     delete (L.state.strategies.convergence as { sizesVersion?: number }).sizesVersion
     await ladder.run()
     eq('F: size table re-applied once', { daily: cfg.convergenceMaxDailyTrades, v: (L.state.strategies.convergence as { sizesVersion?: number }).sizesVersion }, { daily: 6, v: 2 })
-    const trades = (n: number, cents: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ ts: new Date().toISOString(), status: 'settled', realizedPnlCents: cents(i) }))
+    // Five event clusters (2026-09-19: adding size needs >= 4 clusters and the 95% band); every cluster holds three +12 and one -20.
+    const trades = (n: number, cents: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ ts: new Date().toISOString(), status: 'settled', realizedPnlCents: cents(i), eventTicker: `EV-${i % 5}` }))
     writeFileSync(join(dir3, 'crypto-convergence.json'), JSON.stringify({ trades: trades(19, () => 6) }))
     await ladder.run()
     eq('F: 19 trades: no checkpoint yet', { stage: conv().stage, cp: L.state.strategies.convergence.lastCheckpoint }, { stage: 'tiny-live', cp: 0 })
@@ -413,7 +414,7 @@ async function main(): Promise<void> {
     status.perfByStrategy = { settlement: { trades: 20, realizedPnl: 1.2 } }
     // netSq 1936 -> sd 8c on a mean of 6c: a real winning sample has losers in it. A uniform +6c x20
     // (netSq 720, sd 0) is now correctly refused as a one-sided sample - see the round-63 guard.
-    status.calib = { byStrategy: { settlement: { netN: 20, netSum: 120, netSq: 1936 } } }
+    status.calib = { byStrategy: { settlement: { netN: 20, netSum: 120, netSq: 1936, byDay: { d1: { n: 5, sum: 30 }, d2: { n: 5, sum: 30 }, d3: { n: 5, sum: 30 }, d4: { n: 5, sum: 30 } } } } }
     // shard 0 must carry the bigger size first: held (and retried) until it does
     shard0 = 6
     await ladder.run()
@@ -469,7 +470,7 @@ async function main(): Promise<void> {
     eq('G: the rest wait for the stagger', { m: st('kalshi-momentum').stage, p: st('polyus-fade').stage, why: st('kalshi-momentum').lastVerdict?.includes('promotion held') }, { m: 'disabled', p: 'disabled', why: true })
     // fade: 20 graded trades, +6c each, +$1.20 -> checkpoint win -> stake x2; momentum enters on the same run
     status.perfByStrategy = { fade: { trades: 20, realizedPnl: 1.2 } }
-    status.calib = { byStrategy: { fade: { netN: 20, netSum: 120, netSq: 1936 } } }
+    status.calib = { byStrategy: { fade: { netN: 20, netSum: 120, netSq: 1936, byDay: { d1: { n: 5, sum: 30 }, d2: { n: 5, sum: 30 }, d3: { n: 5, sum: 30 }, d4: { n: 5, sum: 30 } } } } }
     L.state.lastPromotionAt = 0
     await ladder.run()
     eq('G: fade checkpoint win doubles its stake', { stage: st('kalshi-fade').stage, mult: (cfg.strategySizeMult as Record<string, number>)?.fade }, { stage: 'live', mult: 2 })
@@ -493,21 +494,23 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     eq('G: Polymarket US fade and book on at multiplier 1', { fade: mcfg.fadeEnabled, book: mcfg.bookEnabled, mult: mcfg.strategySizeMult }, { fade: true, book: true, mult: { fade: 1, 'book-imbalance': 1, 'weather-fair': 1 } })
     eq('G: fade still in its cool-down', st('kalshi-fade').stage, 'disabled')
     // Polymarket US fade: 20 closes at +$0.10 in the research log -> x2
-    // 16 x +$0.25 and 4 x -$0.50: same +$2.00 net and $0.10 mean as a uniform run, but two-sided.
-    writeFileSync(join(dir4, 'mini-auto-polymarket-us.json-research.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ type: 'closed', strategy: 'fade', ts: new Date().toISOString(), marketId: `pm-${i}`, pnl: i % 5 === 4 ? -0.5 : 0.25 })).join(String.fromCharCode(10)))
+    // 16 x +$0.35 and 4 x -$0.50: +$3.60 net, $0.18 mean, two-sided, and wide enough for the 95% band (2026-09-19).
+    ;(L.state.strategies['polyus-fade'] as { since?: number }).since = Date.now() - 6 * 86_400_000
+    writeFileSync(join(dir4, 'mini-auto-polymarket-us.json-research.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ type: 'closed', strategy: 'fade', ts: new Date(Date.now() - (i % 4) * 86_400_000).toISOString(), marketId: `pm-${i}`, pnl: i % 5 === 4 ? -0.5 : 0.35 })).join(String.fromCharCode(10)))
     await ladder.run()
     eq('G: Polymarket US fade scales on its research log', { stage: st('polyus-fade').stage, mult: (mcfg.strategySizeMult as Record<string, number>)?.fade }, { stage: 'live', mult: 2 })
     // lead-lag: 20 swept markets settled at +$0.05 through the venue ledger -> 2 contracts
     const now = Date.now()
+    ;(L.state.strategies['kalshi-leadlag'] as { since?: number }).since = now - 6 * 86_400_000
     // Rows the venue merely ACCEPTED (no fill count) are not evidence: before
     // 2026-09-08 every accepted IOC wrote executed:true and the arm scaled on
     // settlements it never held.
-    writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now).toISOString(), kalshiTicker: `KXT-${i}`, executed: true })).join(String.fromCharCode(10)))
+    writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now - (i % 4) * 86_400_000).toISOString(), kalshiTicker: `KXT-${i}`, executed: true })).join(String.fromCharCode(10)))
     // 16 x +$0.125 and 4 x -$0.25: +$1.00 net, $0.05 mean, sd $0.15 - a winning sample that has lost.
-    for (let i = 0; i < 20; i++) details.push({ timestamp: now, marketId: `KXT-${i}`, realizedPnl: i % 5 === 4 ? -0.25 : 0.125, shares: 1 })
+    for (let i = 0; i < 20; i++) details.push({ timestamp: now - (i % 4) * 86_400_000, marketId: `KXT-${i}`, realizedPnl: i % 5 === 4 ? -0.25 : 0.125, shares: 1 })
     await ladder.run()
     eq('G: lead-lag does not scale on zero-fill sweeps', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'tiny-live', n: 1 })
-    writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now).toISOString(), kalshiTicker: `KXT-${i}`, executed: true, filledContracts: 1 })).join(String.fromCharCode(10)))
+    writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now - (i % 4) * 86_400_000).toISOString(), kalshiTicker: `KXT-${i}`, executed: true, filledContracts: 1 })).join(String.fromCharCode(10)))
     await ladder.run()
     eq('G: lead-lag scales by contracts', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'live', n: 2 })
   }

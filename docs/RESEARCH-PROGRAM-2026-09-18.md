@@ -90,3 +90,7 @@ adversely selected.
 
 No new live arm without a pre-registration, a shadow read with a sign, and the ladder's micro stage. No
 subscription, deposit or key without the operator. No strategy that needs a forecast we do not have.
+
+**2026-09-19 amendment.** Planning number for lead-lag is +1.5c/contract (handbook §12.17); +8.94c is a regime
+figure and appears in no forward decision. Adding size anywhere on the ladder now needs the one-sided 95%
+day-clustered band and >= 4 clusters (§12.14); 80% admits to tiny-live only.

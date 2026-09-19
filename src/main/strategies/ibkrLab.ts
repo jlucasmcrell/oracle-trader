@@ -57,10 +57,13 @@ export class IbkrLab {
     const s=this.state
     const strategies:IbkrLabStrategyRow[]=IBKR_STRATEGIES.map(def=>{
       const all=s.trades.filter(t=>t.strategy===def.id),trades=all.filter(t=>t.openedAt>=IBKR_RULES_SINCE),legacy=all.filter(t=>t.openedAt<IBKR_RULES_SINCE),positions=s.positions.filter(p=>p.strategy===def.id)
-      const days=new Map<string,number[]>();for(const t of trades){const key=day(t.closedAt),v=days.get(key)??[];v.push(t.net/t.quantity);days.set(key,v)}
-      const means=[...days.values()].map(a=>a.reduce((x,y)=>x+y,0)/a.length),mean=means.length?means.reduce((a,b)=>a+b,0)/means.length:0
-      const se=means.length>1?Math.sqrt(means.reduce((a,b)=>a+(b-mean)**2,0)/(means.length-1)/means.length):Infinity
-      const critical=means.length<=2?12.706:means.length===3?4.303:means.length<=5?3.182:means.length<=10?2.776:means.length<=30?2.262:1.96
+      // Estimand: net per CONTRACT (contract-weighted), standard error clustered by day. The equal-day mean used
+      // until 2026-09-19 could pass liveEligible on a strategy that lost money per contract (external review
+      // §127, F-04). G = day clusters; se = sqrt(G/(G-1) x sum_d (S_d - n_d x mean)^2) / N.
+      const days=new Map<string,{n:number;sum:number}>();for(const t of trades){const key=day(t.closedAt),v=days.get(key)??{n:0,sum:0};v.n+=t.quantity;v.sum+=t.net;days.set(key,v)}
+      const groups=[...days.values()],N=groups.reduce((a,g)=>a+g.n,0),mean=N?groups.reduce((a,g)=>a+g.sum,0)/N:0
+      const se=groups.length>1&&N>0?Math.sqrt(groups.length/(groups.length-1)*groups.reduce((a,g)=>a+(g.sum-g.n*mean)**2,0))/N:Infinity
+      const G=groups.length,critical=G<=2?12.706:G===3?4.303:G<=5?3.182:G<=10?2.776:G<=30?2.262:1.96
       const confidenceLow=Number.isFinite(se)?mean-critical*se:undefined
       let unrealized=0,unpriced=0
       for(const p of positions){const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)];if(q&&freshAsk(q,now))unrealized+=(1-q.ask!-slippage-fee-p.entry)*p.quantity-p.entryFee;else unpriced++}

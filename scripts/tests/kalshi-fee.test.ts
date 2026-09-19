@@ -50,6 +50,17 @@ assert.equal(kalshiOrderFeeDollars(R, 0.5, 1), 0.0175)
 assert.equal(kalshiOrderFeeDollars(R, 0.02, 1), 0.0014)
 ok('order-total 4dp ceil')
 
+// Fractional contract counts are charged as fractions (2026-09-19, §127): 536 of 596 fractional live fills
+// matched the fractional-C formula, 2 matched the rounded one. A $1 YES at 67c is 1.49 contracts and pays
+// 2.31c, not the 1.55c a whole-contract rounding produced; a 0.5-contract fill pays half the fee, not all of it.
+assert.equal(kalshiOrderFeeDollars(R, 0.67, 1.49), 0.0231)
+assert.equal(kalshiOrderFeeDollars(R, 0.5, 0.5), 0.0088)
+assert.equal(kalshiOrderFeeDollars(R, 0.93, 1.0753), 0.005)
+assert.ok(Math.abs(kalshiFeeCentsPerContract(R, 0.5, 0.5) - 1.76) < 1e-9, 'per-contract on a half contract')
+assert.equal(kalshiOrderFeeDollars(R, 0.5, 0), 0.0175, 'a non-positive count still prices one contract')
+assert.equal(kalshiOrderFeeDollars(R, 0.5, Number.NaN), 0.0175, 'a bad count still prices one contract')
+ok('fractional contracts')
+
 // Per contract is the order fee spread across the contracts.
 assert.equal(kalshiFeeCentsPerContract(R, 0.02, 50), 0.1372)
 assert.equal(kalshiFeeCentsPerContract(R, 0.5, 10), 1.75)

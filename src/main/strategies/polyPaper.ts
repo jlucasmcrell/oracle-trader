@@ -79,8 +79,11 @@ export class PolyPaperLab {
       strategies:POLY_PAPER_STRATEGIES.map(def=>{
         const all=s.trades.filter(t=>t.strategy===def.id),trades=all.filter(t=>t.opened>=POLY_PAPER_RULES_SINCE),legacy=all.filter(t=>t.opened<POLY_PAPER_RULES_SINCE),positions=s.positions.filter(p=>p.strategy===def.id),byDay=new Map<string,number[]>()
         for(const t of trades){const day=new Date(t.closed).toISOString().slice(0,10);byDay.set(day,[...(byDay.get(day)??[]),t.net])}
-        const means=[...byDay.values()].map(a=>a.reduce((n,v)=>n+v,0)/a.length),days=means.length,mean=means.reduce((n,v)=>n+v,0)/Math.max(1,days)
-        const se=days>1?Math.sqrt(means.reduce((n,v)=>n+(v-mean)**2,0)/(days-1)/days):undefined
+        // Estimand: net per CONTRACT (every trade weighted equally), with the standard error clustered by day.
+        // Until 2026-09-19 this averaged the daily means, which let six +10c single-trade days outvote one
+        // 94-trade -1c day (external review §127, F-04): clustering belongs in the variance, not the mean.
+        const days=byDay.size,N=trades.length,mean=N?trades.reduce((n,t)=>n+t.net,0)/N:0
+        const se=days>1?Math.sqrt(days/(days-1)*[...byDay.values()].reduce((n,a)=>n+(a.reduce((x,v)=>x+v,0)-a.length*mean)**2,0))/N:undefined
         const lower=se===undefined?undefined:mean-2.8*se,upper=se===undefined?undefined:mean+2.8*se
         let unrealized=0,unpriced=0
         for(const p of positions){const q=s.quotes[p.market.id];if(!q||now-q.at>2*MINUTE){unpriced++;continue}const exit=Math.max(0,sideQuote(q,p.side).bid-.01);unrealized+=exit-p.entry-p.fee-polyPaperOrderFee(PAPER_SHARES,exit,now,false,p.market.feeRate)}

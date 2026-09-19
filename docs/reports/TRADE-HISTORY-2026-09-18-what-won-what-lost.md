@@ -214,3 +214,16 @@ consensus's category mix at its next ladder checkpoint against the grader, not a
    unchanged coins and cadence.
 4. ETH and HYPE are negative on both graded signal and fills in the new era; verdict due
    2026-09-21 (backlog 137).
+
+---
+
+## Amendment 2026-09-19 (external review, REVIEW-CHANGES §127)
+
+Five independent model reviews of the public repository each named §7 item 2 - "Period A's +8.94c is the
+target, not a fluke" - as the single belief in this record most likely to be wrong. Their argument holds:
+period A's boundary was drawn after the fact; its gaps were measured against the same stale list quote that
+generated the trade; four other things changed at its edges (coins, cadence, size, quote source); and the honest
+orderbook era grades +1.35c signal / +1.86c realized, a fifth of it. The supported statement is narrower:
+low execution latency appears NECESSARY for lead-lag to earn; nothing here shows it is SUFFICIENT to recover
++8.94c. Item 2 is withdrawn. Period A is recorded as a regime. The forward planning number for lead-lag is
+**+1.5c/contract** (handbook §12.17), and no sizing or cadence change is judged against +8.94c.

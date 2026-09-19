@@ -4327,3 +4327,65 @@ Operator: "reset Poly paper, start it at the same amount Live has in real money;
   before the next reset). `POLY_PAPER_RULES_SINCE` is unchanged.
 - Cash-to-cash is the comparison: the lab accounts hold cash only, so they start at the live account's cash, not
   its cash plus the two long-locked positions. The 09-24 paper-lab read now dates from this reset.
+
+## §127 - 2026-09-19 09:00Z: five external model reviews triaged; four code defects fixed, two doctrine changes
+
+The public repository was reviewed by ChatGPT, DeepSeek, DeepSeek Pro, Gemini and Minimax-M3 with
+`docs/REVIEW-REQUEST-PROMPT.md` (reports in `docs/reports/LLM Reviews/`). Every concrete claim was tested against
+the code, the fills archive or the live state before anything changed. Verdicts:
+
+**Confirmed and fixed (code)**
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| ChatGPT F-01: the ladder scaled an arm up on a positive 80% band with NO cluster floor, and the 100-trade sign rule scaled it unclustered, while the handbook says a one-cluster band is never a verdict | verified in `decideStage` | any scale-up now needs >= `MIN_STOP_CLUSTERS` (4) day-clusters, same as a stop; a held win leaves the checkpoint unjudged |
+| ChatGPT F-02, DeepSeek F-04, DS-Pro M-03, Gemini F-01, Minimax F-14: ~18 arms at repeated one-sided 80% looks with no multiplicity control | verified (one `lbBonferroni` exists, scoped to the BTC gate) | 80% is now the SCREEN (admits to tiny-live); adding size needs the one-sided 95% day-clustered band (`clusterT95`, `SCALE_Z`). No fleet-wide correction; the -$5 stop bounds each arm; the empirical check is backlog 156 |
+| ChatGPT F-04: both paper labs averaged daily means, so six +10c single-trade days outvote one 94-trade -1c day; `liveEligible` fed off it | verified (`polyPaper.ts`, `ibkrLab.ts`) | estimand is now net per contract with a day-clustered SE in both labs |
+| ChatGPT F-05: the fee helper rounded fractional contract counts to whole contracts; orders are fractional ($1 / price) | verified EMPIRICALLY: of 596 fractional fills with a fee, the venue's fee matched the fractional-C formula on 536 and the rounded-C formula on 2 | `kalshiNormaliseContracts` returns the fractional count |
+| DS-Pro M-04: the v27 calibration clear left the ladder baselines' `netN` above the accumulators, clamping the stage delta to zero | verified in state: fade 17 vs 19, volume-spike 23 vs 4, sports-anchor 7 vs 0 | `traderEvidence` re-baselines to zero when the accumulator is below the baseline OR the stage began before the clear (`CALIB_CLEARED_AT`, 13:34:23Z); logged. Ran 08:46Z (volume-spike, sports-anchor) and 08:50Z (fade, 17 -> 0) |
+| DeepSeek F-01: handbook §8.1 still stated the per-contract cent-ceil | verified as a DOC defect only (code used the canonical helper) | §8.1 rewritten; the impact claim ("rejects trades that clear") was already false |
+
+**Confirmed and adopted (doctrine, handbook §12.14-17)**
+
+- Five of five reports named "+8.94c is the target" as the belief most likely wrong. Withdrawn (trade-history
+  amendment). Planning number +1.5c/contract. Period A is a regime.
+- DS-Pro M-01: the 6c gap floor was cut from the sample that judges it. The pre-registration now says so; the
+  rule is judged on post-floor, orderbook-quoted fills only.
+- ChatGPT F-03: the lead-lag coin cohort was edited after outcomes. Everything to 2026-09-19 00:00Z is
+  exploratory; one frozen forward window starts there.
+- Minimax F-04/F-12/F-36: shadow +6.39c became +0.12c in fills; sports-anchor +$12.11 out-of-sample became
+  -$5.14 live. Shadow P&L never promotes (§12.16).
+- Minimax F-13: the consensus pre-registration's 95% lower-bound criterion governs promotion, not the ladder's
+  80% (moot now that size needs 95% anyway).
+
+**Deferred with triggers (backlog 156-161)**: ladder null simulation; executable-bound lead-lag regrade
+(ChatGPT F-07); settlement-basis tail per sweep size (DS-Pro S-01, Minimax F-20 - whose "-1.7c" arithmetic
+treated a divergent window as a certain full loss, which it is not; the realized figures already include those
+windows); kill-switch mark-to-market component (Minimax F-08, verified: `dayRealizedForKill` is settlement-only -
+loss limits are the operator's, recommendation stated); OpenRouter spend cap (Minimax F-28, handbook §16.15 -
+operator's).
+
+**Refuted (with the evidence)**
+
+- Minimax F-01, "the paper lab's fee ternary is eaten by optional chaining and never steps to 0.0695": `?.`
+  followed by a digit is not the optional-chaining token in JavaScript; `node -e` evaluates the expression to
+  0.0695. The comment above it is accurate.
+- Minimax F-02, "the favourite side gets no calibration": the favourite leg uses
+  `1 - 2 x calibratedYesRate(1 - yesExec)` (autoTrader.ts:2635, :3364) - padded twice, not identity.
+- DeepSeek F-03, "reservation tokens leak on restart": tokens exist only for in-flight orders; a cache miss reads
+  the venue, whose positions include anything that filled before the crash (`countOpenPositions`).
+- DeepSeek F-06, "the paper broker's fee is unrounded": `engine/paper.ts` imports `kalshiOrderFeeDollars`.
+- DeepSeek F-05's "settlement-disagreement arbitrage" is, by its own mechanism paragraph, a directional bet
+  near the strike, and the conditional gap analysis is the basis read already scheduled.
+- DeepSeek F-07 (long-horizon cap held by stale positions): addressed the same day (§125, cap 8+4).
+- Gemini (no repository access): F-02 assumes a flat minimum fee Kalshi does not charge; F-03 is a hypothesis
+  with no evidence; F-04 misdescribes the lab, which requires a later ask strictly below the resting limit;
+  its three "untried" strategies exist (dutch arm, long-horizon cap, sports-anchor at -$5.14).
+- Minimax F-06/F-07/F-21/F-26/F-30-F-35, DS-Pro P-02/C-01, Minimax F-16: already in backlog 49/50/51/56 or
+  handbook §16, or operator settings; no change.
+
+**Known, restated usefully**: DS-Pro P-01 - measured run-rate is negative and the ceiling at this capital is a
+few dollars a day. True, recorded, and the reason the program is research first.
+
+Tests: 18/18 (ladder and adversarial fixtures rewritten to supply >= 4 clusters and 95%-clearing evidence, with
+the doctrine date on each). Restarted 08:48:03Z on the 08:47:59Z bundle.
