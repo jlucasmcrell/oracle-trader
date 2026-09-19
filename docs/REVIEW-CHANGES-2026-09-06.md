@@ -4479,3 +4479,18 @@ Operator: "let's do the free things". None needed anything from the operator.
 
 A 120 ms stagger of lead-lag's Kalshi reads (Gemini Pro F-01) is NOT in: it changed the direction-seat
 sequencing a regression test protects (§129); backlog 164 measures first.
+
+## §132 - 2026-09-19 11:10Z: read dates are surfaced automatically; PASS is acted on by the maintainer
+
+Operator: "I won't remember this and will need a reminder or it will need to be automatic somehow."
+
+- `scripts/due-triggers.mjs` parses every dated `Trigger:` in `docs/BACKLOG.md` (number-aware: the last bullet
+  per item number wins, a DONE/CLOSED bullet retires the number, only dates inside the trigger sentence count,
+  and the read date is the latest one the trigger names). `maintenance.ps1` runs it before the daily session:
+  it writes `data/due-triggers.md`, pushes the DUE list to the operator's alert webhook once a day, and the
+  session's prompt now begins with "read data/due-triggers.md; every DUE item is a read to perform today; a
+  PASS the registration assigns to the maintainer, act on". First push went out at 10:58Z.
+- `PREREGISTERED-leadlag-polyws-shadow.md` amended: on PASS the maintainer ships the event-driven Kalshi read as
+  a shadow and, if that passes its own five-cluster read, switches the live arm's quote source and reports it -
+  the same way every lead-lag configuration change to date was made. The operator is not asked. Sizes, loss
+  limits, funding, keys and the global arm stay his.

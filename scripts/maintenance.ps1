@@ -30,7 +30,10 @@ while ((Test-Path $lock) -and (((Get-Date) - (Get-Item $lock).LastWriteTime).Tot
 }
 "maintenance $PID $(Get-Date -Format o)" | Set-Content $lock
 $skill = 'G:/PROJECTS/oracle-trader/docs/MAINTENANCE-PROMPT.md'
-$prompt = "You are running HEADLESS from Windows Task Scheduler: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. Read the file $skill and follow every step in order. For step 6 write the report to docs\reports\$stamp.md and skip the sending: a separate desktop task delivers that file at 08:30. Finish everything; end by printing DONE and a five-line summary of what changed and what needs the operator (usually nothing)."
+# Which backlog reads are due today (dated triggers in docs/BACKLOG.md). Pushes the list to the operator's alert
+# webhook once a day and writes data/due-triggers.md for the session: nobody has to remember a read date.
+& node scripts/due-triggers.mjs --notify 2>&1 | Tee-Object -FilePath $log -Append
+$prompt = "You are running HEADLESS from Windows Task Scheduler: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. FIRST read G:\PROJECTS\oracle-trader\data\due-triggers.md: every item under DUE is a pre-registered read you must perform today, exactly as its backlog entry and pre-registration say, recording the result in docs\BACKLOG.md and REVIEW-CHANGES; a PASS that the registration says the maintainer acts on, you act on. Then read the file $skill and follow every step in order. For step 6 write the report to docs\reports\$stamp.md and skip the sending: a separate desktop task delivers that file at 08:30. Finish everything; end by printing DONE and a five-line summary of what changed and what needs the operator (usually nothing)."
 "[$(Get-Date -Format o)] start" | Tee-Object -FilePath $log -Append
 # The scheduler passes the user environment, where ANTHROPIC_API_KEY (an un-scoped key) overrides the
 # claude.ai login and every request fails with 400 (2026-09-08 07:00 run). Use the login.

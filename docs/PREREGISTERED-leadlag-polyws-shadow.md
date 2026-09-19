@@ -34,3 +34,11 @@ Rows with `polyWs.ageMs <= 5000`, per UTC day, five days minimum, read on **2026
 
 A proposal, not a switch. Any change to the quote the live arm acts on is its own pre-registration with the
 five-cluster bar and the +1.5c/contract planning number (handbook §12.17).
+
+**Amendment 2026-09-19 11:00Z - who acts on PASS.** The operator will not be asked. If both reads pass on or
+after 2026-09-24, the maintainer writes the follow-on registration for the event-driven Kalshi read and ships it
+as a shadow first; if THAT passes its own five-cluster read, the maintainer switches the live arm's quote source
+and reports it, the way every lead-lag configuration change to date was made (gap floor, cadence, coin set).
+Nothing here touches sizes, loss limits, funding, keys or the global arm, which stay the operator's. The read
+dates are surfaced automatically: `scripts/due-triggers.mjs` runs before every daily maintenance session and
+pushes the due list to the operator's alert webhook.

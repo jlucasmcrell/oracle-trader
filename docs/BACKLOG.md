@@ -2006,3 +2006,7 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   moneyline / RFI / totals top moves, and the cents available to a taker at the stale book minus the fee.
 - **167. Lead-lag Polymarket WebSocket shadow (§131, pre-registered).** Trigger: read on **2026-09-24** per
   `docs/PREREGISTERED-leadlag-polyws-shadow.md`.
+- **168. Due reads are automatic (2026-09-19).** `scripts/due-triggers.mjs` parses every dated trigger in this file;
+  `maintenance.ps1` runs it first, pushes the DUE list to the alert webhook once a day, and the daily session reads
+  `data/due-triggers.md` before anything else. A PASS a registration assigns to the maintainer is acted on without
+  asking. Trigger: none - standing.
