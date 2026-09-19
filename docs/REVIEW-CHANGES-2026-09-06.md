@@ -4404,7 +4404,7 @@ model at a fraction of a cent, which is the intended floor either way. The three
 hunch-challenger (gpt-5.6-sol, 81 calls) and news vetting (deepseek-v4-pro); the critic already runs on Gemini
 flash. Those remain as configured (`hunchChallengerModel`, `intelligenceSecondaryModel`).
 
-## §129 - 2026-09-19 10:30Z: two more external reviews (Gemini Pro, Gemini Flash); one live arm was trading the wrong markets
+## §129 - 2026-09-19 09:40Z: two more external reviews (Gemini Pro, Gemini Flash); one live arm was trading the wrong markets
 
 **Confirmed and fixed**
 

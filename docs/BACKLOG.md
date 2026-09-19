@@ -1979,6 +1979,6 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   sequencing preserved (the 120 ms stagger changed it and was reverted).
 - **150 note (Flash F-10).** IJC baskets are excluded from any basket claim: Kalshi "at least" vs ForecastEx
   "exceed" lose both legs on an exact-strike print.
-- **Consensus re-based (§129).** Trades before 2026-09-19 10:30Z live under `consensus:pre-matcher-20260919`.
+- **Consensus re-based (§129).** Trades before 2026-09-19 09:39Z live under `consensus:pre-matcher-20260919`.
   Trigger: first read at >= 40 settled contracts on winner markets with `side`, or **2026-10-13** (the registered
   deadline), whichever first.
