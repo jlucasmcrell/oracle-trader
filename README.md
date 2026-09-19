@@ -1,79 +1,71 @@
-> **Out of date.** This README describes the original August 2026 scaffold. The current, complete developer
-> handbook (architecture, operations, strategy record, rules, known defects) is
-> [docs/DEVELOPER-HANDBOOK.md](docs/DEVELOPER-HANDBOOK.md). Start there.
-
 # Oracle Trader
 
-A desktop auto-trader for prediction markets. Manifold-first, with a swappable
-multi-venue adapter layer, a paper-trading simulator, event scanning, and
-high-earner copy-trading.
+A desktop auto-trader for prediction markets, run for real money at small size by one operator, with every
+strategy decision written down before and after it was made. Electron + React + TypeScript.
 
-> **Status:** early scaffold — the Manifold adapter, paper broker, scanner, and
-> copy-trader are wired end to end. Polymarket and Kalshi adapters are next.
+**Venues**
+- **Kalshi** - live, the only funded venue with strategies trading (about $60 of cash, $1 per position).
+- **Polymarket US** - live account funded, every arm on operator hold; an eight-account paper lab runs against
+  live books.
+- **IBKR / ForecastEx** - funded, no arm qualifies for live; a 23-arm paper lab runs against the live gateway.
 
-## Why a desktop app?
+Nothing here is investment advice, and most of the record is of things that did not work.
 
-Prediction markets are **not** HFT: markets resolve over days/months and order
-flow is modest. Strategy quality and risk management dominate raw speed, so a
-desktop app is entirely sufficient (and keeps keys/funds local).
+## Where to start
 
-## Architecture
+| Want | Read |
+|---|---|
+| Architecture, operations, rules, known defects | [docs/DEVELOPER-HANDBOOK.md](docs/DEVELOPER-HANDBOOK.md) |
+| What changed and why, in order (numbered rounds) | [docs/REVIEW-CHANGES-2026-09-06.md](docs/REVIEW-CHANGES-2026-09-06.md) |
+| What is deferred, each with a checkable trigger | [docs/BACKLOG.md](docs/BACKLOG.md) |
+| What won, what lost, what changed between | [docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md](docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md) |
+| The research program (shadows, recorders, reads) | [docs/RESEARCH-PROGRAM-2026-09-18.md](docs/RESEARCH-PROGRAM-2026-09-18.md) |
+| Pre-registered strategy tests | `docs/PREREGISTERED-*.md` |
+| Daily reports | `docs/reports/YYYY-MM-DD.md` |
+
+## Layout
 
 ```
-src/
-  shared/        framework-agnostic domain types + the VenueAdapter contract + IPC surface
-  main/          Electron main process (Node): the trading engine lives here
-    venues/      one adapter per venue (manifold.ts, then polymarket/kalshi)
-    engine/      TradingEngine + PaperBroker (simulated fills on live prices)
-    strategies/  Scanner (discovery) + CopyTrader (mirror top users)
-    store/       ConfigStore (persists settings; encrypts API keys)
-  preload/       contextBridge -> window.api
-  renderer/      React UI (dashboard, scanner, copy-trader, activity log)
+src/main/            Electron main: engine, venue adapters, strategies, IPC
+  engine/            order routing, paper ledgers, position cap, portfolio snapshots
+  venues/            kalshi, polymarketUs, ibkr (TWS API), forecastexData
+  strategies/        autoTrader (Kalshi arms), leadLag, polyPaper (lab), ibkrLab, ibkrSignals
+src/renderer/        React UI: one account layout per venue (paper view / real account)
+src/shared/          IPC contract and shared types
+scripts/             recorders (weather-books, sports-books), sentinel, backups, backtests (GET-only)
+scripts/tests/       node test suites (`npm test`, 18 suites, ~10 s)
+docs/                the record; nothing is deleted, corrections are appended
 ```
 
-### Key design decisions
+Runtime state (balances, fills, ledgers, credentials) lives in `%APPDATA%/oracle-trader` and is not in this
+repository. `data/` and `tmp/` are ignored.
 
-- **Swappable venues** — everything (engine, strategies, UI) talks to the
-  `VenueAdapter` interface in `src/shared/venue.ts`. Add a market by implementing
-  it and registering in `src/main/venues/registry.ts`.
-- **Execution mode toggle** — `paper` (default) simulates every fill against
-  live prices with zero risk; `live` sends real orders. Manifold is play money
-  (M$), so even "live" there is zero real-money risk.
-- **Copy-trading is possible on Manifold** because other users' positions and
-  bet history are public API endpoints (no auth).
+## Build and run
 
-## Getting started
-
-```bash
+```
 pnpm install
-pnpm smoke:manifold   # verify live Manifold connectivity (no key needed)
-pnpm dev              # launch the desktop app in dev mode
+npm run typecheck
+npm test
+npm run build
+npm start
 ```
 
-### Trading live on Manifold (optional, play money)
+Credentials are entered in the app and stored encrypted with Electron `safeStorage`; no key is read from the
+environment or from this tree.
 
-1. Create a key at manifold.markets → your profile → edit → refresh API key.
-2. The app reads it from `config.json` in the Electron `userData` directory
-   (encrypted via `safeStorage`). A settings UI for this is coming.
+## Conventions worth knowing before reviewing
 
-## Roadmap
+- Every strategy change is a numbered round in `docs/REVIEW-CHANGES-2026-09-06.md` with the evidence that
+  motivated it and the read that will judge it. A pre-registration precedes each new arm.
+- Results are judged on settled markets from venue records, after fees, never on the in-app ledger alone.
+- Ad-hoc scripts against venues are GET-only. Orders are placed only by the engine.
+- Sizes, loss limits, venue funding and the live/hold switches belong to the operator; the assistant that
+  maintains the code decides everything else and reports it.
 
-- [x] Electron + TypeScript + React scaffold
-- [x] `VenueAdapter` contract + registry
-- [x] Manifold adapter (search, market, price, account, positions, orders, social)
-- [x] Paper broker + paper/live toggle
-- [x] Event scanner (search + "what's hot")
-- [x] High-earner copy-trader (mirror recent master bets)
-- [x] Buy YES / Buy NO + sell/close position controls
-- [x] Venue switcher (multi-venue UI)
-- [x] Polymarket adapter (Gamma + CLOB market data, paper trading)
-- [x] Copy-trader: leaderboard discovery + sizing + take-profit/stop-loss + mirror exits + auto-poll
-- [x] Kalshi adapter (market data + paper trading)
-- [x] Scanner: sort (liquidity/volume/probability/ending-soon/newest) + category filter
-- [x] Paper trade history + performance stats + backtesting (Polymarket price history)
-- [x] Research & vetting: news scanning (Google News RSS) + cross-venue consensus + arbitrage candidates
-- [x] Settings UI (Manifold API key + Kalshi credentials + risk limits)
-- [x] Scanner polish: series grouping, price correctness, close times, signal score
-- [x] Unrealized P&L on positions (mark-to-market) + backtest max drawdown
-- [ ] Live trading auth (Polymarket API-key trading — blocked on Polymarket region/API status)
-- [ ] AI verdict layer (question + news -> likelihood; needs an LLM key)
+## For reviewers
+
+Reports that help most name a file and line, state the concrete failure (inputs, state, wrong output or lost
+money), and say what evidence would settle it. The trade history and the pre-registrations are the ground
+truth for "is this strategy working"; the handbook's known-defects section lists what is already known.
+
+MIT licensed. See [LICENSE](LICENSE).
