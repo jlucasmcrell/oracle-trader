@@ -177,6 +177,15 @@ try {
       // B-27: a position whose journal row carries a sub-engine ref is that engine's, not an orphan.
       assert.ok(t.orphanAlerted.has('KXMANUAL') && !t.orphanAlerted.has('KXBTC15M-LL'), 'the lead-lag position is tracked; only the manual one alerts')
       assert.ok(!t.state.openTrades.some((x: any) => x.marketId === 'KXBTC15M-LL'), 'and it is not adopted by the trader')
+      // The adoption loop (2026-09-19): once this ledger has booked the market's settlement, the venue's still-listed
+      // determined position is not adopted again - five sweeps booked one settlement five times before this.
+      t.state.openTrades = t.state.openTrades.filter((x: any) => x.marketId !== 'KXR')
+      t.noteSettled('KXR', 1.08)
+      assert.ok(t.recentlySettled('KXR'))
+      await t.orphanSweep()
+      assert.ok(!t.state.openTrades.some((x: any) => x.marketId === 'KXR'), 'a settled market is not re-adopted')
+      t.state.settledMarkets.KXR.at = Date.now() - 4 * 24 * 60 * 60_000
+      assert.ok(!t.recentlySettled('KXR'), 'the mark ages out after three days')
     }
     // B-12: the churn guard (per-market entries per day, re-entry lockout) survives a restart.
     {

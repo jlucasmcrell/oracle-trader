@@ -4615,3 +4615,24 @@ Operator: "IBKR is back up. Continue." Every medium in `docs/reports/AUDIT-BUG-C
 
 Restart: build 15:07:26Z, electron start 15:09:23Z under `agent.lock`; the B-20 relabel ran between stop
 and start. Not in this round: the 24 lows (B-36..B-59), next; BACKLOG 174.
+
+## §135 - 2026-09-19 15:15Z: the adoption loop - one settlement booked five times
+
+Found in the §134 log check. The B-09 adoption (§133) took a venue position the journal explained and pushed it
+into the ledger; `trySettle` then booked its settlement and removed it; the venue kept listing the DETERMINED
+position until its 30-minute settlement timer ran out, so the next orphan sweep adopted it again. On
+`KXTRUMPENDORSEMENTS-26SEP18-A20` (fade NO x1.09 @0.92, result no at 14:00Z, settled at the venue 14:59:44Z) that
+happened five times, 14:33-14:55Z: `calib.byStrategy.fade.byEvent[market] = { n: 5 }`, fade perf +5 trades and
++$0.41, the day's realized +$0.41, the day cluster +37.4c. The evidence the ladder judges fade on carried the
+same +7.48c/contract observation five times.
+
+Fix: a live settlement this ledger books marks the market (`PersistedState.settledMarkets`, three-day memory, the
+single-market and dutch-leg paths); the orphan sweep treats a marked market as tracked. Test: the B-09 block now
+sweeps again after the settlement and asserts no re-adoption, and that the mark ages out.
+
+Repair (`repair_double_settle.py`, app stopped): the four duplicates removed from `perf`, `perfByStrategy.fade`,
+`dailyPnl`, and the fade calibration accumulators (`netN/netSum/netSq`, the event, the day); every delta derived
+from the ledger's own per-booking value (7.477c/contract, $0.0815). Result: perf trades 608 -> 604, fade 271 -> 267 (wins 254 -> 250), fade netN 30 -> 26, the day realized -$0.76 -> -$1.09. The four duplicate research
+`exit` episodes stay (append-only, not evidence).
+
+Restart: build 15:14:10Z, electron start 15:14:33Z under `agent.lock`.

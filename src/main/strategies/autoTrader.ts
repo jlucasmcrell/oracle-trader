@@ -417,6 +417,9 @@ interface PersistedState {
   killReset?: { date: string; at: number; local: number; venue: number; reason: string }
   /** Per-market churn (entries today, last exit) - persisted because the app restarts ~15x a day (audit B-12). */
   churn?: Record<string, { day: string; entries: number; lastExitAt: number }>
+  /** Live settlements this ledger has booked, by market: the venue keeps listing a determined position until its
+   *  settlement timer runs out, and the orphan sweep must not adopt it again (2026-09-19: five bookings in 22 min). */
+  settledMarkets?: Record<string, { at: number; shares: number }>
   stats: { scans: number; approved: number; vetoed: number; executed: number }
   bookStats: AutoBookStats
   perf: { trades: number; wins: number; losses: number; realizedPnl: number }
@@ -3561,7 +3564,10 @@ export class AutoTrader {
         this.state.openTrades.some((t) => t.marketId === pos.marketId || t.legs?.some((l) => l.marketId === pos.marketId)) ||
         this.state.pendingOrders.some((p) => p.marketId === pos.marketId) ||
         this.subEngineHolds(pos.marketId) ||
-        (journalRef !== undefined && !journalRef.startsWith('auto:'))
+        (journalRef !== undefined && !journalRef.startsWith('auto:')) ||
+        // Settled here already: the venue lists a determined position for up to its settlement timer (30 min on
+        // the 2026-09-19 case), and adopting it again booked the same settlement on every sweep.
+        this.recentlySettled(pos.marketId)
       if (!tracked && pos.shares > 0) {
         // A position the journal can explain - an acknowledged BUY of ours whose response was lost, recovered by
         // reconcileOrders - is ADOPTED into the ledger under its strategy, so it is exited, graded and counted
@@ -4040,6 +4046,7 @@ export class AutoTrader {
           const rec = this.engine.settlePaperPosition(VENUE, leg.marketId, 'NO', win)
           if (rec?.realizedPnl !== undefined) realized += rec.realizedPnl
         } else {
+          this.noteSettled(leg.marketId, leg.shares)
           // Live settles server-side; estimate P&L. The entry fee was real money (a leg without a recorded rate is
           // charged at the standard taker coefficient - dutch legs are IOC takers); until 2026-09-19 this omitted it
           // and a basket bought at 98c with 7.5c of fees was booked +2c (external review, Gemini Flash F-06).
@@ -4080,6 +4087,7 @@ export class AutoTrader {
       } else {
         // Settlement charges no fee, but the entry fee was real money.
         const realized = (win - t.entryPrice) * t.shares - entryFeeDollars(t)
+        this.noteSettled(t.marketId, t.shares)
         Object.assign(t, { graded: true })
         this.gradeEntry(t.perfKey ?? t.strategy, t.modeledWinProb, win === 1, netCentsOf(t, win), t.eventTicker ?? t.marketId, clusterDayOf(t.closeTime), t.shares)
         this.removeTrade(t.id)
@@ -4174,6 +4182,18 @@ export class AutoTrader {
     const t = this.state.openTrades.find((x) => x.id === id)
     if (t) this.noteExit(t.marketId)
     this.state.openTrades = this.state.openTrades.filter((x) => x.id !== id)
+  }
+
+  /** Remember a live settlement this ledger booked (see PersistedState.settledMarkets); entries age out after three days. */
+  private noteSettled(marketId: string, shares: number): void {
+    const now = Date.now()
+    const m = (this.state.settledMarkets ??= {})
+    for (const [id, v] of Object.entries(m)) if (now - v.at > 3 * 24 * 60 * 60_000) delete m[id]
+    m[marketId] = { at: now, shares }
+  }
+
+  private recentlySettled(marketId: string): boolean {
+    return (this.state.settledMarkets?.[marketId]?.at ?? 0) > Date.now() - 3 * 24 * 60 * 60_000
   }
 
   /**
