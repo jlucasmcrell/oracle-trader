@@ -2053,3 +2053,20 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   writes UTF-16LE, so the report needs `iconv` to read and 99% of it is `\r` progress ticks. Send the ticks to
   stderr and let the redirect keep only the verdict. Trigger: next Friday's run (2026-09-25); trivial, fold it
   into whatever else touches the script.
+
+- **172. Contract-weighted trader evidence needs a fresh baseline per stage (2026-09-19, §134 B-21).** A stage
+  whose baseline was captured before the weights existed keeps the equal-per-trade statistics until its next
+  baseline capture (`weightedTraderStats` returns null when fewer weighted grades than trades exist since the
+  baseline). Trigger: on **2026-09-26** read `ladder.json`: any live stage with `baseline.wTrades` undefined and
+  `since` before 2026-09-19T18:00Z is still judged on the old estimand; if fade, volume-spike or consensus has
+  not recaptured by then, re-baseline it by hand and say so in REVIEW-CHANGES.
+- **173. Kalshi fill direction depends on the deprecated `action`/`side` (2026-09-19, §134 B-23).** The schema
+  still emits them (docs.kalshi.com, get-fills, read 2026-09-19); when they go, every fill is archived as a buy
+  of its exposure side at that leg's price. Trigger: on **2026-09-21** count rows in
+  `fill-reconciler-kalshi.json.fills.jsonl` after the §134 restart by `side`; if exits happened and no `sell`
+  row exists, the legacy fields are gone: note it in the handbook and switch the archive consumers to the
+  exposure model.
+- **174. Audit lows B-36..B-59 (2026-09-19).** Twenty-four low findings in
+  `docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md` are untouched. Trigger: after 24 h of clean operation on
+  the §134 build (**2026-09-20 18:00Z**: no new `.corrupt-` files, no recovered-exit or dutch-unwind alerts
+  that were wrong), take them in report order in one round.

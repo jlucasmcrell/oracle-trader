@@ -18,6 +18,7 @@
  * trip) while still counting them as fills.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { loadJsonOrQuarantine } from './json'
 import { dirname } from 'node:path'
 import type { TradingEngine } from '../engine/engine'
 import type { HistoryStore } from './history'
@@ -102,11 +103,8 @@ export class FillReconciler {
     private readonly log: (s: string) => void = console.log
   ) {
     this.state = { venue, seenFillIds: [], lastFillTs: 0, ingested: 0, skippedPlacement: 0, runs: 0, completeness: 'unknown' }
-    try {
-      if (existsSync(path)) this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<ReconcilerState>) }
-    } catch {
-      // fresh state
-    }
+    const loaded = loadJsonOrQuarantine<Partial<ReconcilerState>>(path, log)
+    if (loaded) this.state = { ...this.state, ...loaded }
     // Re-read executions previously discarded by the timestamp heuristic.
     if (this.state.schemaVersion !== 2) {
       this.state.seenFillIds = []; this.state.lastFillTs = 0; this.state.schemaVersion = 2
@@ -128,7 +126,7 @@ export class FillReconciler {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
       const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2))
+      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(tmp, this.path)
     } catch (e) {
       this.log('[reconciler] persist failed: ' + (e instanceof Error ? e.message : String(e)))

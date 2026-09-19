@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import Module from 'node:module'
@@ -155,12 +155,13 @@ try {
     {
       const adapter: any = {
         getOpenOrders: async () => [],
-        getPositions: async () => [{ venue: 'kalshi', marketId: 'KXR', outcome: 'NO', shares: 1.08, avgPrice: 0.93 }, { venue: 'kalshi', marketId: 'KXMANUAL', outcome: 'YES', shares: 2, avgPrice: 0.5 }],
+        getPositions: async () => [{ venue: 'kalshi', marketId: 'KXR', outcome: 'NO', shares: 1.08, avgPrice: 0.93 }, { venue: 'kalshi', marketId: 'KXMANUAL', outcome: 'YES', shares: 2, avgPrice: 0.5 }, { venue: 'kalshi', marketId: 'KXBTC15M-LL', outcome: 'YES', shares: 1, avgPrice: 0.7 }],
         getMarket: async (id: string) => ({ id, venue: 'kalshi', question: 'q ' + id, status: 'open', closeTime: Date.now() + 3600_000, feeRate: 0.07 })
       }
       const engine: any = {
         getExecutionMode: () => 'live', getAdapter: () => adapter, ownsOrder: () => false,
-        recoveredOrder: (_v: string, marketId: string) => marketId === 'KXR' ? { venue: 'kalshi', marketId, outcome: 'NO', side: 'buy', ref: 'auto:fade:sig1', clientOrderId: 'c1', orderId: 'o1', state: 'acknowledged', requestedAt: Date.now() - 300_000, acknowledgedAt: Date.now() - 240_000 } : undefined
+        recoveredOrder: (_v: string, marketId: string) => marketId === 'KXR' ? { venue: 'kalshi', marketId, outcome: 'NO', side: 'buy', ref: 'auto:fade:sig1', clientOrderId: 'c1', orderId: 'o1', state: 'acknowledged', requestedAt: Date.now() - 300_000, acknowledgedAt: Date.now() - 240_000 }
+          : marketId === 'KXBTC15M-LL' ? { venue: 'kalshi', marketId, outcome: 'YES', side: 'buy', ref: 'leadlag', clientOrderId: 'c2', orderId: 'o2', state: 'acknowledged', requestedAt: Date.now() - 300_000, acknowledgedAt: Date.now() - 240_000 } : undefined
       }
       const t: any = new AutoTrader(engine, join(adir, 'adopt.json'))
       t.quoter.ownsOrder = () => false
@@ -173,6 +174,25 @@ try {
       assert.equal(adopted.strategy, 'fade'); assert.equal(adopted.shares, 1.08); assert.equal(adopted.entryPrice, 0.93); assert.equal(adopted.outcome, 'NO'); assert.equal(adopted.feeRate, 0.07)
       assert.ok(!t.state.openTrades.some((x: any) => x.marketId === 'KXMANUAL'), 'a position the journal cannot explain is not adopted')
       assert.ok(alerts.some((a) => /adopted/.test(a)) && alerts.some((a) => /untracked/.test(a)), 'one adoption alert, one untracked alert')
+      // B-27: a position whose journal row carries a sub-engine ref is that engine's, not an orphan.
+      assert.ok(t.orphanAlerted.has('KXMANUAL') && !t.orphanAlerted.has('KXBTC15M-LL'), 'the lead-lag position is tracked; only the manual one alerts')
+      assert.ok(!t.state.openTrades.some((x: any) => x.marketId === 'KXBTC15M-LL'), 'and it is not adopted by the trader')
+    }
+    // B-12: the churn guard (per-market entries per day, re-entry lockout) survives a restart.
+    {
+      const file = join(adir, 'churn.json')
+      const a: any = new AutoTrader({}, file)
+      a.noteEntry('KXCH'); a.noteExit('KXCH'); a.persist()
+      const b: any = new AutoTrader({}, file)
+      assert.equal(b.churn.get('KXCH')?.entries, 1); assert.ok((b.churn.get('KXCH')?.lastExitAt ?? 0) > 0)
+    }
+    // B-13: a quarantined (unparseable) state file starts from defaults AND runs the config migrations.
+    {
+      const file = join(adir, 'quarantine.json')
+      writeFileSync(file, '\ufeff{"config": {')
+      new AutoTrader({}, file)
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27, 'migrations ran on the fresh state')
+      assert.ok(readdirSync(adir).some((f) => f.startsWith('quarantine.json.corrupt-')), 'the bad file was moved aside')
     }
     auditDone = true
   })().catch((e) => { console.error(e); process.exitCode = 1 }).finally(() => rmSync(adir, { recursive: true, force: true }))

@@ -225,6 +225,10 @@ interface KalshiFill {
   market_ticker?: string
   outcome_side?: string
   book_side?: string
+  /** Deprecated by Kalshi but still emitted: the only fields that say buy vs sell (outcome_side/book_side carry
+   *  the directional EXPOSURE, where buy-no and sell-yes collapse). */
+  action?: string
+  side?: string
   count_fp?: string | number
   yes_price_dollars?: string
   no_price_dollars?: string
@@ -877,21 +881,7 @@ export class KalshiAdapter implements VenueAdapter {
   async getFills(limit = 100): Promise<VenueFill[]> {
     this.requireAuth()
     const rows = await this.authPaged<KalshiFill>('/portfolio/fills', 'fills', limit)
-    return rows.map((f) => {
-      const outcome: 'YES' | 'NO' = f.outcome_side === 'no' ? 'NO' : 'YES'
-      return {
-        id: f.fill_id ?? '',
-        orderId: f.order_id,
-        marketId: f.ticker ?? '',
-        outcome,
-        side: f.book_side === 'ask' ? 'sell' : 'buy',
-        shares: toNum(f.count_fp),
-        price: outcome === 'YES' ? toNum(f.yes_price_dollars) : toNum(f.no_price_dollars),
-        fee: toNum(f.fee_cost),
-        isTaker: !!f.is_taker,
-        timestamp: f.created_time ? Date.parse(f.created_time) : 0
-      }
-    })
+    return rows.map(mapKalshiFill)
   }
 
   /** Resting orders — the maker-order lifecycle reads fills/expiry from here. */
@@ -1695,6 +1685,33 @@ function toNumOpt(v?: string | number): number | undefined {
  * fee_cost is the entry fee already debited at fill time, and subtracting it
  * here is what makes realizedPnl the trade's true round-trip P&L.
  */
+/**
+ * Fill direction. Kalshi's `outcome_side`/`book_side` are one bit of directional EXPOSURE (`bid` = long yes =
+ * buy yes = sell no; `ask` = long no = buy no = sell yes), so `book_side === 'ask'` is not "sell": it archived
+ * every NO buy as a NO sale and every YES exit as a NO sale at the NO price (audit 2026-09-19, B-23; item D5 of
+ * the 09-18 audit). The deprecated `action`/`side` pair still says buy vs sell and which leg; it is used when
+ * present. Without it the fill is recorded in exposure terms - a buy of `outcome_side` at that leg's price -
+ * which is exactly how the venue nets it (sell YES @0.30 is buy NO @0.70), so nothing phantom is written.
+ */
+export function mapKalshiFill(f: KalshiFill): VenueFill {
+  const exposure: 'YES' | 'NO' = f.outcome_side === 'no' ? 'NO' : f.outcome_side === 'yes' ? 'YES' : f.book_side === 'ask' ? 'NO' : 'YES'
+  const action = f.action === 'sell' ? 'sell' : f.action === 'buy' ? 'buy' : undefined
+  const leg: 'YES' | 'NO' | undefined = f.side === 'yes' ? 'YES' : f.side === 'no' ? 'NO' : undefined
+  const outcome: 'YES' | 'NO' = leg ?? (action === 'sell' ? (exposure === 'YES' ? 'NO' : 'YES') : exposure)
+  return {
+    id: f.fill_id ?? '',
+    orderId: f.order_id,
+    marketId: f.ticker ?? f.market_ticker ?? '',
+    outcome,
+    side: action ?? 'buy',
+    shares: toNum(f.count_fp),
+    price: outcome === 'YES' ? toNum(f.yes_price_dollars) : toNum(f.no_price_dollars),
+    fee: toNum(f.fee_cost),
+    isTaker: !!f.is_taker,
+    timestamp: f.created_time ? Date.parse(f.created_time) : 0
+  }
+}
+
 export function mapKalshiSettlement(s: KalshiSettlement): VenueSettlement {
   const yesShares = toNum(s.yes_count_fp ?? s.yes_count)
   const noShares = toNum(s.no_count_fp ?? s.no_count)

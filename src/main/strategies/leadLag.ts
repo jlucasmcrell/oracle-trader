@@ -102,6 +102,10 @@ export interface LeadLagDislocation {
   /** Detection (quotes in hand) to venue acknowledgement, and the order round trip alone, in ms. */
   latencyMs?: number
   submitMs?: number
+  /** When the Polymarket quote was read, and how old it was when the IOC was sent (audit B-33: `ts` is stamped
+   *  after two further Kalshi round trips, so latencyMs alone never bounded the quote's age). */
+  polyAt?: number
+  polyAgeMs?: number
 }
 
 export interface LeadLagStatus {
@@ -138,6 +142,8 @@ interface LeadLagState {
 interface PolyQuote {
   source: 'clob-book' | 'clob-mid'
   mid: number
+  /** Wall clock when the REST body arrived: the age of this quote at the IOC is measured from here (audit B-33). */
+  at: number
   /** Pushed top-of-book for the same token, when the socket has one (shadow). */
   ws?: { bid: number; ask: number; ageMs: number; changes: number }
   bid?: number
@@ -349,7 +355,7 @@ export class LeadLagEngine {
       }
       mkdirSync(dirname(this.path), { recursive: true })
       const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2))
+      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(tmp, this.path)
       return true
     } catch (e) {
@@ -472,9 +478,14 @@ export class LeadLagEngine {
     if (!resolved) return null
     const { upToken, marketId } = resolved
     this.wsTokens.add(upToken)
-    const ws = this.wsTop(upToken)
+    // The socket top is snapshotted AFTER the REST round trip, not before it: the pre-registered agreement read
+    // compares the two at the same instant, and a snapshot taken before a 150-400 ms fetch was one top earlier
+    // on a token that moves every few seconds (audit 2026-09-19, B-32).
+    let ws: PolyQuote['ws']
     try {
       const bookRes = await fetch(`${POLY_CLOB_API}/book?token_id=${encodeURIComponent(upToken)}`, { signal: AbortSignal.timeout(6000) })
+      ws = this.wsTop(upToken)
+      const at = Date.now()
       if (bookRes.ok) {
         const book = (await bookRes.json()) as { bids?: { price?: string; size?: string }[]; asks?: { price?: string; size?: string }[] }
         const bids = (book.bids ?? []).map((l) => num(l.price)).filter((p): p is number => p !== null)
@@ -482,7 +493,7 @@ export class LeadLagEngine {
         if (bids.length && asks.length) {
           const bid = Math.max(...bids)
           const ask = Math.min(...asks)
-          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId, ws }
+          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId, ws, at }
         }
       }
     } catch {
@@ -490,10 +501,12 @@ export class LeadLagEngine {
     }
     try {
       const midRes = await fetch(`${POLY_CLOB_API}/midpoint?token_id=${encodeURIComponent(upToken)}`, { signal: AbortSignal.timeout(6000) })
+      ws = this.wsTop(upToken)
+      const at = Date.now()
       if (!midRes.ok) return null
       const mid = num(((await midRes.json()) as { mid?: string }).mid)
       if (mid === null) return null
-      return { source: 'clob-mid', mid, marketId, ws }
+      return { source: 'clob-mid', mid, marketId, ws, at }
     } catch {
       return null
     }
@@ -503,6 +516,20 @@ export class LeadLagEngine {
    * Compare the Polymarket CLOB to Kalshi's resting quotes on the identical
    * 15-minute contract and record every gap that exceeds the threshold.
    */
+  /**
+   * Kalshi tickers this arm holds or held within the last two hours: the sweep's fills settle 15 minutes after
+   * entry and the venue lists them until then. The trader's orphan sweep and its per-market guard read this
+   * (audit 2026-09-19, B-27/B-28).
+   */
+  heldTickers(now = Date.now()): Set<string> {
+    const out = new Set<string>()
+    for (const [ticker, f] of this.windowFills) if (f.contracts > 0) out.add(ticker)
+    for (const r of this.state.history) {
+      if (r.executed && (r.filledContracts ?? 0) > 0 && now - Date.parse(r.ts) < 2 * 60 * 60_000) out.add(r.kalshiTicker)
+    }
+    return out
+  }
+
   async scanAndSweep(
     adapter: VenueAdapter,
     cfg: LeadLagConfig,
@@ -510,7 +537,9 @@ export class LeadLagEngine {
     armed: boolean,
     killed: boolean,
     /** Exchange trading paused (weekly maintenance): observe nothing, place nothing. */
-    paused = false
+    paused = false,
+    /** A market another arm holds or rests on: never cross it (Kalshi nets the two into one signed position). */
+    heldElsewhere: (ticker: string) => boolean = () => false
   ): Promise<void> {
     if (this.running || !cfg.leadLagEnabled) return
     if (paused) {
@@ -662,14 +691,15 @@ export class LeadLagEngine {
             netCents,
             dPolyCents,
             dKalshiCents,
-            polyWs: poly.ws
+            polyWs: poly.ws,
+            polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
           if (this.worthNoting(d, now)) {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi ask ${(kYesAsk * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
           }
-          if (canTrade && d.clearsFees) await this.sweep(adapter, d, 'YES', kYesAsk, cfg, shardOf(kalshiMarket))
+          if (canTrade && d.clearsFees && !heldElsewhere(ticker)) await this.sweep(adapter, d, 'YES', kYesAsk, cfg, shardOf(kalshiMarket))
         } else if (kYesBid - poly.mid >= threshold) {
           // Polymarket below Kalshi's bid: the Kalshi YES bid looks rich; buying NO at 1 − bid.
           foundDislocations++
@@ -696,14 +726,15 @@ export class LeadLagEngine {
             netCents,
             dPolyCents,
             dKalshiCents,
-            polyWs: poly.ws
+            polyWs: poly.ws,
+            polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
           if (this.worthNoting(d, now)) {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi bid ${(kYesBid * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
           }
-          if (canTrade && d.clearsFees) await this.sweep(adapter, d, 'NO', kYesBid, cfg, shardOf(kalshiMarket))
+          if (canTrade && d.clearsFees && !heldElsewhere(ticker)) await this.sweep(adapter, d, 'NO', kYesBid, cfg, shardOf(kalshiMarket))
         }
         } catch (e) {
           errors++
@@ -783,6 +814,7 @@ export class LeadLagEngine {
       }
       let res: OrderResult
       const submitAt = Date.now()
+      if (d.polyAt !== undefined) d.polyAgeMs = submitAt - d.polyAt
       try {
         res = await adapter.placeOrder({
         venue: 'kalshi',

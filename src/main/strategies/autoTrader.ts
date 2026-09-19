@@ -22,6 +22,7 @@ import { KalshiWsClient, type WsStats } from '../venues/kalshiWs'
 import { PolymarketAdapter } from '../venues/polymarket'
 import { sendAlert } from '../util/alert'
 import { KALSHI_TAKER_FEE_COEF, kalshiFeeCentsPerContract, kalshiOrderFeeDollars } from '../util/kalshiFee'
+import { HttpError } from '../util/http'
 import { fadeCategoryBlock, tempSeriesKind, underlyingOf, weatherSeatBlock } from './classify'
 import { bankObservations, eventDayStatus, parseEventDate, stationCode, stationTimeZone } from './weatherDay'
 import { bracketFairValue, fetchHourlyForecast, forecastSigma, remainingExtremes } from './weatherForecast'
@@ -391,7 +392,9 @@ interface VetoWatchItem {
 }
 
 interface CalibState {
-  byStrategy: Record<string, { n: number; brierSum: number; buckets: { n: number; wins: number; probSum: number }[]; netN?: number; netSum?: number; netSq?: number; byEvent?: Record<string, { n: number; sum: number }>; byDay?: Record<string, { n: number; sum: number }> }>
+  byStrategy: Record<string, { n: number; brierSum: number; buckets: { n: number; wins: number; probSum: number }[]; netN?: number; netSum?: number; netSq?: number; byEvent?: Record<string, { n: number; sum: number }>; byDay?: Record<string, { n: number; sum: number; w?: number; wsum?: number }>;
+    /** Contract-weighted accumulators (audit B-21): wN = contracts graded, wSum = sum of net cents x contracts, wSq = sum of net^2 x contracts, wTrades = grades that carried a weight. */
+    wN?: number; wSum?: number; wSq?: number; wTrades?: number }>
   vetoWatch: VetoWatchItem[]
   vetoes: { graded: number; wouldHaveWon: number; estPnlCents: number }
   /** Same counterfactual ledger split by veto reason (LLM vs category filter). */
@@ -412,6 +415,8 @@ interface PersistedState {
   dailyPnl: { date: string; realized: number; tripped: boolean }
   /** Explicit operator restart baseline; raw daily ledgers remain unchanged. Expires at UTC midnight. */
   killReset?: { date: string; at: number; local: number; venue: number; reason: string }
+  /** Per-market churn (entries today, last exit) - persisted because the app restarts ~15x a day (audit B-12). */
+  churn?: Record<string, { day: string; entries: number; lastExitAt: number }>
   stats: { scans: number; approved: number; vetoed: number; executed: number }
   bookStats: AutoBookStats
   perf: { trades: number; wins: number; losses: number; realizedPnl: number }
@@ -700,12 +705,20 @@ export class AutoTrader {
     const c = this.churn.get(marketId)
     if (c && c.day === nowDate()) c.entries++
     else this.churn.set(marketId, { day: nowDate(), entries: 1, lastExitAt: 0 })
+    this.saveChurn()
   }
 
   private noteExit(marketId: string): void {
     const c = this.churn.get(marketId)
     if (c && c.day === nowDate()) c.lastExitAt = Date.now()
     else this.churn.set(marketId, { day: nowDate(), entries: 0, lastExitAt: Date.now() })
+    this.saveChurn()
+  }
+
+  /** Mirror today's churn into the persisted state so a restart keeps the re-entry lockout and the per-day cap (B-12). */
+  private saveChurn(): void {
+    const today = nowDate()
+    this.state.churn = Object.fromEntries([...this.churn].filter(([, c]) => c.day === today))
   }
   private resetRequested = false
   private readonly orphanAlerted = new Set<string>()
@@ -758,7 +771,10 @@ export class AutoTrader {
     this.store = new JsonStore<PersistedStore>(statePath, {
       config: { ...DEFAULT_CONFIG },
       state: defaultState(),
-      configVersion: 20
+      // 0, not the version DEFAULT_CONFIG happens to match: JsonStore keeps these defaults when the file is absent or
+      // will not parse, and a quarantined file must then run EVERY migration, not come back on code defaults with 2-20
+      // skipped (the mini's 2026-09-03 lesson; audit 2026-09-19, B-13).
+      configVersion: 0
     })
     this.episodes = new EpisodeRecorder(join(dirname(statePath), 'episodes'))
     const persisted = this.store.get()
@@ -767,6 +783,8 @@ export class AutoTrader {
     this.config.oddsApiKey = decryptValue(this.config.oddsApiKey ?? '')
     this.config.metaculusApiKey = decryptValue(this.config.metaculusApiKey ?? '')
     this.state = persisted.state ?? defaultState()
+    // Rebuild today's churn guard from the persisted mirror (audit B-12): the guard was memory-only across ~15 boots a day.
+    for (const [marketId, c] of Object.entries(this.state.churn ?? {})) if (c && c.day === nowDate()) this.churn.set(marketId, { ...c })
     this.state.pendingOrders = this.state.pendingOrders ?? []
     this.state.dailyPnl = this.state.dailyPnl ?? { date: nowDate(), realized: 0, tripped: false }
     this.state.perfByStrategy = this.state.perfByStrategy ?? {}
@@ -2790,6 +2808,10 @@ export class AutoTrader {
     // Live entries wait for the boot reconcile: local state must be checked
     // against the venue once per process start before new money moves.
     if (this.engine.getExecutionMode() === 'live' && !this.reconciledLive) return 'awaiting venue reconcile'
+    // An unknown balance is not "no loss": with the account read failed the kill switch cannot be judged and the
+    // equity cap cannot bind, so entries hold for this scan (audit 2026-09-19, B-10). The sub-engines already fail
+    // closed on the same condition (subEngineKilled).
+    if (this.engine.getExecutionMode() === 'live' && data.balance === undefined && data.equity === undefined) return 'venue balance unknown - entries held until the account read succeeds'
     // Percentage of EQUITY, not free cash: deploying capital into positions
     // shrank the cash base and tripped the limit at a smaller dollar loss.
     const kill = this.killSwitchCheck(data.equity ?? data.balance)
@@ -2825,6 +2847,9 @@ export class AutoTrader {
     }
     if (this.state.openTrades.some((t) => t.marketId === sig.marketId)) return 'market already open'
     if (this.state.pendingOrders.some((p) => p.marketId === sig.marketId)) return 'order already resting'
+    // One arm per market, in both directions: Kalshi nets YES and NO into one signed position, so a fade NO on
+    // a strike convergence holds YES would close its contracts, not open ours (audit 2026-09-19, B-28).
+    if (this.subEngineHolds(sig.marketId)) return 'market held by a sub-engine'
     // Correlation cap: many strikes of one ladder are ONE bet on one
     // underlying — at a small bankroll, six positions on the same event is
     // ruin-shaped, and edge-per-day ranking actively clusters same-expiry
@@ -3336,6 +3361,15 @@ export class AutoTrader {
             console.warn(`[auto-trader] cancel refused for ${p.orderId} on ${p.marketId} (${p.strategy} is off): ${fmtErr(err).slice(0, 160)}`)
           }
         }
+        // A fill that landed on the stopped arm's rest is real inventory whatever the cancel did: promote it now, not
+        // when the order finally leaves the book hours later (audit 2026-09-19, B-17).
+        const filledWhileOff = o.fillCount - p.promoted
+        if (filledWhileOff > 0.005) {
+          this.promoteFill(p.marketId, p.question, p.outcome, filledWhileOff, legOf(p.yesPrice), p.closeTime, p.eventTicker, p.modeledWinProb, p.makerFeeRate ?? 0, p.strategy, p.perfKey)
+          if (p.promoted === 0) this.bumpDaily()
+          p.promoted = o.fillCount
+          this.emit('autoopened', { marketId: p.marketId, outcome: p.outcome, shares: round2(filledWhileOff), price: legOf(p.yesPrice), strategy: p.strategy, reason: 'maker fill on a stopped strategy' })
+        }
         continue
       }
       if (o) {
@@ -3519,9 +3553,15 @@ export class AutoTrader {
     }
     if (fetchedClean) this.reconciledLive = true
     for (const pos of positions) {
+      // The sub-engines keep their positions in their own files, and an acknowledged journal row with a
+      // sub-engine ref is the same fact from the order side: neither is an orphan. Until 2026-09-19 every
+      // lead-lag and convergence position alerted "untracked - review it" once per ticker (audit B-27).
+      const journalRef = this.engine.recoveredOrder?.(VENUE, pos.marketId)?.ref
       const tracked =
         this.state.openTrades.some((t) => t.marketId === pos.marketId || t.legs?.some((l) => l.marketId === pos.marketId)) ||
-        this.state.pendingOrders.some((p) => p.marketId === pos.marketId)
+        this.state.pendingOrders.some((p) => p.marketId === pos.marketId) ||
+        this.subEngineHolds(pos.marketId) ||
+        (journalRef !== undefined && !journalRef.startsWith('auto:'))
       if (!tracked && pos.shares > 0) {
         // A position the journal can explain - an acknowledged BUY of ours whose response was lost, recovered by
         // reconcileOrders - is ADOPTED into the ledger under its strategy, so it is exited, graded and counted
@@ -3593,12 +3633,47 @@ export class AutoTrader {
     this.state.stats.executed++
   }
 
+  /** A market a sub-engine holds (convergence, lead-lag) or rests a quote on. */
+  private subEngineHolds(marketId: string): boolean {
+    return this.convergenceEngine.heldTickers().has(marketId) || this.leadLagEngine.heldTickers().has(marketId) || this.quoter.restingMarketIds().has(marketId)
+  }
+
+  /** A market this trader holds or rests on, for the sub-engines' own cross-arm check (audit B-28). */
+  private holdsMarket(marketId: string): boolean {
+    return this.state.openTrades.some((t) => t.marketId === marketId || t.legs?.some((l) => l.marketId === marketId)) ||
+      this.state.pendingOrders.some((p) => p.marketId === marketId)
+  }
+
+  /** Markets the thin quoter filled on since `sinceMs` (its own sidecar), for the ladder's quoter evidence (audit B-22). */
+  quoterFilledMarkets(sinceMs: number): Set<string> {
+    return this.quoter.filledMarkets(sinceMs)
+  }
+
+  /**
+   * Markets any arm OTHER than `ref` filled on since `sinceMs`, from the engine's shared fill history (every
+   * routed order records there with its ref). The ladder excludes these from an arm's settlement evidence,
+   * because the venue settles one net position per market.
+   */
+  otherArmMarkets(ref: string, sinceMs: number): Set<string> {
+    const out = new Set<string>()
+    for (const r of this.engine.getHistory(5000, VENUE)) {
+      if (r.timestamp < sinceMs || r.side !== 'buy') continue
+      const owner = r.ref ?? r.strategyRef ?? ''
+      if (owner && owner !== ref && owner !== 'settled') out.add(r.marketId)
+    }
+    return out
+  }
+
   private async executeDutch(sig: AutoSignal, data: ScanData, adapter: import('../../shared/venue').VenueAdapter): Promise<void> {
     const legs = sig.groupLegs ?? []
     const entries: AutoOpenTradeLeg[] = []
     const perLeg = this.stakeFor(data, 'dutch') / legs.length
     let totalAmount = 0
     let totalShares = 0
+    // A leg another trade of ours already holds or rests on would be netted by the venue into that position
+    // and unwound with it (audit 2026-09-19, B-24: Dutch legs bypassed the per-market guards).
+    const heldLeg = legs.find((l) => this.holdsMarket(l) || this.subEngineHolds(l))
+    if (heldLeg) throw new Error(`Dutch leg ${heldLeg}: market already held`)
     try {
       // Re-check the live books: the arb must survive at execution time.
       let sumBids = 0
@@ -3637,6 +3712,10 @@ export class AutoTrader {
         entries.push({ marketId: legs[i], outcome: 'NO', shares: res.shares, amount: res.amount, entryPrice: res.avgPrice })
         totalAmount += res.amount
         totalShares += res.shares
+        // A partial leg is not a basket: the payout no longer covers every outcome (audit B-24). Record the
+        // slice so the unwind below sells exactly it, then abandon the basket.
+        const wanted = perLeg / Math.max(0.01, clamp01(liveBids[i] - 0.01))
+        if (res.shares < wanted * 0.99 - 0.005) throw new Error(`Dutch leg ${legs[i]}: partial fill ${res.shares.toFixed(2)} of ${wanted.toFixed(2)}`)
       }
       this.state.openTrades.push({
         id: sig.id,
@@ -3660,9 +3739,28 @@ export class AutoTrader {
         question: sig.question.slice(0, 80)
       })
     } catch (err) {
-      // Unwind legs already placed so we never carry one-sided Dutch risk.
+      // Unwind legs already placed so we never carry one-sided Dutch risk. Sell THIS basket's shares, not the
+      // whole venue position (which also held any fade NO on the same strike - audit B-24), and keep any leg the
+      // unwind could not sell in the ledger as a tracked basket rather than dropping it unbooked.
+      const stranded: AutoOpenTradeLeg[] = []
       for (const e of entries) {
-        await this.engine.sellPosition({ venue: VENUE, marketId: e.marketId, outcome: 'NO', ref: 'auto:dutch' }).catch(() => undefined)
+        try {
+          const res = await this.engine.sellPosition({ venue: VENUE, marketId: e.marketId, outcome: 'NO', shares: e.shares, ref: 'auto:dutch' })
+          if (res.shares < e.shares - 0.01) stranded.push({ ...e, shares: e.shares - Math.max(0, res.shares), amount: e.amount * (1 - Math.max(0, res.shares) / e.shares) })
+        } catch (unwindErr) {
+          console.warn(`[auto-trader] dutch unwind failed on ${e.marketId}: ${fmtErr(unwindErr)}`)
+          stranded.push(e)
+        }
+      }
+      if (stranded.length > 0) {
+        const amount = stranded.reduce((a, l) => a + l.amount, 0)
+        const shares = stranded.reduce((a, l) => a + l.shares, 0)
+        this.state.openTrades.push({
+          id: `${sig.id}:stranded`, marketId: sig.marketId, question: sig.question, outcome: 'NO', shares, amount,
+          entryPrice: amount / (shares || 1), strategy: 'dutch', createdAt: Date.now(), closeTime: sig.closeTime, legs: stranded, feeRate: sig.feeRate
+        })
+        this.persist()
+        this.alert('Oracle Trader — Dutch unwind incomplete', `${stranded.length} leg(s) of ${sig.marketId} could not be sold back after a failed basket; they are held to settlement as a tracked (one-sided) position.`)
       }
       throw err
     }
@@ -3695,6 +3793,9 @@ export class AutoTrader {
       const quotes = batchQuotes ? batch.map(t => batchQuotes.get(`${t.marketId}:${t.outcome}`))
         : await Promise.all(batch.map(t => adapter.getPrice(t.marketId, t.outcome).catch(() => undefined)))
       for (const [index, t] of batch.entries()) {
+      // A lost exit response is resolved before anything else touches the trade (audit B-25).
+      if (t.exitUnknownAt !== undefined && await this.reconcileUnknownExit(t, adapter)) continue
+      if (!this.state.openTrades.includes(t)) continue
       // Fade holds to settlement by default (its edge is thinner than the
       // second spread); with fadeExitEnabled it uses the TP/SL path instead.
       // Momentum (2026-09-07) holds to settlement too: its reversal exits and
@@ -3853,7 +3954,64 @@ export class AutoTrader {
       }
       t.exitAttempts = attempt
       result.errors.push(`exit ${t.marketId}: ${msg}`)
+      // A live sell that neither returned nor was refused may have filled. Hold the trade until the journal
+      // recovers the order (reconcileUnknownExit) instead of retrying blind, settling it at full size, or
+      // dropping it unbooked (audit 2026-09-19, B-25). An explicit 4xx or a journal refusal is not ambiguous.
+      const explicit = (err instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(err.status)) || /Unresolved submission|awaiting venue reconciliation/i.test(msg)
+      if (this.engine.getExecutionMode() === 'live' && !explicit && t.exitUnknownAt === undefined) {
+        t.exitUnknownAt = Date.now()
+        this.persist()
+      }
     }
+    return false
+  }
+
+  /**
+   * Resolve an exit whose response was lost. Returns true while the trade must stay untouched (the submission
+   * is still pending at the journal), false once it is resolved: either the recovered sell's fills were booked
+   * (a full fill removes the trade), or the venue never created the order and the exit ladder may retry.
+   */
+  private async reconcileUnknownExit(t: AutoOpenTrade, adapter: import('../../shared/venue').VenueAdapter): Promise<boolean> {
+    if (t.exitUnknownAt === undefined) return false
+    const row = this.engine.recoveredOrder?.(VENUE, t.marketId)
+    const sell = row && row.side === 'sell' && row.orderId && row.requestedAt >= t.exitUnknownAt - 5 * 60_000 ? row : undefined
+    if (!sell) {
+      if (this.engine.submissionPending(VENUE, t.marketId)) return true
+      // Released by the journal: nothing exists at the venue, the exit ladder may try again.
+      delete t.exitUnknownAt
+      this.persist()
+      return false
+    }
+    let fills: import('../../shared/types').VenueFill[]
+    try {
+      fills = adapter.getFills ? await adapter.getFills(300) : []
+    } catch {
+      return true
+    }
+    const mine = fills.filter((f) => f.orderId === sell.orderId)
+    const shares = Math.min(t.shares, mine.reduce((a, f) => a + f.shares, 0))
+    if (shares <= 0.005) {
+      // An IOC the venue accepted but that crossed nothing: no position changed hands.
+      delete t.exitUnknownAt
+      this.persist()
+      return false
+    }
+    const avg = mine.reduce((a, f) => a + f.price * f.shares, 0) / mine.reduce((a, f) => a + f.shares, 0)
+    const fee = mine.reduce((a, f) => a + (f.fee ?? 0), 0)
+    const fraction = shares / t.shares
+    const pnl = (avg - t.entryPrice) * shares - fee - entryFeeDollars(t) * fraction
+    const full = shares >= t.shares - 0.01
+    if (full) {
+      this.removeTrade(t.id)
+      this.recordExit(pnl, t.perfKey ?? t.strategy, t)
+    } else {
+      t.shares -= shares
+      t.amount *= 1 - fraction
+      delete t.exitUnknownAt
+      this.recordExit(pnl, t.perfKey ?? t.strategy, t, shares)
+    }
+    console.log(`[auto-trader] recovered exit on ${t.marketId}: ${shares.toFixed(2)} sold @ ${avg.toFixed(3)} (order ${sell.orderId}), realized ${pnl.toFixed(2)}`)
+    this.emit('autoexited', { marketId: t.marketId, outcome: t.outcome, reason: full ? 'recovered exit (lost response)' : `recovered exit (partial ${round2(shares)})`, pnlPct: 0, realized: round2(pnl) })
     return false
   }
 
@@ -3894,6 +4052,9 @@ export class AutoTrader {
       return
     }
 
+    // A trade whose exit response was lost is not settled at full size while the sell is unresolved (audit B-25).
+    if (t.exitUnknownAt !== undefined && await this.reconcileUnknownExit(t, adapter)) return
+    if (!this.state.openTrades.includes(t)) return
     const mk = await adapter.getMarket(t.marketId).catch(() => undefined)
     // Self-heal the cached close time: the venue is the authority and it can
     // move (earlier when play ends, later on a delay). Leaving ours stale is
@@ -3907,7 +4068,7 @@ export class AutoTrader {
         const rec = this.engine.settlePaperPosition(VENUE, t.marketId, t.outcome, win)
         if (rec) {
           Object.assign(t, { graded: true })
-          this.gradeEntry(t.perfKey ?? t.strategy, t.modeledWinProb, win === 1, netCentsOf(t, win), t.eventTicker ?? t.marketId, clusterDayOf(t.closeTime))
+          this.gradeEntry(t.perfKey ?? t.strategy, t.modeledWinProb, win === 1, netCentsOf(t, win), t.eventTicker ?? t.marketId, clusterDayOf(t.closeTime), t.shares)
           this.removeTrade(t.id)
           this.recordExit(rec.realizedPnl ?? 0, t.perfKey ?? t.strategy, t)
           this.emit('autoexited', { marketId: t.marketId, outcome: t.outcome, reason: 'settled', realized: round2(rec.realizedPnl ?? 0) })
@@ -3920,7 +4081,7 @@ export class AutoTrader {
         // Settlement charges no fee, but the entry fee was real money.
         const realized = (win - t.entryPrice) * t.shares - entryFeeDollars(t)
         Object.assign(t, { graded: true })
-        this.gradeEntry(t.perfKey ?? t.strategy, t.modeledWinProb, win === 1, netCentsOf(t, win), t.eventTicker ?? t.marketId, clusterDayOf(t.closeTime))
+        this.gradeEntry(t.perfKey ?? t.strategy, t.modeledWinProb, win === 1, netCentsOf(t, win), t.eventTicker ?? t.marketId, clusterDayOf(t.closeTime), t.shares)
         this.removeTrade(t.id)
         this.recordExit(realized, t.perfKey ?? t.strategy, t)
         this.emit('autoexited', {
@@ -4046,6 +4207,8 @@ export class AutoTrader {
       // is (audit 2026-09-19, B-06 - every live basket was being dropped 25 minutes after entry).
       const legHeld = t.legs?.some((l) => held.has(l.marketId) || pending.has(l.marketId)) ?? false
       if (held.has(t.marketId) || pending.has(t.marketId) || legHeld || now - t.createdAt < 10 * 60_000) { this.venueMiss.delete(t.id); continue }
+      // Not held because a lost-response exit sold it: the exit path books it from the recovered order (B-25).
+      if (t.exitUnknownAt !== undefined) continue
       const misses = (this.venueMiss.get(t.id) ?? 0) + 1
       this.venueMiss.set(t.id, misses)
       if (misses < 3) continue
@@ -4127,7 +4290,8 @@ export class AutoTrader {
       this.engine.getExecutionMode(),
       this.config.liveArmed,
       this.subEngineKilled(),
-      paused
+      paused,
+      (ticker) => this.holdsMarket(ticker) || this.leadLagEngine.heldTickers().has(ticker) || this.quoter.restingMarketIds().has(ticker)
     )
     const st = this.convergenceEngine.status(this.convergenceCfg())
     console.log('[convergence] ' + st.note + ' | graded ' + st.gradedTrades + ' (W:' + st.wins + ' L:' + st.losses + ') PnL: ' + st.realizedPnlCents + 'c')
@@ -4306,7 +4470,7 @@ export class AutoTrader {
     }
   }
 
-  private gradeEntry(strategy: string, prob: number | undefined, won: boolean, netCents?: number, clusterEvent?: string, clusterDay?: string): void {
+  private gradeEntry(strategy: string, prob: number | undefined, won: boolean, netCents?: number, clusterEvent?: string, clusterDay?: string, contracts?: number): void {
     const s = (this.state.calib.byStrategy[strategy] ??= {
       n: 0,
       brierSum: 0,
@@ -4325,6 +4489,16 @@ export class AutoTrader {
       ev.n++; ev.sum += netCents
       const dy = ((s.byDay ??= {})[clusterDay ?? 'unknown'] ??= { n: 0, sum: 0 })
       dy.n++; dy.sum += netCents
+      // Contract-weighted, the estimand the doctrine and both labs use: a 5-contract loser and a 1.25-contract
+      // winner are not one observation each (audit 2026-09-19, B-21), and a partial close weighs its slice.
+      if (contracts !== undefined && contracts > 0) {
+        s.wN = (s.wN ?? 0) + contracts
+        s.wSum = (s.wSum ?? 0) + netCents * contracts
+        s.wSq = (s.wSq ?? 0) + netCents * netCents * contracts
+        s.wTrades = (s.wTrades ?? 0) + 1
+        dy.w = (dy.w ?? 0) + contracts
+        dy.wsum = (dy.wsum ?? 0) + netCents * contracts
+      }
     }
     if (prob === undefined || !Number.isFinite(prob) || prob <= 0 || prob > 1) return
     s.n++
@@ -4536,7 +4710,7 @@ export class AutoTrader {
     if (trade && !(trade as { graded?: boolean }).graded && pnl !== undefined && Number.isFinite(pnl) && gradeOver !== undefined && gradeOver > 0) {
       // Only a FULL close marks the trade graded; a partial must leave the remainder gradeable.
       if (gradedShares === undefined) Object.assign(trade, { graded: true })
-      this.gradeEntry(strategy, trade.modeledWinProb, pnl > 0, (pnl / gradeOver) * 100, trade.eventTicker ?? trade.marketId, clusterDayOf(Date.now()))
+      this.gradeEntry(strategy, trade.modeledWinProb, pnl > 0, (pnl / gradeOver) * 100, trade.eventTicker ?? trade.marketId, clusterDayOf(Date.now()), gradeOver)
     }
   }
 

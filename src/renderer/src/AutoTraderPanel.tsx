@@ -63,6 +63,9 @@ const PROVIDERS: { name: string; baseUrl: string; model: string; needsKey: boole
 
 export default function AutoTraderPanel({ log, onChanged }: Props) {
   const [cfg, setCfg] = useState<AutoTraderConfig | null>(null)
+  // The day-loss field is committed on blur/Enter, not per keystroke: an intermediate digit ('1' on the way to
+  // '10') was persisted and could trip the sticky daily kill switch mid-scan (audit 2026-09-19, B-29).
+  const [lossDraft, setLossDraft] = useState<string | null>(null)
   const [status, setStatus] = useState<AutoStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -398,7 +401,9 @@ export default function AutoTraderPanel({ log, onChanged }: Props) {
         </label>
         <label className="inline" title="Kill-switch: when today's realized loss reaches this % of balance, stop opening positions (exits keep managing) and disarm LIVE. 0 = off.">
           day loss &lt;= %
-          <input type="number" min={0} max={100} value={cfg.maxDailyLossPct} onChange={(e) => patch({ maxDailyLossPct: Number(e.target.value) })} />
+          <input type="number" min={0} max={100} value={lossDraft ?? cfg.maxDailyLossPct} onChange={(e) => setLossDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            onBlur={() => { if (lossDraft === null) return; const v = Number(lossDraft); setLossDraft(null); if (Number.isFinite(v) && v >= 0 && v <= 100 && v !== cfg.maxDailyLossPct) void patch({ maxDailyLossPct: v }) }} />
         </label>
         <label className="inline">
           Max open

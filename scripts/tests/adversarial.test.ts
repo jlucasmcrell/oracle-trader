@@ -199,7 +199,7 @@ async function main(): Promise<void> {
         setCalls.push(p)
         cfg = { ...cfg, ...p }
       },
-      detachOpenTrades: () => 0,
+      detachOpenTrades: () => 0, quoterFilledMarkets: () => new Set<string>(), otherArmMarkets: () => new Set<string>(),
       getStatus: () => ({ killSwitchTripped: false, exchangePaused: false, perfByStrategy: {}, calib: { byStrategy: {} } })
     }
     let shard0 = 0.05
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
       setConfig: (p: Record<string, unknown>) => {
         cfg = { ...cfg, ...p }
       },
-      detachOpenTrades: () => 0,
+      detachOpenTrades: () => 0, quoterFilledMarkets: () => new Set<string>(), otherArmMarkets: () => new Set<string>(),
       getStatus: () => ({ killSwitchTripped: false, exchangePaused: false, perfByStrategy: {}, calib: { byStrategy: {} } })
     }
     const shards: Record<number, number> = { 0: 0.05, 2: 25, 3: 40 }
@@ -370,7 +370,7 @@ async function main(): Promise<void> {
       setConfig: (p: Record<string, unknown>) => {
         cfg = { ...cfg, ...p }
       },
-      detachOpenTrades: () => 0,
+      detachOpenTrades: () => 0, quoterFilledMarkets: () => new Set<string>(), otherArmMarkets: () => new Set<string>(),
       getStatus: () => status
     }
     let shard0 = 0.5
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
       setConfig: (p: Record<string, unknown>) => {
         cfg = { ...cfg, ...p }
       },
-      detachOpenTrades: () => 0,
+      detachOpenTrades: () => 0, quoterFilledMarkets: () => new Set<string>(), otherArmMarkets: () => new Set<string>(),
       getStatus: () => status
     }
     let mcfg: Record<string, unknown> = { microMakerEnabled: true, fadeEnabled: false, bookEnabled: false, amountPerTrade: 1 }
@@ -538,7 +538,7 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     setConfig: (p: Record<string, unknown>) => {
       cfgH = { ...cfgH, ...p }
     },
-    detachOpenTrades: () => 0,
+    detachOpenTrades: () => 0, quoterFilledMarkets: () => new Set<string>(), otherArmMarkets: () => new Set<string>(),
     getStatus: () => ({ killSwitchTripped: false, exchangePaused: false, perfByStrategy: {}, calib: { byStrategy: {} } })
   }
   const minisH = new Map<string, unknown>()

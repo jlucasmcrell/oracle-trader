@@ -93,6 +93,8 @@ export class TradingEngine {
     return clientOrderId !== undefined && this.journal.byClientId(venue, clientOrderId) !== undefined
   }
   orderIntent(venue: VenueId, ref: string): JournalOrder | undefined { return this.journal?.byRef(venue, ref) }
+  /** True while a submission on the market is still unresolved (neither acknowledged nor released). */
+  submissionPending(venue: VenueId, marketId: string): boolean { return this.journal?.pending(venue).some(r => r.marketId === marketId) ?? false }
   orderStrategy(venue: VenueId, orderId: string): string | undefined { return this.orderAttribution(venue, orderId)?.ref ?? this.history.orderStrategy(venue, orderId) }
 
   async reconcileOrders(venue: VenueId): Promise<void> {
@@ -274,7 +276,9 @@ export class TradingEngine {
     }
     // Nothing held and nothing resting: give the reserved slot back. Otherwise it stays counted until a later read sees it.
     if (token !== undefined) {
-      if (!(res.shares > 0 || res.venueStatus === 'resting')) this.reservations.get(order.venue)?.delete(token)
+      // A resting order keeps its slot: Polymarket US and IBKR report `status 'open'` (no venueStatus), and Kalshi's
+      // create response carries no status word at all (audit 2026-09-19, B-14).
+      if (!(res.shares > 0 || res.venueStatus === 'resting' || res.status === 'open')) this.reservations.get(order.venue)?.delete(token)
       else this.settleSlot(order.venue, token)
     } else this.openPositionCountCache.delete(order.venue)
     if (order.marketQuestion) this.questionCache.set(order.marketId, order.marketQuestion)
@@ -318,7 +322,7 @@ export class TradingEngine {
     // The per-venue entry queue serialises this update with the cap check. A
     // filled buy or resting order consumes one conservative slot immediately,
     // so the next strategy need not wait on two venue reads to see it.
-    if (this.riskLimits.maxOpenPositions > 0 && (res.shares > 0 || res.venueStatus === 'resting')) this.settleSlot(order.venue, this.reserveSlot(order.venue))
+    if (this.riskLimits.maxOpenPositions > 0 && (res.shares > 0 || res.venueStatus === 'resting' || res.status === 'open')) this.settleSlot(order.venue, this.reserveSlot(order.venue))
     // Record live fills so real orders appear in the trade history (recordFill
     // drops zero-share results, so unfilled IOCs stay out of the ledger). A closeFrom exit is a SELL of the
     // position it closes here too (§129 covered only the reserved path; audit 2026-09-19, B-35).
@@ -548,7 +552,7 @@ export class TradingEngine {
       // the auto-trader aborted the scan mid-cycle. Serve the last good
       // snapshot when we have one rather than fabricating a zero-equity view;
       // if there is no prior snapshot, surface the error honestly.
-      const last = this.portfolioCache.get(`${this.mode}:${venue}`)
+      const last = this.portfolioCache.get(`${mode}:${venue}`) /* the requested mode's last good snapshot, never the other ledger's (audit B-15) */
       if (last) {
         console.warn(
           `[engine] portfolio read failed for '${venue}' (${(err as Error).message}); serving last good snapshot from ${Math.round((Date.now() - last.at) / 1000)}s ago`

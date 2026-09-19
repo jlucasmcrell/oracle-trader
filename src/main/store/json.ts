@@ -9,6 +9,27 @@ export function writeFileAtomic(path: string, content: string): void {
   renameSync(tmp, path)
 }
 
+/**
+ * Parse a JSON state file, or move an unparseable one aside and return undefined. The sub-engine loaders used to
+ * fall back to defaults over a corrupt file and the next persist() overwrote the only copy (audit 2026-09-19,
+ * B-31); a missing file also returns undefined, so callers keep their defaults either way.
+ */
+export function loadJsonOrQuarantine<T>(path: string, log: (s: string) => void = console.warn): T | undefined {
+  if (!existsSync(path)) return undefined
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as T
+  } catch (err) {
+    const aside = `${path}.corrupt-${Date.now()}`
+    try {
+      renameSync(path, aside)
+      log(`[json-store] ${path} unreadable (${err instanceof Error ? err.message : String(err)}); moved to ${aside}`)
+    } catch (moveErr) {
+      log(`[json-store] ${path} unreadable and could not be quarantined: ${moveErr instanceof Error ? moveErr.message : String(moveErr)}`)
+    }
+    return undefined
+  }
+}
+
 /** Minimal JSON-file persistence for a single mutable object. */
 export class JsonStore<T extends object> {
   private data: T
@@ -46,7 +67,9 @@ export class JsonStore<T extends object> {
       // Write-then-rename: a crash mid-write leaves the previous complete
       // file in place instead of a truncated one.
       const tmp = `${this.path}.tmp`
-      writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf-8')
+      // flush: the rename can land before the data does; a power loss then leaves a zero-length file (audit
+      // 2026-09-19, B-31). The settings writer has flushed since round 1; the ledgers did not.
+      writeFileSync(tmp, JSON.stringify(this.data, null, 2), { encoding: 'utf-8', flush: true })
       renameSync(tmp, this.path)
     } catch (err) {
       console.warn('[json-store] save failed:', err)

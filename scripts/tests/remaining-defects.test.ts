@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TradingEngine } from '../../src/main/engine/engine'
@@ -10,6 +10,9 @@ import { HttpError, RateLimiter } from '../../src/main/util/http'
 import { PolymarketUsAdapter, usCashPnl } from '../../src/main/venues/polymarketUs'
 import { AutoTrader } from '../../src/main/strategies/autoTrader'
 import { cfObservation } from '../../src/main/venues/cfReferenceShadow'
+import { loadJsonOrQuarantine } from '../../src/main/store/json'
+import { LeadLagEngine } from '../../src/main/strategies/leadLag'
+import { entryFeeDollars } from '../../src/main/strategies/autoTrader'
 
 const dir = mkdtempSync(join(tmpdir(), 'oracle-remaining-'))
 const originalFetch = globalThis.fetch
@@ -181,6 +184,92 @@ async function main() {
     t.settleProbeAt = new Map()
     await t.manageExits({})
     assert.equal(peak, 4); assert.ok(t.state.openTrades.every((r: any) => r.lastSideMid === 0.5))
+  })
+  await test('B-31: an unparseable state file is moved aside, never overwritten by the next persist', () => {
+    const p = join(dir, 'state-b31.json')
+    writeFileSync(p, '\ufeff{"trades": [1, 2')
+    const logs: string[] = []
+    assert.equal(loadJsonOrQuarantine(p, (s) => logs.push(s)), undefined)
+    assert.ok(!existsSync(p), 'the corrupt file no longer sits at the state path')
+    assert.ok(readdirSync(dir).some((f) => f.startsWith('state-b31.json.corrupt-')), 'it was moved aside')
+    assert.ok(logs.length === 1 && /unreadable/.test(logs[0]))
+    writeFileSync(p, '{"trades": [1, 2]}')
+    assert.deepEqual(loadJsonOrQuarantine(p), { trades: [1, 2] })
+    assert.equal(loadJsonOrQuarantine(join(dir, 'absent.json')), undefined)
+  })
+  await test('B-10: a live scan with no balance and no equity holds entries instead of skipping the kill switch', () => {
+    const t: any = Object.create(AutoTrader.prototype)
+    t.config = { stopEntry: false, maxDailyLossPct: 20 }
+    t.state = { openTrades: [], pendingOrders: [], daily: { date: '', count: 0 }, dailyPnl: { date: '', realized: 0, tripped: false } }
+    t.engine = { getExecutionMode: () => 'live' }
+    t.reconciledLive = true
+    t.venueLedgerStale = () => false
+    t.churn = new Map()
+    const why = t.entryBlocked({ strategy: 'fade', marketId: 'KXX' }, { tradingActive: true })
+    assert.match(why, /balance unknown/)
+    let kill = 0
+    t.killSwitchCheck = () => { kill++; return 'kill-switch: test' }
+    assert.equal(t.entryBlocked({ strategy: 'fade', marketId: 'KXX' }, { tradingActive: true, balance: 50 }), 'kill-switch: test')
+    assert.equal(kill, 1, 'with a balance the kill switch is judged')
+  })
+  await test('B-25: a lost exit response is booked from the recovered order, not retried, settled or dropped', async () => {
+    const mk = (over: Partial<any> = {}) => {
+      const t: any = Object.create(AutoTrader.prototype)
+      const trade: any = { id: 'x', marketId: 'KXF', outcome: 'NO', shares: 2, amount: 1.2, entryPrice: 0.6, strategy: 'fade', createdAt: Date.now() - 3600_000, exitUnknownAt: Date.now() - 120_000, feeRate: 0.07 }
+      t.state = { openTrades: [trade] }
+      t.persist = () => {}; t.emit = () => {}
+      t.booked = [] as any[]
+      t.recordExit = (pnl: number, key: string, tr: any, shares?: number) => t.booked.push({ pnl, key, shares })
+      t.removeTrade = (id: string) => { t.state.openTrades = t.state.openTrades.filter((r: any) => r.id !== id) }
+      t.engine = { recoveredOrder: () => ({ side: 'sell', orderId: 'sell-1', requestedAt: Date.now() - 100_000 }), submissionPending: () => false, ...over }
+      return { t, trade }
+    }
+    // Full fill recovered: booked at the fill price and removed.
+    {
+      const { t, trade } = mk()
+      const adapter: any = { getFills: async () => [{ orderId: 'sell-1', shares: 1.2, price: 0.46, fee: 0.02 }, { orderId: 'sell-1', shares: 0.8, price: 0.46, fee: 0.01 }, { orderId: 'other', shares: 5, price: 0.9, fee: 0 }] }
+      assert.equal(await t.reconcileUnknownExit(trade, adapter), false)
+      assert.equal(t.state.openTrades.length, 0)
+      assert.equal(t.booked.length, 1)
+      assert.ok(Math.abs(t.booked[0].pnl - ((0.46 - 0.6) * 2 - 0.03 - entryFeeDollars(trade))) < 1e-9, 'realized = (fill - entry) x shares - exit fees - entry fee')
+    }
+    // Still pending at the journal: untouched, and the caller must skip it.
+    {
+      const { t, trade } = mk({ recoveredOrder: () => undefined, submissionPending: () => true })
+      assert.equal(await t.reconcileUnknownExit(trade, { getFills: async () => { throw new Error('must not be called') } }), true)
+      assert.equal(t.state.openTrades.length, 1); assert.equal(t.booked.length, 0); assert.ok(trade.exitUnknownAt)
+    }
+    // Released as never created: the flag clears and the exit ladder may retry.
+    {
+      const { t, trade } = mk({ recoveredOrder: () => undefined, submissionPending: () => false })
+      assert.equal(await t.reconcileUnknownExit(trade, {}), false)
+      assert.equal(trade.exitUnknownAt, undefined); assert.equal(t.booked.length, 0); assert.equal(t.state.openTrades.length, 1)
+    }
+    // Partial: the slice is booked, the remainder keeps working.
+    {
+      const { t, trade } = mk()
+      assert.equal(await t.reconcileUnknownExit(trade, { getFills: async () => [{ orderId: 'sell-1', shares: 0.5, price: 0.5, fee: 0.01 }] }), false)
+      assert.equal(t.state.openTrades.length, 1); assert.equal(trade.shares, 1.5); assert.equal(trade.exitUnknownAt, undefined); assert.equal(t.booked[0].shares, 0.5)
+    }
+  })
+  await test('B-32/B-33: the socket top is snapshotted after the REST book and the quote carries its read time', async () => {
+    const ll: any = new LeadLagEngine(join(dir, 'll-b32.json'), () => undefined)
+    ll.resolveSlug = async () => ({ upToken: 'tok', marketId: 'm1' })
+    let top = { bid: 0.44, ask: 0.46, at: Date.now(), changes: 1 }
+    ll.polyWs = { top: () => top }
+    let fetchedAt = 0
+    const saved = globalThis.fetch
+    globalThis.fetch = (async () => {
+      top = { bid: 0.50, ask: 0.52, at: Date.now(), changes: 2 }
+      fetchedAt = Date.now()
+      return { ok: true, json: async () => ({ bids: [{ price: '0.50' }], asks: [{ price: '0.52' }] }) }
+    }) as any
+    try {
+      const q = await ll.polyQuote('slug')
+      assert.equal(q.ws.bid, 0.50, 'the snapshot is the top at the instant the book arrived, not before the round trip')
+      assert.ok(q.at >= fetchedAt && q.at <= Date.now())
+      assert.equal(q.source, 'clob-book')
+    } finally { globalThis.fetch = saved }
   })
   console.log(`remaining-defects: ${passed} scenarios passed`)
 }

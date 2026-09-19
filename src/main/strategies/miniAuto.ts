@@ -1029,6 +1029,12 @@ export class MiniAuto {
             this.logResearch('cancel-refused', { marketId: p.marketId, strategy: p.strategy, orderId: p.orderId, error: rec.cancelError })
           }
         }
+        // Promote a fill that landed before/around the cancel (audit B-17): a stopped arm's fill is still real inventory.
+        const filledWhileOff = o.fillCount - p.promoted
+        if (filledWhileOff > 0.005) {
+          this.promotePendingFill(p, filledWhileOff, legOf(p.yesPrice))
+          p.promoted = o.fillCount
+        }
         continue
       }
       if (o) {
@@ -1038,8 +1044,10 @@ export class MiniAuto {
           p.promoted = o.fillCount
         }
         if (Date.now() / 1000 > p.expirationTs + 120) {
+          // Cancel, but leave the row: a fill can land between the open-orders snapshot and this cancel, and the
+          // gone-branch promotes it from the venue's own order/fills before removing the row (audit B-16; the Kalshi
+          // trader has ordered it this way since round 63).
           await adapter.cancelOrder(p.orderId, p.marketId).catch(() => undefined)
-          this.state.pendingOrders = this.state.pendingOrders.filter((x) => x.orderId !== p.orderId)
         }
         continue
       }
@@ -1060,10 +1068,13 @@ export class MiniAuto {
         total = venueOrder.fillCount
         legPrice = venueOrder.avgYes !== undefined ? legOf(venueOrder.avgYes) : undefined
       } else {
-        const mine = fills.filter((f) => f.marketId === p.marketId && f.timestamp >= p.createdAt - 10_000)
+        // This order's fills only: by order id where the feed carries one, else the same leg and direction.
+        // Market-and-time alone promoted the other side of a two-sided rest, or a manual trade, as this
+        // order's fill (audit 2026-09-19, B-26). A fill's price is already the traded leg's price.
+        const mine = fills.filter((f) => f.marketId === p.marketId && f.timestamp >= p.createdAt - 10_000 && f.outcome === p.outcome && f.side === 'buy' && (!f.orderId || f.orderId === p.orderId))
         total = mine.reduce((s, f) => s + f.shares, 0)
         const vwap = mine.reduce((s, f) => s + f.price * f.shares, 0) / Math.max(total, 0.01)
-        legPrice = vwap > 0 && vwap < 1 ? legOf(vwap) : undefined
+        legPrice = vwap > 0 && vwap < 1 ? vwap : undefined
       }
       const newly = total - p.promoted
       if (newly > 0.005) {

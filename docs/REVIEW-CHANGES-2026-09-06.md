@@ -4580,3 +4580,38 @@ carries a test that fails without it; 19/19 suites.
 
 Not in this round, next: B-10 (a failed balance read silences the kill switch and the equity cap for that scan),
 B-11 (the mode-switch guard ignores the mini's resting orders), and the mediums in the report's order.
+
+## §134 - 2026-09-19 15:10Z: audit fix round two - the twenty-four mediums
+
+Operator: "IBKR is back up. Continue." Every medium in `docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md`
+(B-10..B-33), in the report's order. Tests where the fix has a pure or stubbable seam; 19/19 suites.
+
+| Finding | Fix |
+|---|---|
+| B-10 a failed live balance read was "no loss": the kill switch and the equity cap were skipped for that scan | `entryBlocked` holds entries while balance AND equity are unknown in live mode (the sub-engines already failed closed) |
+| B-11 the paper/live mode switch counted only the trader's resting orders | the guard counts the mini's `pendingOrders` too |
+| B-12 the churn guard (two entries per market per day, one-hour re-entry lockout) lived in memory only; a restart reset it | today's churn is mirrored into the persisted state and rebuilt on load |
+| B-13 a quarantined `kalshi-auto.json` started at `configVersion` 20, so migrations 21-27 never ran on the fresh state | the store's default is version 0; every migration runs |
+| B-14 an order the venue accepted as resting (`status: 'open'`, no `venueStatus`) released its cap reservation | the reservation is kept on `status === 'open'` on both placement paths |
+| B-15 the portfolio fallback cache was keyed by venue alone, so a paper read could serve a live snapshot and vice versa | keyed by `mode:venue` |
+| B-16 the mini's expired-order branch dropped the row after the cancel, before the gone-branch could promote a fill that landed first | the row stays; the gone-branch promotes from the venue's own order/fills |
+| B-17 a maker fill on a STOPPED strategy was never promoted to an open trade (trader and mini) while the rest lived | both strategy-off branches promote `filledWhileOff` before the cancel; the trader emits `autoopened` for it |
+| B-18 the Polymarket paper lab searched through the paced adapter, which was never catalog-indexed: the 3,000-row fallback every scan | discovery goes through the engine's indexed adapter |
+| B-19 `lastCheckpoint` stayed ahead of the evidence count after every re-baseline, so the 20-trade band checks were skipped (fade, volume-spike, consensus) | reset to 0 whenever it exceeds `floor(n / 20)` |
+| B-20 the 12 consensus positions opened before the matcher fix would grade into the restarted cohort | relabelled to `consensus:pre-matcher-20260919` with the app stopped (`consensus_perfkey.py`, 9 trades) |
+| B-21 Kalshi arms were judged on an equal-per-trade mean of per-contract nets; a 5-contract loser and a 1.25-contract winner weighed the same, and a partial close was an extra observation | `gradeEntry` keeps contract-weighted accumulators (`wN/wSum/wSq/wTrades`, per-day `w/wsum`); `weightedTraderStats` gives the ladder the contract-weighted mean, day-clustered SE (the labs' formula) and sd, used once every trade since the baseline carries a weight; the 20-trade checkpoints still count trades |
+| B-22 `quoterEvidence` was every KXHIGH/KXLOW settlement in the venue ledger (ratchet and weather-morning arms included), and `n` counted rows the mean excluded | only markets the quoter filled on (its fill sidecar, resting quotes, mark watch), minus markets any other arm bought (engine history refs); `n` = averaged rows |
+| B-23 `book_side === 'ask'` was read as "sell": every NO buy archived as a NO sale, every YES exit as a NO sale at the NO price (D5 of the 09-18 audit) | `mapKalshiFill`: buy/sell and the leg come from the still-emitted legacy `action`/`side`; without them the fill is a buy of the exposure side at that leg's price, which is how the venue nets it |
+| B-24 `executeDutch` booked a partially filled leg as a basket, its unwind sold the WHOLE venue NO position (another arm's contracts too), a failed unwind was swallowed, and legs bypassed the per-market guards | a leg already held by any arm refuses the basket; a fill under 99% of the leg's size aborts it; the unwind sells the basket's own shares; a leg the unwind cannot sell is kept as a tracked one-sided basket with an alert |
+| B-25 an ambiguous (timed-out/5xx) exit that actually filled was never booked: dropped as `orphan-ledger`, or settled at full size | the trade carries `exitUnknownAt`; `reconcileUnknownExit` books the recovered sell's fills by order id (full or partial) before any retry, settlement or ledger drop, and clears the flag once the journal releases a never-created order |
+| B-26 the mini's fallback fill attribution for a vanished order summed every fill on the market since the order's time - the other side of a two-sided rest, a manual trade | this order's fills only: by order id where the feed carries one, else the same leg and direction; the leg price is used as reported (it was being re-flipped for NO) |
+| B-27 every lead-lag and convergence position alerted "untracked - review it" once per ticker per process on the same webhook as the kill switch | a position is tracked when a sub-engine holds it (`heldTickers()` on both engines, the quoter's resting markets) or the journal's acknowledged row carries a sub-engine ref |
+| B-28 convergence and fade could take opposite sides of one strike; Kalshi nets them into one signed position and both ledgers mis-book | one arm per market in both directions: the trader refuses a market a sub-engine holds; convergence and lead-lag refuse a market the trader holds or rests on (`heldElsewhere`) |
+| B-29 the "day loss <= %" field saved every keystroke; an intermediate digit could trip the sticky daily kill switch mid-scan | committed on blur/Enter, validated 0..100, unchanged values not sent |
+| B-30 a corrupt or schema-mismatched `poly-paper.json` threw before `autoTrader.start()`: no window, live trader unmanaged | the lab's construction is caught; the file is moved to `.corrupt-<ts>` and a fresh lab starts |
+| B-31 `JsonStore.save` and every sub-engine `persist()` wrote unflushed; five loaders overwrote a corrupt file with defaults on the next persist | `flush: true` everywhere (trader, history, ladder, lead-lag, reconciler, dutch, convergence, quoter); `loadJsonOrQuarantine` moves an unparseable file aside for all of them |
+| B-32 the Polymarket socket snapshot was taken BEFORE the REST `/book` round trip, so the pre-registered agreement read compared two instants | snapshotted when the book (or midpoint) arrives; the quote carries `at` |
+| B-33 the sweep's `latencyMs` started after two Kalshi round trips; the Polymarket quote's age at the IOC was never measured | rows carry `polyAt` and `polyAgeMs` (quote read to IOC submit); the 2026-09-24 read can bound it |
+
+Restart: build 15:07:26Z, electron start 15:09:23Z under `agent.lock`; the B-20 relabel ran between stop
+and start. Not in this round: the 24 lows (B-36..B-59), next; BACKLOG 174.

@@ -10,7 +10,8 @@
  * 2. Fractional Kelly sizing calculator integration for mathematically optimal compound growth.
  * 3. Immediate-Or-Cancel (IOC) crossing with bounded 1c slippage.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { loadJsonOrQuarantine } from '../store/json'
 import { dirname } from 'node:path'
 import type { VenueAdapter } from '../../shared/venue'
 import { liveSpotFeed } from '../services/liveSpot'
@@ -136,13 +137,8 @@ export class CryptoConvergenceEngine {
     private readonly path: string,
     private readonly log: (s: string) => void = console.log
   ) {
-    try {
-      if (existsSync(path)) {
-        this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<ConvergenceState>) }
-      }
-    } catch {
-      // fresh state
-    }
+    const loaded = loadJsonOrQuarantine<Partial<ConvergenceState>>(path, log)
+    if (loaded) this.state = { ...this.state, ...loaded }
     // Legacy IOC misses were stored as "pending" even though no exchange
     // order remained. Normalize them so the UI and retry logic are truthful.
     for (const t of this.state.trades as Array<ConvergenceTrade & { status: string }>) {
@@ -178,7 +174,7 @@ export class CryptoConvergenceEngine {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
       const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2))
+      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(tmp, this.path)
     } catch (e) {
       this.log('[convergence] persist failed: ' + (e instanceof Error ? e.message : String(e)))
@@ -272,6 +268,11 @@ export class CryptoConvergenceEngine {
   /**
    * Scan hourly crypto ladders at T-5 minutes and fire convergence orders.
    */
+  /** Kalshi tickers with a filled, unsettled convergence position (audit 2026-09-19, B-27/B-28). */
+  heldTickers(): Set<string> {
+    return new Set(this.state.trades.filter((t) => t.status === 'filled').map((t) => t.marketTicker))
+  }
+
   async scanAndExecute(
     adapter: VenueAdapter,
     cfg: CryptoConvergenceConfig,
@@ -279,7 +280,13 @@ export class CryptoConvergenceEngine {
     armed: boolean,
     killed: boolean,
     /** Exchange trading paused (weekly maintenance): settle, but place nothing. */
-    paused = false
+    paused = false,
+    /**
+     * A market another arm holds or rests on. Fade buys longshot NO on the same daily strikes hours earlier;
+     * a convergence YES there would not open a position, it would close the fade contracts at the venue while
+     * both ledgers kept booking them (audit 2026-09-19, B-28).
+     */
+    heldElsewhere: (ticker: string) => boolean = () => false
   ): Promise<void> {
     if (this.running || !cfg.convergenceEnabled) return
     this.running = true
@@ -397,6 +404,11 @@ export class CryptoConvergenceEngine {
           const sameEvent = this.state.trades.filter((t) => (t.eventTicker ?? t.marketTicker) === eventTicker)
           if (sameEvent.some((t) => t.status === 'filled' || t.status === 'settled') || sameEvent.filter((t) => t.status === 'no_fill' || t.status === 'error').length >= 3) {
             skip.event++
+            continue
+          }
+          if (heldElsewhere(String(m.ticker))) {
+            skip.event++
+            this.log(`[convergence] ${m.ticker}: another arm holds this market; not crossing it`)
             continue
           }
 

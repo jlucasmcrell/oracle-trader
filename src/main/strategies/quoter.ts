@@ -31,6 +31,7 @@
  *    It is a diagnostic; scripts/quoter-shadow-gate.mjs grades it.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { loadJsonOrQuarantine } from '../store/json'
 import { dirname } from 'node:path'
 import type { VenueAdapter } from '../../shared/venue'
 import type { MarketTrade, OrderBook, VenueFill } from '../../shared/types'
@@ -393,13 +394,8 @@ export class ThinQuoter {
     private readonly path: string,
     private readonly log: (s: string) => void = console.log
   ) {
-    try {
-      if (existsSync(path)) {
-        this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<QuoterState>) }
-      }
-    } catch {
-      // fresh state
-    }
+    const loaded = loadJsonOrQuarantine<Partial<QuoterState>>(path, log)
+    if (loaded) this.state = { ...this.state, ...loaded }
     // Shadow rows written before cohorts existed: derive the cohort from the flag.
     for (const s of this.state.shadow ?? []) {
       const legacy = s as ShadowQuote & { gated?: boolean }
@@ -410,6 +406,33 @@ export class ThinQuoter {
 
   ownsOrder(orderId: string): boolean {
     return this.state.quotes.some((x) => x.orderId === orderId)
+  }
+
+  /**
+   * Markets the quoter has filled on since `sinceMs`, from its own fill sidecar: the ladder judges the quoter on
+   * settlements of THESE markets only, not on every weather settlement in the venue ledger (audit 2026-09-19,
+   * B-22). Resting quotes and the 20-minute mark watch are included so a fill that has not reached the sidecar
+   * yet still counts as the quoter's.
+   */
+  filledMarkets(sinceMs: number): Set<string> {
+    const out = new Set<string>()
+    for (const q of this.state.quotes) if ((q.filledSoFar ?? 0) > 0) out.add(q.marketId)
+    for (const w of this.state.markWatch ?? []) out.add(w.marketId)
+    try {
+      const p = this.sidecar('-fills.jsonl')
+      if (existsSync(p)) {
+        for (const line of readFileSync(p, 'utf8').split('\n')) {
+          if (!line.trim()) continue
+          try {
+            const row = JSON.parse(line) as { ts?: string; marketId?: string; count?: number }
+            if (row.marketId && (row.count ?? 0) > 0 && Date.parse(row.ts ?? '') >= sinceMs) out.add(row.marketId)
+          } catch { /* a torn last line */ }
+        }
+      }
+    } catch (e) {
+      this.log('[quoter] fill sidecar unreadable: ' + (e instanceof Error ? e.message : String(e)))
+    }
+    return out
   }
 
   /** Markets this quoter currently rests on (a taker arm must not cross its own quote). */
@@ -518,7 +541,7 @@ export class ThinQuoter {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
       const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2))
+      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(tmp, this.path)
     } catch (e) {
       this.log('[quoter] persist failed: ' + (e instanceof Error ? e.message : String(e)))

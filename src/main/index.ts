@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync } from 'node:fs'
+import { createWriteStream, mkdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
+import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
 import { KalshiAdapter } from './venues/kalshi'
 import { startCfReferenceShadow } from './venues/cfReferenceShadow'
@@ -164,7 +165,9 @@ function registerIpc(): void {
       // stops the trader (or restores a parked state) first.
       const k = autoTrader.getStatus()
       const held = k.openTrades.length + (k.pendingOrders ?? []).length
-      const miniHeld = [...miniAutos.values()].reduce((n, m) => n + m.getStatus().openTrades.length, 0)
+      // Resting mini orders count too (audit 2026-09-19, B-11): a live->paper flip while maker orders rested promoted
+      // their later fills into a paper-governed ledger that discarded them at settlement.
+      const miniHeld = [...miniAutos.values()].reduce((n, m) => { const s = m.getStatus(); return n + s.openTrades.length + (s.pendingOrders ?? []).length }, 0)
       if (held + miniHeld > 0) {
         throw new Error(
           `Cannot switch to ${mode}: Kalshi holds ${k.openTrades.length} open + ${(k.pendingOrders ?? []).length} resting, minis hold ${miniHeld}. ` +
@@ -423,9 +426,21 @@ app.whenReady().then(async () => {
   const labStart=setTimeout(()=>void ibkrLab.scan(),10000)
   const labTimer=setInterval(()=>void ibkrLab.scan(),30000)
   const polyVenue=new PolymarketUsAdapter(1500)
-  polyPaper=new PolyPaperLab(join(app.getPath('userData'),'poly-paper.json'),{
-    searchMarkets:q=>polyVenue.searchMarkets(q),getMarket:id=>polyVenue.getMarket(id),getOrderBook:id=>polyVenue.getOrderBook!(id)
-  })
+  const polyPaperPath=join(app.getPath('userData'),'poly-paper.json')
+  const polyPaperVenue:Pick<VenueAdapter,'searchMarkets'|'getMarket'|'getOrderBook'>={
+    // Discovery goes through the ENGINE's adapter, the one instance that carries the catalog index (§118); the paced
+    // instance was never indexed, so the lab's "whole venue" walk was still the 3,000-row fallback (audit B-18).
+    searchMarkets:q=>(polyUs instanceof PolymarketUsAdapter?polyUs:polyVenue).searchMarkets(q),getMarket:id=>polyVenue.getMarket(id),getOrderBook:id=>polyVenue.getOrderBook!(id)
+  }
+  try{polyPaper=new PolyPaperLab(polyPaperPath,polyPaperVenue)}
+  catch(err){
+    // A paper lab's state file must never keep the live Kalshi trader from starting: the constructor throws on a
+    // BOM or a missing cash entry, and it ran before autoTrader.start() with no catch (audit 2026-09-19, B-30).
+    const aside=`${polyPaperPath}.corrupt-${Date.now()}`
+    console.warn(`[poly-paper] state unreadable (${err instanceof Error?err.message:String(err)}); moving to ${aside} and starting fresh`)
+    try{renameSync(polyPaperPath,aside)}catch{/* missing or locked: the fresh lab overwrites on its first save */}
+    polyPaper=new PolyPaperLab(polyPaperPath,polyPaperVenue)
+  }
   const polyStart=setTimeout(()=>void polyPaper.scan(),20000)
   const polyTimer=setInterval(()=>void polyPaper.scan(),60000)
   app.once('before-quit',()=>{clearTimeout(polyStart);clearInterval(polyTimer)})

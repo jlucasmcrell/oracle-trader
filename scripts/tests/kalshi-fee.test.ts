@@ -28,6 +28,7 @@ import {
 import { entryFeeDollars, netCentsOf } from '../../src/main/strategies/autoTrader'
 import { kalshiTakerFeeCents } from '../../src/main/strategies/leadLag'
 import { PaperBroker } from '../../src/main/engine/paper'
+import { mapKalshiFill } from '../../src/main/venues/kalshi'
 
 const R = KALSHI_TAKER_FEE_COEF
 let n = 0
@@ -215,6 +216,24 @@ async function paperChecks(): Promise<void> {
   assert.ok(pres.shares > 0, 'poly fill')
   assert.ok(Math.abs((pres.fee ?? 0) - R * pres.shares * 0.02 * 0.98) < 1e-9, 'non-Kalshi venues keep the continuous model')
   ok('other venues keep the continuous model')
+}
+
+// audit 2026-09-19 B-23: outcome_side/book_side are exposure, not buy/sell. The deprecated action/side pair
+// still says which; without it a fill is a buy of the exposure side at that leg's price (how the venue nets it).
+{
+  const base = { fill_id: 'f1', order_id: 'o1', ticker: 'KXT', count_fp: '3', yes_price_dollars: '0.62', no_price_dollars: '0.38', fee_cost: '0.03', is_taker: true, created_time: '2026-09-19T10:00:00Z' }
+  const buyNo = mapKalshiFill({ ...base, outcome_side: 'no', book_side: 'ask', action: 'buy', side: 'no' })
+  assert.deepEqual([buyNo.side, buyNo.outcome, buyNo.price], ['buy', 'NO', 0.38]); n++
+  const sellYes = mapKalshiFill({ ...base, outcome_side: 'no', book_side: 'ask', action: 'sell', side: 'yes' })
+  assert.deepEqual([sellYes.side, sellYes.outcome, sellYes.price], ['sell', 'YES', 0.62]); n++
+  const sellNo = mapKalshiFill({ ...base, outcome_side: 'yes', book_side: 'bid', action: 'sell', side: 'no' })
+  assert.deepEqual([sellNo.side, sellNo.outcome, sellNo.price], ['sell', 'NO', 0.38]); n++
+  const sellYesNoLeg = mapKalshiFill({ ...base, outcome_side: 'no', book_side: 'ask', action: 'sell' })
+  assert.deepEqual([sellYesNoLeg.side, sellYesNoLeg.outcome, sellYesNoLeg.price], ['sell', 'YES', 0.62]); n++
+  const exposureOnly = mapKalshiFill({ ...base, outcome_side: 'no', book_side: 'ask' })
+  assert.deepEqual([exposureOnly.side, exposureOnly.outcome, exposureOnly.price, exposureOnly.shares], ['buy', 'NO', 0.38, 3]); n++
+  const legacyBookOnly = mapKalshiFill({ ...base, book_side: 'bid' })
+  assert.deepEqual([legacyBookOnly.side, legacyBookOnly.outcome, legacyBookOnly.price], ['buy', 'YES', 0.62]); n++
 }
 
 paperChecks()

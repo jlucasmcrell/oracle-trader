@@ -3,7 +3,7 @@
  * Run: npm run test:ladder
  */
 import { clusterT, clusteredMean, CONFIDENCE_Z, COOLDOWN_MS, LONG_COOLDOWN_MS, cooldownAfter, dayClusteredSe, decideConvergence, decideQuoter, decideSettlement, decideStage, isPromotion, meanCi, QUOTER_GATE, tradeSmallEntry } from '../../src/main/ladder/ladder'
-import { clusterT95, SCALE_Z } from '../../src/main/ladder/ladder'
+import { clusterT95, SCALE_Z, weightedTraderStats } from '../../src/main/ladder/ladder'
 import { geminiKey } from '../../src/main/intelligence/gemini'
 import { planParameterChanges, REVIEW_CHEAP_MODEL, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../src/shared/ipc'
@@ -285,6 +285,20 @@ const EV = (clusters) => ({ n: 20, netDollars: 2, mean: 1.0, se: 0.5, sd: 5, clu
 eq('stage: two clusters cannot carry a scale-up on this evidence', decideStage(EV(2), 1, 0).kind, 'hold')
 eq('stage: the same numbers over twelve clusters can', decideStage(EV(12), 1, 0).kind, 'scale-up')
 eq('stage: no cluster count cannot add size (2026-09-19)', decideStage({ n: 20, netDollars: 2, mean: 1.0, se: 0.5, sd: 5 }, 1, 0).kind, 'hold')
+
+// audit 2026-09-19 B-21: the report's example - ten 5-contract losers at -20c and ten 1.25-contract winners at
+// +19c read -0.5c equal-per-trade and -12.2c per contract; the ladder now judges the second.
+{
+  const c = { netN: 20, netSum: 10 * -20 + 10 * 19, netSq: 10 * 400 + 10 * 361, wTrades: 20, wN: 62.5, wSum: 10 * -100 + 10 * 23.75, wSq: 10 * 2000 + 10 * 451.25,
+    byDay: { '2026-09-18': { n: 10, sum: -5, w: 31.25, wsum: -381.25 }, '2026-09-19': { n: 10, sum: -5, w: 31.25, wsum: -381.25 } } }
+  const w = weightedTraderStats(c, {}, 20)
+  eq('weighted: mean is per contract, not per trade', w?.mean.toFixed(1), '-12.2')
+  eq('weighted: two day clusters', w?.clusters, 2)
+  eq('weighted: clustered SE is finite and positive', (w?.se ?? 0) > 0 && Number.isFinite(w?.se), true)
+  eq('weighted: not used while a stage predates the weights (fewer weighted grades than trades)', weightedTraderStats({ ...c, wTrades: 12 }, {}, 20), null)
+  eq('weighted: baseline deltas', weightedTraderStats(c, { wTrades: 10, wN: 50, wSum: -1000, wSq: 20000, 'dayW:2026-09-18': 31.25, 'dayWSum:2026-09-18': -381.25 }, 10)?.mean.toFixed(2), '19.00')
+  eq('weighted: no trades, no stats', weightedTraderStats(c, {}, 0), null)
+}
 
 console.log(`ladder: ${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

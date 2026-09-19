@@ -37,6 +37,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { loadJsonOrQuarantine } from '../store/json'
 import { dirname, join } from 'node:path'
 import type { TradingEngine } from '../engine/engine'
 import type { AutoTrader } from '../strategies/autoTrader'
@@ -366,6 +367,41 @@ export function clusteredSe(groups: { n: number; sum: number }[], n: number, mea
  * momentum a -2.93..-2.93 "80% band" and stopped it on no evidence at all.
  * Falls back to the plain SE when the buckets do not account for every trade.
  */
+export interface CalibAccumulator {
+  netN?: number; netSum?: number; netSq?: number
+  byDay?: Record<string, { n: number; sum: number; w?: number; wsum?: number }>
+  wN?: number; wSum?: number; wSq?: number; wTrades?: number
+}
+
+/**
+ * Contract-weighted mean, SE and sd of the net cents per contract since the stage baseline - the estimand the
+ * doctrine states and both labs compute (audit 2026-09-19, B-21). N is contracts, the day clusters carry
+ * contract sums, and the SE is the G/(G-1)-corrected cluster estimator over those sums (the lab's formula),
+ * floored at the plain SE below three clusters as dayClusteredSe does. Returns null when the weighted
+ * accumulators do not cover every trade counted since the baseline (a stage that began before the weights
+ * existed): the caller then keeps the equal-per-trade statistics until its next baseline capture.
+ */
+export function weightedTraderStats(c: CalibAccumulator | undefined, b: Record<string, number>, trades: number): { mean: number; se: number; sd?: number; groups: { n: number; sum: number }[]; clusters?: number } | null {
+  const wTrades = (c?.wTrades ?? 0) - (b.wTrades ?? 0)
+  const wN = (c?.wN ?? 0) - (b.wN ?? 0)
+  if (trades <= 0 || wTrades !== trades || !(wN > 0)) return null
+  const wSum = (c?.wSum ?? 0) - (b.wSum ?? 0)
+  const wSq = (c?.wSq ?? 0) - (b.wSq ?? 0)
+  const mean = wSum / wN
+  const groups = Object.entries(c?.byDay ?? {})
+    .map(([day, g]) => ({ n: (g.w ?? 0) - (b[`dayW:${day}`] ?? 0), sum: (g.wsum ?? 0) - (b[`dayWSum:${day}`] ?? 0) }))
+    .filter((g) => g.n > 1e-9)
+  const plain = wN > 1 ? Math.sqrt(Math.max(0, (wSq - wN * mean * mean) / (wN - 1)) / wN) : 0
+  const covered = Math.abs(groups.reduce((a, g) => a + g.n, 0) - wN) < 1e-6
+  let se = plain
+  if (groups.length > 0 && covered) {
+    const clustered = clusteredSe(groups, wN, mean)
+    se = groups.length < 3 ? Math.max(clustered, plain) : clustered
+  }
+  const sd = wN > 1 ? Math.sqrt(Math.max(0, (wSq - wN * mean * mean) / (wN - 1))) : undefined
+  return { mean, se, sd, groups, clusters: groups.length > 0 && covered ? groups.length : undefined }
+}
+
 export function dayClusteredSe(groups: { n: number; sum: number }[], n: number, mean: number, sq: number): number {
   const plain = n > 1 ? Math.sqrt(Math.max(0, (sq - n * mean * mean) / (n - 1)) / n) : 0
   if (groups.length === 0 || groups.reduce((a, g) => a + g.n, 0) !== n) return plain
@@ -586,12 +622,8 @@ export class Ladder {
     private readonly userData: string,
     private readonly log: (s: string) => void = console.log
   ) {
-    const p = this.statePath()
-    try {
-      if (existsSync(p)) this.state = { ...this.state, ...(JSON.parse(readFileSync(p, 'utf8')) as Partial<LadderState>) }
-    } catch {
-      // fresh state
-    }
+    const loaded = loadJsonOrQuarantine<Partial<LadderState>>(this.statePath(), this.log)
+    if (loaded) this.state = { ...this.state, ...loaded }
   }
 
   private statePath(): string {
@@ -644,7 +676,7 @@ export class Ladder {
     try {
       const p = this.statePath()
       mkdirSync(dirname(p), { recursive: true })
-      writeFileSync(p + '.tmp', JSON.stringify(this.state, null, 2))
+      writeFileSync(p + '.tmp', JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(p + '.tmp', p)
     } catch (e) {
       this.log('[ladder] persist failed: ' + (e instanceof Error ? e.message : String(e)))
@@ -736,6 +768,7 @@ export class Ladder {
         s.stage = cfgStage
         s.since = Date.now()
         s.baseline = this.captureBaseline(id)
+        s.lastCheckpoint = 0 // the evidence restarts with the baseline (audit B-19)
         // A switch-off in the panel is the operator's call: trade-small entry
         // stays off until the operator switches it back on (a passing gate can
         // still promote). A switch-on clears the hold.
@@ -750,12 +783,15 @@ export class Ladder {
     if (key) {
       const st = this.autoTrader.getStatus()
       const p = st.perfByStrategy?.[key]
-      const c = st.calib?.byStrategy?.[key] as unknown as { netN?: number; netSum?: number; netSq?: number; byDay?: Record<string, { n: number; sum: number }> } | undefined
-      const b: Record<string, number> = { trades: p?.trades ?? 0, realizedPnl: p?.realizedPnl ?? 0, netN: c?.netN ?? 0, netSum: c?.netSum ?? 0, netSq: c?.netSq ?? 0 }
+      const c = st.calib?.byStrategy?.[key] as unknown as CalibAccumulator | undefined
+      const b: Record<string, number> = { trades: p?.trades ?? 0, realizedPnl: p?.realizedPnl ?? 0, netN: c?.netN ?? 0, netSum: c?.netSum ?? 0, netSq: c?.netSq ?? 0,
+        wN: c?.wN ?? 0, wSum: c?.wSum ?? 0, wSq: c?.wSq ?? 0, wTrades: c?.wTrades ?? 0 }
       // Per-day sums so the live evidence can be clustered by day since promotion.
       for (const [day, g] of Object.entries(c?.byDay ?? {})) {
         b[`dayN:${day}`] = g.n
         b[`daySum:${day}`] = g.sum
+        b[`dayW:${day}`] = g.w ?? 0
+        b[`dayWSum:${day}`] = g.wsum ?? 0
       }
       // Trades still open from the previous stage settle later and would land
       // in this stage's evidence (2026-09-08: two mean-reversion v2 losers
@@ -1084,11 +1120,17 @@ export class Ladder {
   private async quoterEvidence(since: number, notch: number): Promise<StageEvidence | null> {
     const pnl = await this.engine.getLivePnl('kalshi').catch(() => null)
     if (!pnl?.details) return null
-    const rows = pnl.details.filter((d) => d.timestamp >= since && /^KX(HIGH|LOW)/.test(d.marketId))
+    // Only markets the quoter itself filled on: the settlement ratchet and the weather-morning arms settle the
+    // same KXHIGH/KXLOW tickers, and until 2026-09-19 every one of their rows was the quoter's evidence (audit
+    // B-22). A market that another arm also filled on is excluded: Kalshi settles one net position per market.
+    const mine = this.autoTrader.quoterFilledMarkets(since - 24 * 60 * 60_000)
+    const others = this.autoTrader.otherArmMarkets('quoter', since - 24 * 60 * 60_000)
+    const rows = pnl.details.filter((d) => d.timestamp >= since && /^KX(HIGH|LOW)/.test(d.marketId) && mine.has(d.marketId) && !others.has(d.marketId))
     // Cluster by city-day event (ticker without its strike): one day's brackets settle together.
     const obs = rows.filter((r) => r.shares > 0).map((r) => ({ v: (r.realizedPnl / r.shares) * 100, g: r.marketId.replace(/-[A-Z]?[\d.]+$/, '') }))
     const ci = clusteredMean(obs)
-    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: 'c/contract', stake: 1 * notch }
+    // n is the rows the mean was taken over, not every row (a zero-share row counted before and was not averaged).
+    return { n: obs.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: 'c/contract', stake: 1 * notch }
   }
 
   private convergenceEvidence(since: number, notch: number): StageEvidence | null {
@@ -1109,7 +1151,7 @@ export class Ladder {
   private traderEvidence(s: LadderStrategy, key: string): StageEvidence {
     const st = this.autoTrader.getStatus()
     const p = st.perfByStrategy?.[key]
-    const c = st.calib?.byStrategy?.[key] as unknown as { netN?: number; netSum?: number; netSq?: number; byDay?: Record<string, { n: number; sum: number }> } | undefined
+    const c = st.calib?.byStrategy?.[key] as unknown as CalibAccumulator | undefined
     const b = s.baseline ?? {}
     // A baseline captured before a calibration clear (v27, 2026-09-18) holds counts the accumulator no longer
     // has, so the delta clamps to zero and the arm can never reach a checkpoint (§127, M-04: fade 17,
@@ -1120,20 +1162,28 @@ export class Ladder {
     // clear (any scale-up since) has since >= CALIB_CLEARED_AT and is left alone.
     if ((c?.netN ?? 0) < (b.netN ?? 0) || (s.since < CALIB_CLEARED_AT && (b.netN ?? 0) > 0)) {
       console.log(`[ladder] ${s.id}: baseline netN ${b.netN} predates the 2026-09-18 calibration clear (accumulator ${c?.netN ?? 0}); re-baselining to zero`)
-      for (const k of Object.keys(b)) if (k === 'netN' || k === 'netSum' || k === 'netSq' || k.startsWith('dayN:') || k.startsWith('daySum:')) b[k] = 0
+      for (const k of Object.keys(b)) if (k === 'netN' || k === 'netSum' || k === 'netSq' || k === 'wN' || k === 'wSum' || k === 'wSq' || k === 'wTrades' || k.startsWith('dayN:') || k.startsWith('daySum:') || k.startsWith('dayW:') || k.startsWith('dayWSum:')) b[k] = 0
       s.baseline = b
     }
     const n = Math.max(0, (c?.netN ?? 0) - (b.netN ?? 0))
+    // A checkpoint counter ahead of the evidence count is only possible when the evidence restarted under it (a
+    // re-baseline, a clear, a hand re-base): the 20-trade band checks were being skipped until the count caught up
+    // (audit B-19: fade, volume-spike and consensus were all in that state). Reset it.
+    if ((s.lastCheckpoint ?? 0) > Math.floor(n / CHECKPOINT_TRADES)) {
+      console.log(`[ladder] ${s.id}: checkpoint ${s.lastCheckpoint} is ahead of ${n} settled since the stage baseline; resetting to 0`)
+      s.lastCheckpoint = 0
+    }
+    const w = weightedTraderStats(c, b, n)
     const sum = (c?.netSum ?? 0) - (b.netSum ?? 0)
     const sq = (c?.netSq ?? 0) - (b.netSq ?? 0)
-    const mean = n > 0 ? sum / n : 0
+    const mean = w ? w.mean : n > 0 ? sum / n : 0
     // Cluster by day since promotion when the per-day sums are available; else the plain SE.
-    const groups = Object.entries(c?.byDay ?? {})
+    const groups = w ? w.groups : Object.entries(c?.byDay ?? {})
       .map(([day, g]) => ({ n: g.n - (b[`dayN:${day}`] ?? 0), sum: g.sum - (b[`daySum:${day}`] ?? 0) }))
       .filter((g) => g.n > 0)
-    const se = dayClusteredSe(groups, n, mean, sq)
-    const sd = n > 1 ? Math.sqrt(Math.max(0, (sq - n * mean * mean) / (n - 1))) : undefined
-    const clusters = groups.length > 0 && groups.reduce((a, g) => a + g.n, 0) === n ? groups.length : undefined
+    const se = w ? w.se : dayClusteredSe(groups, n, mean, sq)
+    const sd = w ? w.sd : n > 1 ? Math.sqrt(Math.max(0, (sq - n * mean * mean) / (n - 1))) : undefined
+    const clusters = w ? w.clusters : groups.length > 0 && groups.reduce((a, g) => a + g.n, 0) === n ? groups.length : undefined
     const stake = (this.autoTrader.getConfig().amountPerTrade ?? 0) * (s.notch ?? 1)
     // statsBand refuses whenever the sum of squares covers fewer observations than the sum (round 67), so a
     // half-accumulated series cannot produce a veto out of a band that was never computable.

@@ -497,6 +497,9 @@ export interface AutoOpenTrade {
   feeRate?: number
   /** Exit-ledger key when it differs from `strategy`: a stage change detaches the trades it inherited under `<strategy>:pre-<stamp>`, so a new stage is judged only on trades it opened. */
   perfKey?: string
+  /** A live exit whose response was lost (timeout/5xx after submission): the trade waits for the journal to recover
+   *  the order and books its fills before any retry, settlement or ledger drop (audit 2026-09-19, B-25). */
+  exitUnknownAt?: number
   /** Last time the venue was asked about this market and answered "not resolved yet" — lets the ledger audit tell a creator who has not resolved from a settlement path of ours that has broken. */
   venueUnresolvedAt?: number
 }
@@ -539,7 +542,7 @@ export interface CalibBucket {
 /** Forward calibration of the bot's own entries + counterfactual veto grading. */
 export interface CalibStats {
   /** netCents = mean net cents per contract after fees over graded settlements (the base-rate-proof number); netCiLo/Hi = event-clustered 95% interval. */
-  byStrategy: Record<string, { n: number; brier: number; buckets: CalibBucket[]; netCents?: number; netN?: number; netSum?: number; netSq?: number; byDay?: Record<string, { n: number; sum: number }>; netEvents?: number; netDays?: number; netCiLo?: number; netCiHi?: number }>
+  byStrategy: Record<string, { n: number; brier: number; buckets: CalibBucket[]; netCents?: number; netN?: number; netSum?: number; netSq?: number; byDay?: Record<string, { n: number; sum: number; w?: number; wsum?: number }>; netEvents?: number; netDays?: number; netCiLo?: number; netCiHi?: number; wN?: number; wSum?: number; wSq?: number; wTrades?: number }>
   /** Vetoed signals currently being watched to resolution. */
   vetoWatching: number
   /** Graded vetoes: how often the vetoed trade would have won, and its est. P&L. */

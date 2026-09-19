@@ -10,7 +10,8 @@
  * Enforces exhaustive slate rules (requires 'Other'/'None' leg or verified closed roster)
  * to avoid truncation risk on open-ended rosters.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { loadJsonOrQuarantine } from '../store/json'
 import { dirname } from 'node:path'
 import type { VenueAdapter } from '../../shared/venue'
 import { kalshiTakerOrderFeeDollars } from '../util/kalshiFee'
@@ -109,13 +110,8 @@ export class DutchBookEngine {
     private readonly path: string,
     private readonly log: (s: string) => void = console.log
   ) {
-    try {
-      if (existsSync(path)) {
-        this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<DutchState>) }
-      }
-    } catch {
-      // fresh state
-    }
+    const loaded = loadJsonOrQuarantine<Partial<DutchState>>(path, log)
+    if (loaded) this.state = { ...this.state, ...loaded }
   }
 
   status(cfg: DutchBookConfig): DutchBookStatus {
@@ -137,7 +133,7 @@ export class DutchBookEngine {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
       const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2))
+      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
       renameSync(tmp, this.path)
     } catch (e) {
       this.log('[dutch] persist failed: ' + (e instanceof Error ? e.message : String(e)))
