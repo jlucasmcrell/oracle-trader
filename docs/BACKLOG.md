@@ -1971,6 +1971,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   covers pairs across series where A implies B (cut by September inside cut by November; a spread inside its
   moneyline; conference champion inside national champion). GET-only scanner over the open catalog, logging every
   `ask(B) < bid(A)` net of fees. Trigger: build by **2026-09-23**; read at 7 days.
+- **162 BUILT and first read (2026-09-19 10:15Z, §130).** `scripts/implication-scan.mjs`: 6,528 spread-vs-moneyline
+  pairs across 166 series, zero violations, best -0.92c after fees. Recording every 30 min for 8 days
+  (`OracleTrader-ImplicationScan`, `data/implication-scan/`). Trigger: read on **2026-09-26** - count confirmed
+  positive pairs per day and their depth; none in a week closes the family like 76.
 - **163. Post-final sports liquidity (§129, Flash F-15).** In the 151 read on **2026-09-25**: for each matched game,
   the Kalshi book in the cycles after the Polymarket US book collapses to 0/1 (the free "final" signal) - resting
   bids on the loser above 1c, asks on the winner below 99c, and for how many cycles.

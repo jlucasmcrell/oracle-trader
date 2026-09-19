@@ -4428,3 +4428,29 @@ flash. Those remain as configured (`hunchChallengerModel`, `intelligenceSecondar
 - Flash F-15 (post-final sports sweeps): the sports-books recorder already captures both books through game end; the 09-25 read (151) adds the post-final residual-liquidity question. Flash F-16 (cross-venue econ execution now that IBKR is funded): the 150 read decides.
 
 Tests 18/18. Lab reset to the live cash at the rule change; app restarted; the consensus recorder re-run once so fresh rows carry `side`.
+
+## §130 - 2026-09-19 10:15Z: what the seven reviews offered as strategies, and the one measured today
+
+Asked directly: none of the seven external reviews produced a strategy with evidence behind it. What they
+proposed, and where each stands:
+
+| Proposal | Reviewer(s) | Status |
+|---|---|---|
+| Bracket-sum (mutually exclusive) arbitrage | Gemini | exists: the dutch arm |
+| Capital-velocity / duration sorting | Gemini | exists: the long-horizon cap and the velocity doctrine |
+| Sharp-book latency capture via The Odds API | Gemini | exists: sports-anchor, -$5.14 live |
+| Settlement-disagreement "arbitrage" on 15-minute crypto | DeepSeek | not an arbitrage by its own mechanism; the basis read (150/158) |
+| Fade as maker spread capture | Gemini Pro | already live at tiny size; description accepted |
+| Within-ladder monotonicity | (implicit) | closed on evidence, backlog 76 |
+| **Cross-series implication: spread implies moneyline** | Gemini Pro F-05, Gemini Flash F-14 | **measured today, below** |
+| Post-final sports liquidity sweeps | Gemini Flash F-15 | reads from the sports-books recorder on 09-25 (163) |
+| Cross-venue econ baskets now that IBKR is funded | Gemini Flash F-16 | the 150 read on 09-25 decides |
+| Executable-bound lead-lag grading | ChatGPT F-07 | diagnostic, not a strategy (157) |
+
+**Spread ⇒ moneyline implication scan (`scripts/implication-scan.mjs`, GET-only).** "T wins by over X" implies
+"T wins"; "U wins" implies not "T wins by over X". A price violation of either is a Dutch book with a free
+option. Scanned every full-game spread series on Kalshi (166 of 3,827 sports series; 3,292 open spread
+markets; 6,528 implication pairs) on list quotes, with every positive pair re-read on the live book: **zero
+violations**. Best pair -0.92c after two taker fees; median -39c; p90 -15c. The relation is priced at scan
+time, as the ladders were (76). Transient violations around line moves are the remaining question: task
+`OracleTrader-ImplicationScan` records the scan every 30 minutes for 8 days; backlog 162 reads it on 09-26.
