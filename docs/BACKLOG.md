@@ -1940,3 +1940,9 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   read on **2026-09-24** uses trades since 2026-09-18T23:54:42Z only; the archived ledger holds the prior 294 for
   reference. Reset again with `scripts/poly-paper-reset.py --cash <live cash>` whenever the live balance moves
   materially (deposit or withdrawal), not on P&L drift.
+- **Public repo + external review (2026-09-19).** `https://github.com/jlucasmcrell/oracle-trader` is PUBLIC (MIT).
+  The review prompt for other models is `docs/REVIEW-REQUEST-PROMPT.md`. Two standing rules follow from the flip:
+  (1) re-run the PII/secret scan before any push that adds a `docs/reports/` asset or a new data file - history is
+  permanent once pushed, and orphaned objects stay reachable by SHA; (2) when external reports come back, triage
+  each finding against `docs/DEVELOPER-HANDBOOK.md` §16 and this backlog before acting, and record accepted
+  findings as numbered rounds with their own triggers. Trigger: on the operator handing back any external report.

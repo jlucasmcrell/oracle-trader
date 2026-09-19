@@ -1113,7 +1113,9 @@ Verified on 2026-09-15 unless marked otherwise.
    and refuse a verdict on conflicting identities. They do not silently repair diverging simulator histories.
 2. **Windows Update restarts.** 2026-09-09 (5 h 26 min) and 2026-09-15 (4 h 51 min). Everything recovers at logon; the
    collector's gap cannot be rebuilt. Active hours are the operator's setting.
-3. **No git.** Changes are recoverable only from zip backups and `.bak_*` files.
+3. ~~**No git.**~~ Closed 2026-09-18: the tree is a git repository, public at
+   `https://github.com/jlucasmcrell/oracle-trader`. Runtime state and credentials are excluded by `.gitignore`;
+   hourly zip backups and `.bak_*` files continue for the state git does not carry.
 4. **Interrupted-write repair, September 15 09:18 UTC:** settings, nightly review files and both hunch state files now
    use flushed same-directory temporary-file replacement. A simulated replacement failure preserves the previous file.
 5. **v26 migration repaired, deployed 08:36 UTC September 15.** The migration now persists version 26 after older
