@@ -285,6 +285,7 @@ export default function AutoTraderPanel({ log, onChanged }: Props) {
           {status.venueDailyRealized === undefined ? 'n/a' : `${status.venueDailyRealized >= 0 ? '+' : ''}${status.venueDailyRealized.toFixed(2)}`}
           {status.venueDailySettlements !== undefined ? ` (${status.venueDailySettlements} settled)` : ''}
           {status.killSource ? ` - kill reads ${status.killSource}` : ''}
+          {status.openDayMtm !== undefined && status.openDayMtm !== 0 ? ` - open today ${status.openDayMtm >= 0 ? '+' : ''}${status.openDayMtm.toFixed(2)}` : ''}
         </span>
       </div>
 

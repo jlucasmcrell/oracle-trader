@@ -626,7 +626,9 @@ calibration ledger via `gradeEntry()`.
 
 ### 9.7 Risk controls
 
-- **Kill switch** (`killSwitchCheck`): trips when the day's realized loss ≤ −`maxDailyLossPct`% (20) × equity. The
+- **Kill switch** (`killSwitchCheck`): trips when the day's realized loss PLUS today's loss on open positions
+  (`openDayMtm`: shares x (latest side mid − the day-start mark), quotes under 10 min old, a net gain counts as
+  zero; §137) ≤ −`maxDailyLossPct`% (20) × equity. The
   day's loss is the **worse** of the local `dailyPnl` and `venueDay`, which is refreshed from venue settlements and
   includes sub-engines that never touch `dailyPnl`. Once tripped it is **sticky for the UTC day**, persisted, and
   halts every engine (sub-engines check `subEngineKilled()`). Entries resume automatically on the next UTC day. The

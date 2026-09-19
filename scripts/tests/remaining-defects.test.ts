@@ -185,6 +185,34 @@ async function main() {
     await t.manageExits({})
     assert.equal(peak, 4); assert.ok(t.state.openTrades.every((r: any) => r.lastSideMid === 0.5))
   })
+  await test('kill switch counts today\'s loss on open positions: fresh quotes, day-start reference, gains never offset', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const mk = (pct: number, trades: any[], realized = -2) => {
+      const t: any = Object.create(AutoTrader.prototype)
+      t.config = { maxDailyLossPct: pct }
+      t.state = { dailyPnl: { date: today, realized, tripped: false }, openTrades: trades }
+      t.engine = { getExecutionMode: () => 'paper' }
+      t.emit = () => {}; t.alert = () => {}; t.persist = () => {}
+      return t
+    }
+    const fresh = Date.now() - 60_000
+    const loser = { shares: 10, lastSideMid: 0.4, lastSideMidAt: fresh, dayMark: { date: today, mid: 0.9 } }            // -5.00 today
+    const winner = { shares: 10, lastSideMid: 0.95, lastSideMidAt: fresh, dayMark: { date: today, mid: 0.15 } }         // +8.00 today
+    assert.equal(mk(20, [loser]).killSwitchCheck(50), null, '-2 realized -5 open is inside a $10 limit')
+    assert.match(mk(12, [loser]).killSwitchCheck(50), /TRIPPED/, '-7 breaches a $6 limit that -2 realized alone does not')
+    assert.equal(mk(12, []).killSwitchCheck(50), null)
+    assert.equal(mk(12, [{ ...loser, lastSideMidAt: Date.now() - 20 * 60_000 }]).killSwitchCheck(50), null, 'a stale mark is unknown, not a loss')
+    assert.equal(mk(12, [{ ...loser, dayMark: { date: '2026-01-01', mid: 0.9 } }]).killSwitchCheck(50), null, 'a mark from another day is not today\'s change')
+    assert.match(mk(12, [winner], -7).killSwitchCheck(50), /TRIPPED/, 'a paper gain does not offset a realized loss')
+    assert.equal(mk(12, [winner, { ...loser, shares: 1 }], -2).killSwitchCheck(50), null, 'open positions net among themselves')
+    // The day-start reference: yesterday's last mark for a carried trade, the entry MID for one opened today.
+    const t: any = Object.create(AutoTrader.prototype)
+    const carried: any = { createdAt: Date.now() - 3 * 86_400_000, entryPrice: 0.92, entrySideMid: 0.915, lastSideMid: 0.6 }
+    t.stampDayMark(carried); assert.deepEqual(carried.dayMark, { date: today, mid: 0.6 })
+    carried.lastSideMid = 0.3; t.stampDayMark(carried); assert.equal(carried.dayMark.mid, 0.6, 'stamped once per day')
+    const opened: any = { createdAt: Date.now(), entryPrice: 0.1, entrySideMid: 0.07 }
+    t.stampDayMark(opened); assert.equal(opened.dayMark.mid, 0.07, 'the spread paid at entry is not a loss')
+  })
   await test('B-31: an unparseable state file is moved aside, never overwritten by the next persist', () => {
     const p = join(dir, 'state-b31.json')
     writeFileSync(p, '\ufeff{"trades": [1, 2')

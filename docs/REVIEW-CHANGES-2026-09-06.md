@@ -4705,3 +4705,32 @@ pass (`tmp/testout/*-r136.txt`). No app restart (no `src/` change, no build). `a
 2.5-3 h since 09-17 16:04Z - ten halts in two days - and stays down until the sentinel's 3-hourly relaunch, so
 the pre-registered run is dark for a large part of each day; each relaunch also leaves a `cmd /K mmsim.cmd`
 window open (ten at 15:17Z). BACKLOG.
+
+## §137 - 2026-09-19 23:45Z: the kill switch sees open positions; the first stop-loss / take-profit read
+
+**Kill switch (backlog 159, operator approved).** The daily kill counted realized P&L only, and nearly every arm
+holds to settlement, so a break held in unsettled positions was invisible until it settled. It now adds today's
+change in value of the open positions: `shares x (latest side mid - day-start mark)`. The day-start mark is
+yesterday's last mid for a carried trade and the entry MID for one opened today (the spread paid at entry is not
+a loss); only quotes under ten minutes old count; open positions net among themselves, but a net paper gain counts
+as zero and never offsets a realized loss. Limit unchanged (20% of equity); still entries-only, still resumes at
+the next UTC day. The panel shows "open today". At the change: 22 open, $21.82 cost, -$0.10 on paper.
+
+**Operator: "we should probably be measuring our losing trades and decide what a good stop loss might be. Or even a
+stop win."** Read from data already on disk: 21 days of one-minute books joined to the entry/exit rows
+(`scripts/stop-analysis.py`). A rule exits at the archived best bid of OUR side at the first snapshot that crosses
+the level (so gaps are paid for), less the taker fee. Contract-weighted cents per contract:
+
+| Arm | Trades with a path | Hold | Best stop | Best take-profit | Note |
+|---|---|---|---|---|---|
+| fade | 76 of 109 | +2.87 | -3.36 (30c stop), i.e. -6.2 vs hold | +2.54 (+5c), -0.3 vs hold | 38 of 71 winners were down >=5c at the bid before winning; the bid is a wide spread, not news. A stop sells winners: 53 of the 57 a 3c stop hit would have won |
+| momentum (disabled) | 28 of 38 | -6.52 | -5.23 (5c), +1.3 vs hold | -2.27 (+8c), +4.3 vs hold | 5 of 11 losers were up >=5c first - the operator's "winning, then lost" case. 28 trades, 11 rules tried: not evidence, and still negative |
+| consensus | 3 of 61 | - | - | - | its markets never enter the book universe; unreadable until now |
+
+So: no stop on fade, ever on this evidence; a take-profit is worth a shadow test on directional arms once there
+is data. Measurement added so the next read covers every arm: held and resting markets are archived every minute
+whether or not they are in the scan universe, and each exit episode carries `minSideMid`/`maxSideMid`. BACKLOG 177
+holds the read date and the bar a rule must clear.
+
+Tests: the kill-switch scenarios (fresh/stale quotes, other-day marks, gains not offsetting, netting, the day-start
+reference). 20/20 suites. Restart: build 23:44:13Z, electron start 23:44:54Z under `agent.lock`.

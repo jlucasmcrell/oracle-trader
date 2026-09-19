@@ -1969,7 +1969,9 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **158. Settlement-basis tail per sweep size (§127, DS-Pro S-01).** In the 2026-09-25 basis read, compute expected
   daily edge = alpha x N x P(win) - fullPosition x P(divergent fill) at 1, 2, 4 and 8 contracts. Any size above 1
   needs that number positive.
-- **159. Kill switch is settlement-only (§127, Minimax F-08). OPERATOR.** `dayRealizedForKill` sums settled P&L; a
+- **159 DONE 2026-09-19 (§137; operator: "I accept your recommendation").** Today's loss on open positions
+  (fresh quotes, day-start reference, gains never offset) now counts toward the daily kill. Original item:
+  Kill switch is settlement-only (§127, Minimax F-08). OPERATOR. `dayRealizedForKill` sums settled P&L; a
   regime break held in 60 unsettled positions never trips it. Recommendation: add open mark-to-market losses at
   full weight to the daily kill. Loss limits are the operator's; nothing changes until Joe says so.
 - **160. OpenRouter spend (§127, Minimax F-28). PARTLY DONE 2026-09-19 (§128).** Per-caller metering exists
@@ -2094,3 +2096,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   read through `uniqueObservations(rows, r => r.ticker)` and keep the first-written row, refusing a verdict on
   any conflict outside `inDuplicateWriterWindow` - the 40 windows recorded twice on 2026-09-15 06:30-08:17Z are
   all conflicting copies, none byte-exact.
+
+- **177. Stop-loss / take-profit read (2026-09-19, operator asked; first read in §137).** Fade: every stop loses
+  6-8c/contract against holding and no take-profit helps. Momentum (disabled): a +5..8c take-profit looked
+  3-4c/contract better on 28 trades - too few, and the arm stays negative. Consensus could not be read (3 of 61
+  trades had a book path). From the §137 build every held market is archived each minute and exits carry
+  `minSideMid`/`maxSideMid`. Trigger: run `python scripts/stop-analysis.py` on **2026-10-03**, or sooner once
+  consensus has >= 40 settled trades with a path. A rule is adopted only if it beats holding by more than its own
+  day-clustered SE over >= 40 trades and >= 5 days, and it runs in shadow first.

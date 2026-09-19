@@ -1109,6 +1109,7 @@ export class AutoTrader {
       venueDailyDate: this.state.venueDay?.date,
       venueDailySettlements: this.state.venueDay?.date === nowDate() ? this.state.venueDay.settlements : undefined,
       killSource: this.dayRealizedForKill().source,
+      openDayMtm: round2(this.openDayMtm()),
       exchangePaused: this.exchangePaused,
       quoter: this.quoter.status(this.quoterCfg()),
       calib: {
@@ -3812,8 +3813,11 @@ export class AutoTrader {
       // ledger carries a pre-settlement freeze (CLV) and a 5-min markout.
       const quote = quotes[index]
       if (quote && quote.price > 0) {
+        this.stampDayMark(t)
         t.lastSideMid = round4(quote.price)
         t.lastSideMidAt = quote.timestamp
+        t.minSideMid = Math.min(t.minSideMid ?? t.lastSideMid, t.lastSideMid)
+        t.maxSideMid = Math.max(t.maxSideMid ?? t.lastSideMid, t.lastSideMid)
         if (t.markout5mCents === undefined && t.entrySideMid !== undefined && Date.now() - t.createdAt >= 5 * 60_000) {
           t.markout5mCents = round2((quote.price - t.entrySideMid) * 100)
         }
@@ -4716,6 +4720,8 @@ export class AutoTrader {
         entryPrice: trade.entryPrice,
         entrySideMid: trade.entrySideMid,
         lastSideMid: trade.lastSideMid,
+        minSideMid: trade.minSideMid,
+        maxSideMid: trade.maxSideMid,
         markout5mCents: trade.markout5mCents,
         hourOfWeek: trade.hourOfWeek,
         heldMin: Math.round((Date.now() - trade.createdAt) / 60_000)
@@ -4768,16 +4774,21 @@ export class AutoTrader {
     // include the quoter, convergence, lead-lag and Dutch engines, which never
     // touch dailyPnl. Whichever ledger is worse governs.
     const { realized, source } = this.dayRealizedForKill()
-    if (realized <= -limit) {
+    // Open positions count too (operator decision 2026-09-19, backlog 159): nearly every arm holds to settlement,
+    // so a break held in unsettled positions was invisible here until it settled, days later. Only a LOSS counts -
+    // a paper gain is not banked and may not offset a realized loss.
+    const open = Math.min(0, this.openDayMtm())
+    const day = realized + open
+    if (day <= -limit) {
       d.tripped = true
       const disarmed = false
-      this.emit('killswitch', { realized: round2(realized), limit: round2(-limit), disarmed, source })
+      this.emit('killswitch', { realized: round2(realized), open: round2(open), limit: round2(-limit), disarmed, source })
       this.alert(
         'Oracle Trader — KILL SWITCH',
-        `Daily loss ${realized.toFixed(2)} (${source} ledger) hit the ${cfg.maxDailyLossPct}% limit. New entries halted for the rest of the venue day; they resume automatically tomorrow.`
+        `Daily loss ${day.toFixed(2)} (${realized.toFixed(2)} realized on the ${source} ledger, ${open.toFixed(2)} on open positions today) hit the ${cfg.maxDailyLossPct}% limit. New entries halted for the rest of the venue day; they resume automatically tomorrow.`
       )
       this.persist()
-      return `kill-switch TRIPPED (${source} day ${realized.toFixed(2)} ≤ -${limit.toFixed(2)})`
+      return `kill-switch TRIPPED (${source} day ${realized.toFixed(2)} + open ${open.toFixed(2)} ≤ -${limit.toFixed(2)})`
     }
     return null
   }
@@ -4794,6 +4805,31 @@ export class AutoTrader {
   }
 
   /** Today's realized loss for the kill switch: the worse of the venue ledger (live) and the local exits ledger. */
+  /** Give a trade its day-start reference once per UTC day, BEFORE the new quote overwrites the last one. */
+  private stampDayMark(t: AutoOpenTrade): void {
+    const today = nowDate()
+    if (t.dayMark?.date === today) return
+    const openedToday = new Date(t.createdAt).toISOString().slice(0, 10) === today
+    // Mid to mid: a trade opened today starts at its entry MID, so the spread paid at entry is not a "loss".
+    t.dayMark = { date: today, mid: openedToday ? (t.entrySideMid ?? t.entryPrice) : (t.lastSideMid ?? t.entrySideMid ?? t.entryPrice) }
+  }
+
+  /**
+   * Today's change in value of the open positions, dollars: shares x (latest side mid - the day-start mark). Only
+   * quotes under ten minutes old count (a stale mark is unknown, not a loss); baskets carry no single quote and
+   * sub-engine positions settle within the hour, so neither is here.
+   */
+  private openDayMtm(now = Date.now()): number {
+    const today = nowDate()
+    let sum = 0
+    for (const t of this.state.openTrades ?? []) {
+      if (t.dayMark?.date !== today || t.lastSideMid === undefined || t.lastSideMidAt === undefined) continue
+      if (now - t.lastSideMidAt > 10 * 60_000) continue
+      sum += t.shares * (t.lastSideMid - t.dayMark.mid)
+    }
+    return sum
+  }
+
   private dayRealizedForKill(): { realized: number; source: 'venue' | 'local' } {
     const reset = this.state.killReset?.date === nowDate() ? this.state.killReset : undefined
     const local = (this.state.dailyPnl.date === nowDate() ? this.state.dailyPnl.realized : 0) - (reset?.local ?? 0)
@@ -4950,7 +4986,11 @@ export class AutoTrader {
       this.bookUniverse = await this.buildUniverse(r).catch(() => [])
       this.bookUniverseAt = now
     }
-    const tickers = this.bookUniverse.map((m) => m.id)
+    // Held and resting markets are archived every minute too, whether or not they are still in the scan
+    // universe: a stop-loss / take-profit read needs the executable bid along each trade's whole life, and on
+    // 2026-09-19 only 3 of 61 settled consensus trades had one (their markets never enter this universe).
+    const held = [...this.state.openTrades.flatMap((t) => (t.legs?.length ? t.legs.map((l) => l.marketId) : [t.marketId])), ...this.state.pendingOrders.map((p) => p.marketId)]
+    const tickers = [...new Set([...this.bookUniverse.map((m) => m.id), ...held])]
     if (tickers.length === 0) return
 
     if (adapter.getOrderBooks) {

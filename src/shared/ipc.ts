@@ -482,6 +482,12 @@ export interface AutoOpenTrade {
   pnlPct?: number
   /** Failed close attempts so far (drives the escalating exit ladder). */
   exitAttempts?: number
+  /** The side mid this trade started the UTC day at (entry mid when opened today): the reference for the kill
+   *  switch's mark-to-market, so only TODAY's change counts, never a loss carried from an earlier day. */
+  dayMark?: { date: string; mid: number }
+  /** Lowest and highest side mid seen while open: the excursions a stop-loss / take-profit read needs. */
+  minSideMid?: number
+  maxSideMid?: number
   /** Modeled P(this side wins) at entry — graded at settlement (calibration ledger). */
   modeledWinProb?: number
   /** Our side's mid at entry — the CLV/markout reference. */
@@ -637,6 +643,8 @@ export interface AutoStatus {
   venueDailySettlements?: number
   /** Which ledger the kill switch is reading: 'venue' in live mode, 'local' in paper. */
   killSource?: 'venue' | 'local'
+  /** Today's change in value of the open positions (fresh quotes only); its losses count toward the kill switch. */
+  openDayMtm?: number
   /** Exchange trading paused (weekly maintenance) — every engine holds. */
   exchangePaused?: boolean
   /** Promotion ladder: each tested strategy's stage, gate progress and last transition. */
