@@ -32,7 +32,7 @@ import { SportsGameOddsAnchor } from './sportsGameOdds'
 import { FLOW_DEFAULTS, FlowMonitor, flowVerdict } from './flowMonitor'
 import { computeCandidate, midOf, momentumCandidatesActive, recordMomentumCandidates, type MomentumCandidateRow } from './momentumCandidates'
 import { LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT } from './leadLag'
-import { ConsensusFeed, CONSENSUS_RULE, consensusAgeHours, consensusRefusal, type ConsensusRule } from './consensus'
+import { ConsensusFeed, CONSENSUS_NOT_WINNER, CONSENSUS_RULE, consensusAgeHours, consensusRefusal, type ConsensusRule } from './consensus'
 import { appendFileSync } from 'node:fs'
 import type { VettingContext, VettingMarket } from './vetting'
 import { runHunchPass } from './hunch'
@@ -1988,6 +1988,15 @@ export class AutoTrader {
     for (const row of rows) {
       const ticker = row.kalshi?.market
       if (!ticker) continue
+      // Winner markets only, on the side the wallets took. Until 2026-09-19 the recorder's single-market fallback
+      // matched fixtures to "both teams to score", first-inning and second-half markets and every entry was YES
+      // regardless of the wallets' outcome: 11 of 12 open consensus positions were such markets (external review,
+      // Gemini Flash F-03). Rows without a side predate the fix.
+      const side = row.kalshi?.side
+      if (!side || CONSENSUS_NOT_WINNER.test(ticker)) {
+        refused['not-winner-market'] = (refused['not-winner-market'] ?? 0) + 1
+        continue
+      }
       // One entry per market, and one open position per Polymarket source
       // market, so a single consensus event cannot become five correlated bets.
       if (led.markets[ticker] !== undefined) {
@@ -2041,7 +2050,9 @@ export class AutoTrader {
       }
       // The pre-registration prices the entry at the ASK we would actually pay,
       // never at a mid or at the ask the shadow saw an hour ago.
-      const ask = data.books.get(m.id)?.asks[0]?.price
+      // A NO entry pays the NO ask, which is one minus the best YES bid.
+      const book = data.books.get(m.id)
+      const ask = side === 'NO' ? (book?.bids[0]?.price === undefined ? undefined : 1 - book.bids[0].price) : book?.asks[0]?.price
       const hoursToClose = m.closeTime === undefined ? 0 : (m.closeTime - now) / 3600_000
       const why = consensusRefusal({ market: ticker, ask, polyPrice: row.poly_price, ageHours, hoursToClose }, rule)
       if (why) {
@@ -2051,7 +2062,7 @@ export class AutoTrader {
       const wallets = row.n_wallets ?? 3
       const driftCents = row.poly_price === undefined || row.poly_price === null ? 0 : ((ask as number) - row.poly_price) * 100
       out.push(
-        this.makeSignal(m, 'consensus', 'YES', Math.min(100, 50 + wallets * 5), Math.min(1, wallets / 10), {
+        this.makeSignal(m, 'consensus', side, Math.min(100, 50 + wallets * 5), Math.min(1, wallets / 10), {
           wallets,
           polyPrice: round4(row.poly_price ?? 0),
           ask: round4(ask as number),
@@ -3825,7 +3836,10 @@ export class AutoTrader {
           const rec = this.engine.settlePaperPosition(VENUE, leg.marketId, 'NO', win)
           if (rec?.realizedPnl !== undefined) realized += rec.realizedPnl
         } else {
-          realized += (win - leg.entryPrice) * leg.shares // live settles server-side; estimate P&L
+          // Live settles server-side; estimate P&L. The entry fee was real money (a leg without a recorded rate is
+          // charged at the standard taker coefficient - dutch legs are IOC takers); until 2026-09-19 this omitted it
+          // and a basket bought at 98c with 7.5c of fees was booked +2c (external review, Gemini Flash F-06).
+          realized += (win - leg.entryPrice) * leg.shares - entryFeeDollars({ outcome: 'NO', entryPrice: leg.entryPrice, shares: leg.shares, feeRate: (leg as { feeRate?: number }).feeRate ?? t.feeRate ?? 0.07 })
         }
       }
       this.removeTrade(t.id)

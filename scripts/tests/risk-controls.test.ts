@@ -49,6 +49,29 @@ async function main(): Promise<void> {
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 1)
     assert.equal(placed.length, 1)
   })
+  // 2026-09-19 (§129, Gemini Flash F-01): an exit expressed as a buy of the opposite side (closeFrom) is not an entry.
+  // It must pass at the cap, reserve nothing, and be recorded as a sell of the position it closes.
+  await test('a closeFrom exit passes the position cap and records a sell', async () => {
+    const placed: any[] = []
+    const recorded: any[] = []
+    const venue: any = {
+      getPositions: async () => [{ venue: 'ibkr', marketId: 'A', outcome: 'YES', shares: 1, avgPrice: 0.5, currentPrice: 0.6 }],
+      getOpenOrders: async () => [],
+      placeOrder: async (o: any) => { placed.push(o); return { orderId: 'x-' + o.marketId, shares: 1, avgPrice: 0.4, venueStatus: 'executed', timestamp: now } },
+      closeAsBuy: async (req: any) => ({ venue: 'ibkr', marketId: 'A-NO', outcome: 'NO', amount: 0.4, closeFrom: req.marketId })
+    }
+    const e = new TradingEngine({ get: () => venue } as any, { record: (r: any) => { recorded.push(r) } } as any)
+    e.setExecutionMode('live')
+    e.setRiskLimits({ maxStakePerBet: 1, maxOpenPositions: 1 })
+    await assert.rejects(() => e.placeOrder({ venue: 'ibkr', marketId: 'B', outcome: 'YES', amount: 0.5 }), /max open positions/)
+    const res = await e.sellPosition({ venue: 'ibkr', marketId: 'A', outcome: 'YES', shares: 1 } as any)
+    assert.equal(res.orderId, 'x-A-NO')
+    assert.equal(placed.length, 1)
+    assert.equal(recorded.length, 1)
+    assert.equal(recorded[0].side, 'sell')
+    assert.equal(recorded[0].marketId, 'A')
+    await assert.rejects(() => e.placeOrder({ venue: 'ibkr', marketId: 'C', outcome: 'YES', amount: 0.5 }), /max open positions/)
+  })
   await test('a rejected entry releases the queue for the next entry', async () => {
     let attempts = 0
     const venue: any = { getPositions: async () => [], getOpenOrders: async () => [], placeOrder: async () => {

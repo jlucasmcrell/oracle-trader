@@ -22,11 +22,19 @@ import { readFileSync, statSync } from 'node:fs'
 export interface ConsensusKalshiMatch {
   event?: string
   score?: number
-  /** Kalshi ticker whose YES side is the signalled outcome; null when only the event matched. */
+  /** Kalshi winner market for the signalled team; null when only the event matched. */
   market?: string | null
+  /**
+   * Which side of that market the wallets' outcome maps to: 'Yes' on "Will X win" is YES on X's market, 'No' is NO.
+   * Written by the recorder since 2026-09-19; rows without it predate the matcher fix and are not traded.
+   */
+  side?: 'YES' | 'NO'
   yes_bid?: number | null
   yes_ask?: number | null
 }
+
+/** Kalshi series that are not winner markets: a fixture name matches them too, and they were traded as if they were. */
+export const CONSENSUS_NOT_WINNER = /BTTS|TOTAL|SPREAD|RFI|HANDICAP|CORNER|CARD|1H|2H|1Q|MAPS|PROP/i
 
 export interface ConsensusSignalRow {
   /** ISO time the shadow emitted the signal (once per conditionId). */

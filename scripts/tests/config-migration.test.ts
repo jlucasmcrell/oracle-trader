@@ -53,7 +53,7 @@ try {
     }
     const t: any = new AutoTrader({ getAdapter: () => adapter, getExecutionMode: () => 'paper' } as any, join(bdir, 'budget.json'))
     const feedPath = join(bdir, 'signals.jsonl')
-    const rows = Array.from({ length: 16 }, (_, i) => JSON.stringify({ ts: new Date(nowMs).toISOString(), conditionId: `0x${i}`, title: 't', outcome: 'Yes', n_wallets: 4, poly_price: 0.6, kalshi: { market: `KXB${i}-Y`, yes_ask: 0.62 } }))
+    const rows = Array.from({ length: 16 }, (_, i) => JSON.stringify({ ts: new Date(nowMs).toISOString(), conditionId: `0x${i}`, title: 't', outcome: 'Yes', n_wallets: 4, poly_price: 0.6, kalshi: { market: `KXB${i}-Y`, side: 'YES', yes_ask: 0.62 } }))
     writeFileSync(feedPath, rows.join('\n') + '\n')
     t.consensusFeed = new ConsensusFeed(feedPath)
     const scan = () => ({ candles1m: {}, candles1h: {}, trades: new Map(), books: new Map(), headlinesByMarket: new Map(), live: new Map(), marketsById: new Map() })

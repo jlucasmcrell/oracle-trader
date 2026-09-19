@@ -25,7 +25,7 @@ import { killState } from '../lib/kill-state.mjs'
 import { isDnsFailure, makeResolverLookup, PUBLIC_RESOLVERS } from '../lib/dns-fallback.mjs'
 import { tmpdir } from 'node:os'
 import { join as joinPath } from 'node:path'
-import { GEMINI } from '../../src/main/intelligence/gemini'
+import { GEMINI, geminiKey } from '../../src/main/intelligence/gemini'
 import type { MarketTrade, VenueFill } from '../../src/shared/types'
 
 let pass = 0
@@ -381,9 +381,11 @@ const later: VenueFill[] = [
 ]
 eq('reconciler publishes a later fill of a placed order', planFillIngest(later, new Set(), new Map([['ot-2', 1]]), 'kalshi').rows.map((r) => r.id), ['fill:f4'])
 const hunchPlans = hunchModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: 'k', llmModel: 'deepseek-v4-pro' }, 'router')
-eq('hunch plans: router fast models, then Gemini', hunchPlans.map((p) => p.model), ['google/gemini-3.8-flash', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3-flash', ...GEMINI.models])
-// Presence, not value - this test runs with a real GEMINI_API_KEY in the environment.
-eq('hunch plans: Gemini carries a key and is not local', [hunchPlans[3].base, hunchPlans[3].key.length > 0, hunchPlans[3].local], [GEMINI.base, true, false])
+const HGEM = geminiKey() ? GEMINI.models : []
+eq('hunch plans: router fast models, then Gemini', hunchPlans.map((p) => p.model), ['google/gemini-3.8-flash', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3-flash', ...HGEM])
+// Presence, not value; and only when the environment carries a key (a clean checkout must pass, 2026-09-19).
+const hunchGemini = hunchPlans.find((p) => GEMINI.models.includes(p.model))
+if (hunchGemini) eq('hunch plans: Gemini carries a key and is not local', [hunchGemini.base, hunchGemini.key.length > 0, hunchGemini.local], [GEMINI.base, true, false])
 
 // Calibration day buckets are the day the P&L was realized. A sports market's
 // cached close_time sits days ahead until play ends (MILCIN traded 09-06 with

@@ -4,6 +4,7 @@
  */
 import { clusterT, clusteredMean, CONFIDENCE_Z, COOLDOWN_MS, LONG_COOLDOWN_MS, cooldownAfter, dayClusteredSe, decideConvergence, decideQuoter, decideSettlement, decideStage, isPromotion, meanCi, QUOTER_GATE, tradeSmallEntry } from '../../src/main/ladder/ladder'
 import { clusterT95, SCALE_Z } from '../../src/main/ladder/ladder'
+import { geminiKey } from '../../src/main/intelligence/gemini'
 import { planParameterChanges, REVIEW_CHEAP_MODEL, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../src/shared/ipc'
 
@@ -65,10 +66,14 @@ eq('stage: same checkpoint not re-judged', decideStage(S(25, -1, -3, 1), 1, 1).k
 eq('stage: checkpoint loss stops', decideStage(xC(S(20, -1, -3, 1)), 1, 0).kind, 'stop')
 eq('stage: inconclusive keeps testing', decideStage(S(20, 0.5, 1, 2), 1, 0).kind, 'hold')
 eq('stage: positive net but unproven holds', decideStage(S(40, 0.4, 0.5, 1), 1, 1).kind, 'hold')
-eq('stage: 100 trades and net positive wins on enough clusters', decideStage(xC(S(100, 0.4, 0.2, 1)), 1, 4).kind, 'scale-up')
-eq('stage: 100 trades and net positive on two clusters holds', decideStage(xC(S(100, 0.4, 0.2, 1), 2), 1, 4).kind, 'hold')
-eq('stage: 100 trades and net positive on unverifiable clusters holds', decideStage(S(100, 0.4, 0.2, 1), 1, 4).kind, 'hold')
+// 2026-09-19 (§129, Gemini Flash F-02): at 100 trades a small win keeps the arm alive; adding size still needs the 95% band.
+eq('stage: 100 trades, net positive, 95% band clear - scales', decideStage(xC(S(100, 5, 5, 1)), 1, 4).kind, 'scale-up')
+eq('stage: 100 trades, net positive, 95% band spans zero - holds', decideStage(xC(S(100, 0.4, 0.2, 1)), 1, 4).kind, 'hold')
+eq('stage: and the hold names the band', /95% lower bound/.test(decideStage(xC(S(100, 0.4, 0.2, 1)), 1, 4).reason), true)
+eq('stage: 100 trades and net positive on two clusters holds', decideStage(xC(S(100, 5, 5, 1), 2), 1, 4).kind, 'hold')
+eq('stage: 100 trades and net positive on unverifiable clusters holds', decideStage(S(100, 5, 5, 1), 1, 4).kind, 'hold')
 eq('stage: 100 trades and net zero stops', decideStage(S(100, 0, 0, 1), 1, 4).kind, 'stop')
+eq('stage: 100 trades and net negative stops without clusters', decideStage(S(100, -0.5, -0.5, 1), 1, 4).kind, 'stop')
 eq('stage: max size holds on a win', decideStage(S(20, 3, 5, 1), 4, 0).kind, 'hold')
 eq('stage: win needs net positive too', decideStage(S(20, -0.2, 1, 0.5), 1, 0).kind, 'hold')
 // ---- trade-small entry ----
@@ -120,21 +125,24 @@ eq('day-clustered: a single trade has no SE', dayClusteredSe([{ n: 1, sum: -3 }]
 // ---- nightly review model chain ----
 const plansAll = reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: 'k', llmModel: 'deepseek-v4-pro' }, 'router')
 // 2026-09-19: the operator's keyed endpoint leads; the cheap router model is the first fallback; frontier models after.
-eq('review plans: app endpoint, cheap router model, router chain, Gemini, free', plansAll.map((p) => p.model), ['deepseek-v4-pro', REVIEW_CHEAP_MODEL, 'openai/gpt-5.6-sol', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3', ...REVIEW_GEMINI.models, ...REVIEW_FREE_MODELS])
+// Gemini joins the chain only when GEMINI_API_KEY is set (2026-09-19: a clean environment must pass too).
+const GEM = geminiKey() ? REVIEW_GEMINI.models : []
+eq('review plans: app endpoint, cheap router model, router chain, Gemini, free', plansAll.map((p) => p.model), ['deepseek-v4-pro', REVIEW_CHEAP_MODEL, 'openai/gpt-5.6-sol', 'deepseek/deepseek-v4-pro', 'z-ai/glm-5.3', ...GEM, ...REVIEW_FREE_MODELS])
 // Assert that a key is PRESENT, never what it is: this ran with a real GEMINI_API_KEY in the environment and
 // an `eq` on the value printed the secret into the test output on failure.
-const geminiPlan = plansAll.find((p) => p.model === REVIEW_GEMINI.models[0])!
-eq('review plans: Gemini carries a key and asks for JSON', [geminiPlan.base, geminiPlan.key.length > 0, geminiPlan.json], [REVIEW_GEMINI.base, true, true])
+const geminiPlan = plansAll.find((p) => p.model === REVIEW_GEMINI.models[0])
+if (geminiPlan) eq('review plans: Gemini carries a key and asks for JSON', [geminiPlan.base, geminiPlan.key.length > 0, geminiPlan.json], [REVIEW_GEMINI.base, true, true])
+else eq('review plans: no Gemini key, no Gemini plan', plansAll.some((p) => REVIEW_GEMINI.models.includes(p.model)), false)
 // Found by model, not by index: the chain length moves whenever a provider's model list changes, and an
 // index-based assertion silently starts checking a different entry instead of failing honestly.
 const appPlan = plansAll.find((p) => p.model === 'deepseek-v4-pro' && !/openrouter/.test(p.base))
 eq('review plans: the app endpoint keeps its own base and key', [appPlan?.base, appPlan?.key === 'k'], ['https://api.deepseek.com/v1', true])
 eq('review plans: the cheap router fallback is a flash-tier model', /flash/.test(REVIEW_CHEAP_MODEL), true)
 const plansDirect = reviewModelPlans({ llmBaseUrl: 'http://localhost:11434/v1', llmApiKey: '', llmModel: 'qwen3' }, '')
-eq('review plans: no router key and a local endpoint', plansDirect.map((p) => p.model), [...REVIEW_GEMINI.models, 'qwen3'])
+eq('review plans: no router key and a local endpoint', plansDirect.map((p) => p.model), [...GEM, 'qwen3'])
 const plansPaid = reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: 'k', llmModel: 'deepseek-v4-pro' }, '')
-eq('review plans: no router key and a paid endpoint puts that endpoint first', plansPaid.map((p) => p.model), ['deepseek-v4-pro', ...REVIEW_GEMINI.models])
-eq('review plans: nothing configured still has Gemini', reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: '', llmModel: 'x' }, '').map((p) => p.model), REVIEW_GEMINI.models)
+eq('review plans: no router key and a paid endpoint puts that endpoint first', plansPaid.map((p) => p.model), ['deepseek-v4-pro', ...GEM])
+eq('review plans: nothing configured has only Gemini (when keyed)', reviewModelPlans({ llmBaseUrl: 'https://api.deepseek.com/v1', llmApiKey: '', llmModel: 'x' }, '').map((p) => p.model), GEM)
 
 // ---- helpers ----
 eq('promotion ranking', [isPromotion('shadow', 'tiny-live'), isPromotion('tiny-live', 'shadow'), isPromotion('blocked', 'tiny-live'), isPromotion('live', 'disabled')], [true, false, true, false])

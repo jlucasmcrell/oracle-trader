@@ -1,0 +1,1460 @@
+Oracle Trader: Comprehensive System & Methodology Review
+Repository: 
+https://github.com/jlucasmcrell/oracle-trader
+
+Review Target: Commit 1388cb7 (post-round §128, 2026-09-19)
+Operator Constraints: ~$200 total capital across three venues (Kalshi, Polymarket US, IBKR ForecastEx); single operator, consumer Windows machine; US person; free data tiers (plus The Odds API); strictly actionable findings backed by code citations and empirical arithmetic.
+
+Findings
+F-01: IBKR / ForecastEx Exits Blocked When Position Cap Is Reached & Slot Double-Counted
+Area: correctness
+Severity: high (escalates to critical the moment an IBKR strategy is set to live)
+Confidence: verified
+Location: src/main/engine/engine.ts:311–312
+, src/main/engine/engine.ts:219–221
+, src/main/engine/engine.ts:241
+Claim: Exiting an IBKR ForecastEx position via sellPosition() delegates to placeOrder() with closeAsBuy, which enforces the maxOpenPositions entry cap, blocks exits when the portfolio is full, reserves an extra open-position slot, and records the exit fill in history as a buy.
+Evidence: In src/main/engine/engine.ts
+:
+ts
+Copy
+311:   const closeAsBuy = this.requireAdapter(req.venue).closeAsBuy
+312:   if (this.mode === 'live' && closeAsBuy) return this.placeOrder(await closeAsBuy.call(this.requireAdapter(req.venue), req))
+closeAsBuy returns an OrderRequest with closeFrom: req.marketId
+. When this.placeOrder
+ executes in live mode (placeLiveOrderReserved):
+ts
+Copy
+219:   const count = await this.countOpenPositions(order.venue)
+220:   if (count >= this.riskLimits.maxOpenPositions) throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)
+221:   token = this.reserveSlot(order.venue)
+...
+241:   this.recordFill(order.venue, order.marketId, order.outcome, 'buy', res, order.ref, order.marketQuestion, order.answerId)
+Neither placeOrder nor placeLiveOrderReserved checks order.closeFrom
+.
+Failure: An IBKR arm enters live mode. The account reaches maxOpenPositions (e.g. 10 positions). A position hits its take-profit or stop-loss. ibkrLab.ts:320
+ calls engine.sellPosition(...). The engine routes the exit through placeOrder(). countOpenPositions returns 10, which triggers throw new Error("At max open positions (10)"). The exit order is rejected. ibkrLab.ts
+ catches the error, marks the position status = 'uncertain', and abandons the exit. If the order does pass under the cap, it reserves an 11th slot and records the trade in HistoryStore as side: 'buy', corrupting historical P&L accounting.
+Test: In scripts/tests/adversarial.test.ts
+, configure maxOpenPositions = 1, mock an open position on an adapter with closeAsBuy, and assert that engine.sellPosition() succeeds without throwing At max open positions and records a 'sell' fill.
+F-02: 100-Trade Ladder Sign Rule Scales Up on Positive Sign Alone, Bypassing the 95% Confidence Doctrine
+Area: methodology
+Severity: high
+Confidence: verified
+Location: src/main/ladder/ladder.ts:487–497
+Claim: The 100-trade fallback rule in decideStage() unconditionally scales up any strategy with ev.netDollars > 0 (even +$0.01) without requiring a positive 95% confidence lower bound (lo95 > 0), directly violating Handbook §12.14 and ensuring that ~50% of zero-edge strategies scale up at 100 trades.
+Evidence: In src/main/ladder/ladder.ts
+:
+ts
+Copy
+447:   if (ev.netDollars > 0 && lo > 0) {
+...
+465:     if (lo95 <= 0) {
+466:       return { kind: 'hold', checkpoint: lastCheckpoint, reason: `${at}: making money with 80% confidence but not 95% (lower ${lo95.toFixed(2)}${u}) - the screening band admits an arm, the confirmatory band adds size; keep testing at this size` }
+467:     }
+468:     return up(`${at}: making money with 95% confidence`)
+469:   }
+...
+487:   if (ev.n >= THOROUGH_TRADES) {
+...
+495:     if (ev.netDollars > 0) return up(`${at}: ${THOROUGH_TRADES}+ trades and net positive (a small win is a win)`)
+496:     return { kind: 'stop', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net not positive` }
+497:   }
+While round §127 patched the checkpoint scale-up at line 465 to require lo95 > 0, line 495 at THOROUGH_TRADES (100 trades) was left untouched. If an arm has lo <= 0 (meaning its 80% band spans zero), line 447 is skipped entirely, line 470 (hi < 0) is skipped because net is positive, and execution reaches line 495, where it scales up on ev.netDollars > 0.
+Failure: An unproven strategy (e.g. kalshi-sports-anchor or kalshi-fade) reaches 100 trades with 51 wins and 49 losses on even-money bets, realizing a net profit of +
+0.02.
+I
+t
+s
+d
+a
+y
+−
+c
+l
+u
+s
+t
+e
+r
+e
+d
+s
+t
+a
+n
+d
+a
+r
+d
+e
+r
+r
+o
+r
+i
+s
+0.02.Itsday−clusteredstandarderroris0.15, giving an 80% band of [-
+0.17
+,
++
+0.17,+0.21] and a 95% band of [-
+0.33
+,
++
+0.33,+0.37] (
+p
+≈
+0.45
+p≈0.45). Because lo <= 0, line 465 does not catch it. At line 495, ev.netDollars > 0 evaluates to true, and the ladder doubles its notch and bet size on pure noise. Across 18 arms, the expected number of zero-edge arms scaled up to notch 2 by this rule alone is 
+18
+×
+0.50
+=
+9
+18×0.50=9 arms.
+Test: Pass ev = { n: 100, netDollars: 0.05, mean: 0.05, se: 0.5, clusters: 5, unit: 'c' } to decideStage(ev, 1, 4). It currently returns kind: 'scale-up'. It should return kind: 'hold' or kind: 'stop'.
+F-03: Polymarket Consensus Arm Inverts Trades When Wallets Buy 'No' & Grader Measures Phantom Edge
+Area: correctness
+Severity: high
+Confidence: verified
+Location: scripts/polymarket_consensus.py:342–344
+, src/main/strategies/autoTrader.ts:2054
+, scripts/polymarket_consensus.py:464
+Claim: When Polymarket top wallets buy 'No' (the most frequent signal outcome, n=2,993 in signals.jsonl
+), polymarket_consensus.py
+ falls back to single-market Kalshi events and autoTrader.ts
+ hardcodes outcome: 'YES', causing the live arm to take the exact opposite position of the smart money while the shadow grader records fictitious P&L.
+Evidence: In scripts/polymarket_consensus.py
+:
+python
+Copy
+338:   overl = sorted(((len(ot & tokens(m['sub'])), m) for m in ev['markets']), key=lambda x: -x[0])
+339:   mk = None
+340:   if overl and overl[0][0] > 0 and (len(overl) == 1 or overl[0][0] > overl[1][0]):
+341:       mk = overl[0][1]
+342:   elif len(ev['markets']) == 1:
+343:       mk = ev['markets'][0]
+In src/main/strategies/autoTrader.ts
+:
+ts
+Copy
+2053:  out.push(
+2054:    this.makeSignal(m, 'consensus', 'YES', Math.min(100, 50 + wallets * 5), Math.min(1, wallets / 10), {
+In scripts/polymarket_consensus.py
+:
+python
+Copy
+464:   entry['pnl_kalshi'] = (y - k['yes_ask']) if k.get('yes_ask') is not None else None
+Inspecting data/polymarket-consensus/signals.jsonl
+ confirms real rows where outcome is 'No', but kalshi.market
+ is matched to unrelated binary single markets via the len(ev['markets']) == 1 fallback:
+Polymarket: "Will Harry Kane win the 2026 Ballon d'Or?" Wallets bought 'No'. Matched Kalshi event: KXBALLONDOR-26 / KXHKANEKNIGHT-26-YES ("Will Harry Kane be knighted?").
+Polymarket: "Will Club Brugge KV win on 2026-09-08?" Wallets bought 'No'. Matched Kalshi market: KXUCLBTTS-26SEP08BRUAVL-BTTS (Both Teams To Score).
+Failure: Top Polymarket wallets deploy capital buying 'No' on a candidate or team. polymarket_consensus.py
+ matches a Kalshi single-market event. Line 2054 emits an order buying YES on Kalshi. The live bot spends real dollars betting against the consensus. Meanwhile, the shadow grader calculates (y - yes_ask) where y is whether the Polymarket outcome won, creating a completely fictitious shadow performance record (+6.39c/contract) that motivated promoting this arm to live trading.
+Test: Feed a row with outcome: 'No' and title: "Will Team A win?" to parseConsensusSignals / consensusSignals. Observe that sig.outcome
+ emitted by autoTrader.ts
+ is 'YES'.
+F-04: Unmodelled Settlement Basis Divergence Negates Claimed Lead-Lag Edge
+Area: profitability
+
+Severity: high
+
+Confidence: verified
+
+Location: src/main/strategies/leadLag.ts:613–616
+, src/main/strategies/leadLag.ts:646–649
+, docs/DEVELOPER-HANDBOOK.md:488–491
+
+Claim: Lead-lag's clearsFees calculation models only the exchange taker fee, ignoring the 2.1%–2.4% settlement basis divergence between Kalshi (CF Benchmarks) and Polymarket (Chainlink TWAP), which imposes an unmodelled 
+−
+1.1
+c
+−1.1c to 
+−
+1.3
+c/contract
+−1.3c/contract expected drag that consumes the entire forward planning edge of 
++
+1.5
+c/contract
++1.5c/contract.
+
+Evidence: Handbook §8.4 and §10.1:
+
+"15-minute up/down slugs... resolve on the Chainlink 60-second TWAP stream, a different index from Kalshi's CF Benchmarks average. The two venues disagree on about 2.1–2.4% of matched windows... About two thirds of recent matched-window losses sat in the roughly 2% of windows where Kalshi and Polymarket settled differently."
+
+In src/main/strategies/leadLag.ts
+:
+
+ts
+Copy
+613:   const feeCents = kalshiTakerFeeCentsFor(kYesAsk, sweepSizeFor(pair.coin, cfg))
+614:   const gapCents = +((poly.mid - kYesAsk) * 100).toFixed(1)
+615:   const netCents = +(gapCents - feeCents).toFixed(1)
+...
+625:   clearsFees: netCents > 0
+netCents contains zero basis reserve.
+
+Failure: In close 15-minute crypto windows where the underlying spot price finishes within 1–2 basis points of the opening strike, Chainlink and CF Benchmarks disagree. Polymarket CLOB trades to 70c or 80c based on Chainlink prints. Lead-lag detects a 15c gap against Kalshi's 55c ask and sweeps Kalshi YES. At settlement, CF Benchmarks resolves at or below the strike: Kalshi settles NO (
+0.00
+)
+.
+T
+h
+e
+t
+r
+a
+d
+e
+s
+u
+f
+f
+e
+r
+s
+a
+100
+0.00).Thetradesuffersa1000.55). At an average divergence rate of 2.2% and an average contract acquisition cost of 55c, the expected penalty across all trades is:
+
+E
+[
+Basis Drag
+]
+=
+0.022
+×
+(
+−
+55
+c
+)
+=
+−
+1.21
+c per contract
+E[Basis Drag]=0.022×(−55c)=−1.21c per contract
+Subtracting 
+1.21
+c
+1.21c from the post-review planning edge of 
++
+1.50
+c/contract
++1.50c/contract leaves 
++
+0.29
+c/contract
++0.29c/contract, which is within noise and does not cover operational slippage.
+
+Test: Run python scripts/backtests/leadlag_settlement_basis.py
+ and compute the historical realized net P&L of lead-lag sweeps partitioned strictly into windows where Chainlink and CF Benchmarks agreed vs disagreed.
+
+F-05: Crypto Convergence Ignores Cap Strikes & Inverts Direction on 'Below' Markets
+Area: correctness
+Severity: medium
+Confidence: verified
+Location: src/main/strategies/cryptoConvergence.ts:339–351
+Claim: cryptoConvergence.ts
+ extracts only m.floor_strike
+ and hardcodes side = spot > strike ? 'YES' : 'NO', completely ignoring cap_strike and Kalshi's less/less_or_equal strike types, which drops all below-strike markets and inverts trade direction on any non-greater market.
+Evidence: In src/main/strategies/cryptoConvergence.ts
+:
+ts
+Copy
+339:   const strike = num(m.floor_strike)
+340:   if (strike === null || strike <= 0) {
+341:     skip.strike++
+342:     continue
+343:   }
+344:   const margin = Math.abs(spot - strike) / spot
+...
+351:   const side: 'YES' | 'NO' = spot > strike ? 'YES' : 'NO'
+Compare this to the robust implementation in autoTrader.ts:5131–5147:
+ts
+Copy
+5135:  const above = m.strikeType === 'greater' || m.strikeType === 'greater_or_equal'
+5136:  const below = m.strikeType === 'less' || m.strikeType === 'less_or_equal'
+5137:  if (above && typeof m.floorStrike === 'number' && m.floorStrike > 0) return { strike: m.floorStrike, dir: 'above' }
+5138:  if (below && typeof m.capStrike === 'number' && m.capStrike > 0) return { strike: m.capStrike, dir: 'below' }
+Failure: On Kalshi daily crypto ladders (KXBTCD, KXETHD), contracts with strike type less specify the threshold in cap_strike, leaving floor_strike null. cryptoConvergence.ts
+ skips every one of these markets (skip.strike++). Furthermore, if a market specifies a cap strike or a negative predicate, line 351 assumes spot > strike means YES, placing orders on the opposite side of the mathematical edge.
+Test: Construct a mock Kalshi market with strike_type: 'less' and cap_strike: 60000, floor_strike: null. Run scanAndExecute. Observe that inWindow increments while skip.strike
+ increments and no trade is evaluated.
+F-06: Live Dutch Book Settlement Omits Entry Fees from Realized P&L
+Area: fees
+Severity: medium
+Confidence: verified
+Location: src/main/strategies/autoTrader.ts:3821–3834
+Claim: When settling multi-leg Dutch book positions in live mode, trySettle() computes realized += (win - leg.entryPrice) * leg.shares
+ without subtracting entryFeeDollars, overstating live Dutch P&L by the cumulative taker fees paid across all 3–6 legs.
+Evidence: In src/main/strategies/autoTrader.ts
+:
+ts
+Copy
+3821:  for (let i = 0; i < t.legs.length; i++) {
+3822:    const leg = t.legs[i]
+3823:    const win = sides[i] === 'yes' ? 0 : 1 // NO leg pays 1 when the leg resolves NO
+3824:    if (mode === 'paper') {
+3825:      const rec = this.engine.settlePaperPosition(VENUE, leg.marketId, 'NO', win)
+3826:      if (rec?.realizedPnl !== undefined) realized += rec.realizedPnl
+3827:    } else {
+3828:      realized += (win - leg.entryPrice) * leg.shares // live settles server-side; estimate P&L
+3829:    }
+3830:  }
+3831:  this.removeTrade(t.id)
+3832:  this.recordExit(realized, 'dutch')
+Compare this with single-market settlement at line 3861:
+ts
+Copy
+3861:  const realized = (win - t.entryPrice) * t.shares - entryFeeDollars(t)
+Failure: An arm executes a 5-leg Dutch basket. Each leg incurs an exchange taker fee of ~
+0.015
+,
+t
+o
+t
+a
+l
+l
+i
+n
+g
+ 
+0.015,totalling 0.075 across the basket. The gross payoff is 
+1.00
+o
+n
+a
+1.00ona0.98 cost (
+0.02
+g
+r
+o
+s
+s
+p
+r
+o
+f
+i
+t
+)
+.
+T
+h
+e
+t
+r
+u
+e
+n
+e
+t
+p
+r
+o
+f
+i
+t
+a
+f
+t
+e
+r
+f
+e
+e
+s
+i
+s
+0.02grossprofit).Thetruenetprofitafterfeesis0.02 - 
+0.075
+=
+−
+0.075=−0.055 (a net loss). Line 3828 computes (win - leg.entryPrice) * leg.shares
+ and books +$0.02 to the ladder and performance records, silently inverting a losing arbitrage into a winning record.
+Test: Inspect scripts/tests/review-fixes.test.ts
+ for Dutch settlement assertions. Create a test case settling a live Dutch trade with known entry fees and assert that recordExit receives gross minus entry fees.
+F-07: Daily Drawdown Kill Switch Ignores Mark-to-Market Unrealized Losses
+Area: risk
+Severity: high
+Confidence: verified
+Location: src/main/strategies/autoTrader.ts:4501–4548
+Claim: The daily loss kill switch evaluates only realized settlement losses, allowing a market shock against up to 60 open positions to wipe out total portfolio equity without halting entries.
+Evidence: In src/main/strategies/autoTrader.ts
+:
+ts
+Copy
+4512:  const { realized, source } = this.dayRealizedForKill()
+4513:  if (realized <= -limit) {
+4514:    d.tripped = true
+...
+4539:  private dayRealizedForKill(): { realized: number; source: 'venue' | 'local' } {
+4540:    const reset = this.state.killReset?.date === nowDate() ? this.state.killReset : undefined
+4541:    const local = (this.state.dailyPnl.date === nowDate() ? this.state.dailyPnl.realized : 0) - (reset?.local ?? 0)
+4542:    const v = this.state.venueDay
+4543:    const venue = (v?.realized ?? 0) - (reset?.venue ?? 0)
+dayRealizedForKill() sums only closed trade P&L and venue settlement P&L. Unrealized mark-to-market loss on openTrades is completely ignored.
+Failure: The operator has 
+60
+i
+n
+c
+a
+s
+h
+a
+n
+d
+h
+o
+l
+d
+s
+40
+o
+p
+e
+n
+p
+o
+s
+i
+t
+i
+o
+n
+s
+w
+i
+t
+h
+60incashandholds40openpositionswith40 of cost basis (total equity 
+100
+)
+.
+T
+h
+e
+20
+100).The2020. An adverse economic print or crypto cascade occurs. The market price of all 40 positions drops from 80c to 10c (an unrealized loss of 
+35
+)
+.
+B
+e
+c
+a
+u
+s
+e
+n
+o
+n
+e
+o
+f
+t
+h
+e
+s
+e
+c
+o
+n
+t
+r
+a
+c
+t
+s
+h
+a
+v
+e
+s
+e
+t
+t
+l
+e
+d
+,
+‘
+d
+a
+y
+R
+e
+a
+l
+i
+z
+e
+d
+F
+o
+r
+K
+i
+l
+l
+(
+)
+‘
+r
+e
+t
+u
+r
+n
+s
+35).Becausenoneofthesecontractshavesettled,‘dayRealizedForKill()‘returns0.00. The kill switch does not trip. The scan loop continues executing new signals, committing the remaining cash into further adverse risk until final settlement triggers an instantaneous 35%+ drawdown.
+Test: In a test harness, set equity = 100, open 10 positions with entry price 0.50, update their quote prices to 0.05 (unrealizedLoss = -4.50
+), and call killSwitchCheck(100). Observe that it returns null despite mark-to-market losses exceeding risk limits.
+F-08: Polymarket Paper Lab Credits Maker Rebate on Settlement & Mislabels Exits as Taker
+Area: fees
+Severity: medium
+Confidence: verified
+Location: src/main/strategies/polyPaper.ts:94–96
+, src/main/strategies/polyPaper.ts:16–19
+, src/main/strategies/polyPaper.ts:34–37
+Claim: PolyPaperLab.close() passes its settlement boolean flag into polyPaperOrderFee's maker parameter, which causes non-binary settlements to receive a maker rebate credit while all normal market exits are billed taker fees regardless of order type.
+Evidence: In src/main/strategies/polyPaper.ts
+:
+ts
+Copy
+16: export function polyPaperFee(price:number,at:number,maker=false,rate?:number){
+17:   const scheduled=at>=Date.parse('2026-09-17T03:59:00Z')?.0695:.06
+18:   return maker?-POLY_MAKER_REBATE*price*(1-price):price*(1-price)*Math.max(scheduled,Number.isFinite(rate)?rate!:0)
+19: }
+...
+34: export function polyPaperOrderFee(shares:number,price:number,at:number,maker=false,rate?:number){
+...
+94: private close(p:PolyPaperPosition,price:number,reason:string,now:number,settlement=false){
+95:   const fee=polyPaperOrderFee(PAPER_SHARES,price,now,settlement,p.market.feeRate),net=price-p.entry-p.fee-fee
+close() defines parameter 5 as settlement = false. At line 95, it calls polyPaperOrderFee(PAPER_SHARES, price, now, settlement, ...). The 4th argument of polyPaperOrderFee is maker.
+Failure: When an event settles to a probability (e.g. resolution === 'MKT', 
+P
+=
+0.60
+P=0.60), settlement is passed as true. Line 95 passes maker = true, calling polyPaperFee(0.60, now, true). This computes 
+−
+0.0125
+×
+0.6
+×
+0.4
+=
+−
+0.003
+−0.0125×0.6×0.4=−0.003 (a maker rebate), which adds cash upon settlement. Conversely, when an open maker position exits during trading, line 107 calls close(p, exit, reason, now) without the 5th argument (settlement defaults to false). This passes maker = false to polyPaperOrderFee, billing a taker commission even if the exit was executed passively.
+Test: Pass p to close(p, 0.50, 'test', Date.now(), true). Inspect fee. It should be 0 (no fee or rebate on exchange settlement), but instead returns a negative fee (rebate) if share count > 4.
+F-09: Unit Test Suite Fails in Clean Environments Due to Undeclared GEMINI_API_KEY Dependency
+Area: engineering
+Severity: low
+Confidence: verified
+Location: scripts/tests/review-fixes.test.ts:384–386
+, scripts/tests/ladder.test.ts:123–127
+Claim: Running npm test in a clean terminal without GEMINI_API_KEY exported fails 2 of 18 test suites (test:ladder and test:review) with uncaught TypeErrors indexing into undefined.
+Evidence: Running npm test in the working environment produces:
+Copy
+FAIL  test:ladder
+FAIL  test:review
+G:\PROJECTS\oracle-trader\scripts\tests\ladder.test.ts:127
+eq('review plans: Gemini carries a key and asks for JSON', [geminiPlan.base, geminiPlan.key.length > 0, geminiPlan.json], [REVIEW_GEMINI.base, true, true])
+TypeError: Cannot read properties of undefined (reading 'base')
+In src/main/intelligence/gemini.ts:35
+:
+ts
+Copy
+export function geminiKey(): string {
+  return process.env.GEMINI_API_KEY?.trim() ?? ''
+}
+When process.env.GEMINI_API_KEY
+ is empty, reviewModelPlans pushes no Gemini plans into plansAll, causing plansAll.find(...) to return undefined.
+Failure: Any automated CI pipeline, secondary machine, or external reviewer executing npm test fails immediately, masking true regressions.
+Test: Run unset GEMINI_API_KEY; npm test (or $env:GEMINI_API_KEY=""; npm test in PowerShell).
+F-10: Cross-Venue Economic Dutch Books Break on Boundary Discrepancies (Initial Jobless Claims)
+Area: fees / mechanics
+Severity: medium
+Confidence: verified
+Location: scripts/backtests/crossvenue_econ.py:15
+, scripts/backtests/crossvenue_econ.py:68–72
+Claim: crossvenue_econ.py
+ identifies apparent cross-venue arbitrage on Initial Jobless Claims (IJC) between ForecastEx and Kalshi, but the venues use conflicting boundary semantics (strictly greater > vs at least >=), creating a 100% loss scenario on boundary prints.
+Evidence: In scripts/backtests/crossvenue_econ.py
+:
+python
+Copy
+15:   IJC   MMDDYY_X  -> KXJOBLESSCLAIMS-<release date>-<X>   Kalshi is "at least" (>=); a print exactly at X differs
+...
+68:   basket_a = ya + (1 - kb)        # FX YES at ask + Kalshi NO at (1 - yes bid)
+Failure: An economic print for Initial Claims lands exactly on strike 
+K
+=
+220
+k
+K=220k. Initial claims are reported in whole thousands, making boundary prints common. On ForecastEx, the contract is "exceed 220k" (
+X
+>
+220
+X>220), which resolves NO. On Kalshi, the contract is "at least 220k" (
+X
+≥
+220
+X≥220), which resolves YES (meaning Kalshi NO resolves to 
+0.00
+0.00). An operator holding Basket A (ForecastEx YES + Kalshi NO) suffers a total loss on both legs, receiving 
+0.00
+p
+a
+y
+o
+u
+t
+o
+n
+a
+ 
+0.00payoutona 0.96 investment.
+Test: Check historical Department of Labor weekly initial claims prints against Kalshi KXJOBLESSCLAIMS strike definitions to calculate the exact frequency of exact-strike prints over the past 3 years.
+F-11: Sports P&L Profitability Claim Rests on a Single Outlier Lottery Ticket
+Area: methodology / profitability
+Severity: high
+Confidence: verified
+Location: docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:17
+, docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:126–135
+Claim: The reported lifetime positive performance of the Sports strategy family (+
+8.98
+a
+c
+r
+o
+s
+s
+1
+,
+636
+c
+o
+n
+t
+r
+a
+c
+t
+s
+)
+i
+s
+e
+n
+t
+i
+r
+e
+l
+y
+a
+n
+a
+r
+t
+i
+f
+a
+c
+t
+o
+f
+a
+s
+i
+n
+g
+l
+e
+24
+c
+l
+o
+n
+g
+s
+h
+o
+t
+f
+i
+l
+l
+o
+n
+2026
+−
+09
+−
+07
+(
++
+8.98across1,636contracts)isentirelyanartifactofasingle24clongshotfillon2026−09−07(+22.33); excluding that single trade, the entire family has an aggregate loss of -$13.35.
+Evidence: docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md
+:
+markdown
+Copy
+17: | Sports (consensus, mean-reversion, anchors) | 1,636 | +$8.98 | +0.55c |
+...
+128: | 09-07 | +$10.40 | ONE market: LALIGA Elche v Real Sociedad, 38 contracts YES at 24c, resolved YES, **+$22.33**. The other four sports fills that day and the next lost $2.2-$2.9 each. |
+131: Across its 7 sports settlements it was +$18.41; without the one lottery ticket, **-$3.92 on 6**.
+Subtracting 
+22.33
+f
+r
+o
+m
+t
+h
+e
+f
+a
+m
+i
+l
+y
+′
+s
+t
+o
+t
+a
+l
+o
+f
++
+22.33fromthefamily 
+′
+ stotalof+8.98 leaves -$13.35.
+Failure: The operator evaluates the Sports family as a net contributor to portfolio equity (+0.55c/contract) and allocates long-horizon position capacity to it. In reality, the underlying process is negative expectation, and its positive sign is an artifact of high skewness and sample variance.
+Test: Compute the trimmed mean of the Sports trade history excluding the top 1% positive outlier.
+F-12: Multi-Arm Look-Ahead and Multiplicity Bias in Ladder Checkpoints
+Area: methodology
+
+Severity: high
+
+Confidence: verified
+
+Location: src/main/ladder/ladder.ts:406–447
+, docs/DEVELOPER-HANDBOOK.md:898–903
+
+Claim: Evaluating 18 live and paper arms at repeated 20-trade checkpoints against an 80% screening threshold without family-wise error rate control makes the false discovery rate of arm promotion approximately 98% under the null hypothesis of zero edge.
+
+Evidence: Handbook §12.14:
+
+"With ~18 arms at repeated checkpoints a fifth of zero-edge arms clear an 80% screen at any one look; no fleet-wide correction is applied..."
+
+In ladder.ts
+, decideStage evaluates each strategy independently at checkpoints 
+N
+=
+20
+,
+40
+,
+60
+,
+80
+,
+100
+N=20,40,60,80,100 using CONFIDENCE_Z = 0.84
+ (one-sided 
+p
+=
+0.20
+p=0.20).
+
+Failure: For 18 independent strategies with zero true edge, the probability that at least one passes an 80% screen at any single look is:
+
+P
+(
+≥
+1
+ False Promotion
+)
+=
+1
+−
+(
+1
+−
+0.20
+)
+18
+=
+1
+−
+0.80
+18
+=
+1
+−
+0.018
+=
+98.2
+%
+P(≥1 False Promotion)=1−(1−0.20) 
+18
+ =1−0.80 
+18
+ =1−0.018=98.2%
+Over five checkpoints per arm, the cumulative probability that a worthless strategy is admitted to live trading and scaled up approaches certainty. Each promoted false strategy bleeds up to -
+5.00
+b
+e
+f
+o
+r
+e
+h
+i
+t
+t
+i
+n
+g
+t
+h
+e
+h
+a
+r
+d
+s
+t
+o
+p
+(
+5.00beforehittingthehardstop(18 \times $5 = $90$, representing 45% of total system capital).
+
+Test: Implement a permutation / Monte Carlo null test where trade returns are randomly shuffled with zero mean across 18 arms; run decideStage across 10 checkpoints and record the proportion of simulation runs where at least one null arm reaches notch 2 or notch 3.
+
+F-13: Post-Hoc Era Selection Masks Systematic Decay in Lead-Lag Performance
+Area: methodology / profitability
+Severity: medium
+Confidence: verified
+Location: docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:46–62
+, docs/PREREGISTERED-leadlag-gap-floor.md:10–21
+Claim: Dividing lead-lag history into "Era A" (winning, 60s poll), "Era B+C" (losing, 10s poll), and "Era D" (orderbook quotes) was done post-hoc after inspecting the P&L curve, and the 6c gap floor was fitted directly to the historical sample.
+Evidence: docs/PREREGISTERED-leadlag-gap-floor.md
+:
+markdown
+Copy
+66: **Amendment 2026-09-19 (§127, review M-01).** The 6c and 3-minute cut points were chosen from the bucket table of the same 3,883-contract sample, so this file is a documented rule change, not a blind pre-registration; the counterfactual table cannot be evidence for the rule.
+In Era B+C, BTC and ETH on their own lost -1.83c/contract on 1,656 contracts. In Era D, BTC and ETH lost -0.51c/contract on 45 contracts. Across the entire sample since September 13, BTC and ETH have never shown a statistically significant positive return on honest orderbook quotes.
+Failure: The operator assumes that returning to low latency and adding a 6c gap floor restores Era A's profitability. However, Era A (+8.94c) was measured against stale cached quotes (where recorded dislocations were artificially wide). When measured against live executable books, the edge compresses toward zero.
+Test: Compute the Student-
+t
+t confidence interval on net cents per contract for lead-lag using only orders executed under honest orderbook quotes (kalshiSource === 'orderbook') from 2026-09-17 onwards.
+F-14: Strategy Not Tried: Cross-Market Monotonicity & Subsumption Arbitrage (Event Decomposition)
+Area: strategy
+Severity: medium
+Confidence: hypothesis
+Location: N/A — design-level
+ (extends src/main/strategies/dutchBook.ts
+)
+Claim: Cross-market subsumption arbitrage—buying a broad event 
+B
+B and selling a narrow event 
+A
+A where 
+A
+⊂
+B
+A⊂B whenever retail favorite-longshot bias causes 
+P
+(
+A
+)
++
+fee
+>
+P
+(
+B
+)
+−
+fee
+P(A)+fee>P(B)−fee—provides a strictly dominant, risk-free synthetic option on prediction markets.
+Mechanism: In prediction markets, event relationships frequently satisfy absolute propositional implication:
+Crypto & Financial Ladders: "Bitcoin above 
+70
+,
+000
+o
+n
+F
+r
+i
+d
+a
+y
+"
+(
+70,000onFriday"(A
+)
+s
+t
+r
+i
+c
+t
+l
+y
+i
+m
+p
+l
+i
+e
+s
+"
+B
+i
+t
+c
+o
+i
+n
+a
+b
+o
+v
+e
+)strictlyimplies"Bitcoinabove65,000 on Friday" (
+B
+B).
+Sports Point Spreads vs Moneylines: "Chiefs win by 
+≥
+7.5
+≥7.5 points" (
+A
+A) strictly implies "Chiefs win the game" (
+B
+B).
+Political Outcomes: "Party A wins Senate AND Presidency" (
+A
+A) strictly implies "Party A wins Presidency" (
+B
+B). Whenever 
+A
+  
+⟹
+  
+B
+A⟹B, probability theory dictates 
+P
+(
+A
+)
+≤
+P
+(
+B
+)
+P(A)≤P(B). In thin markets, retail retail order flow frequently bids up longshot lottery tickets (
+A
+A) while ignoring the parent contract (
+B
+B).
+Trade: Buy 
+B
+B at ask 
+P
+B
+P 
+B
+​
+ ; Sell 
+A
+A at bid 
+P
+A
+P 
+A
+​
+  (or buy NO on 
+A
+A at 
+1
+−
+P
+A
+1−P 
+A
+​
+ ).
+Payoff:
+If 
+A
+A occurs, 
+B
+B must occur. Both contracts pay out. Payout on 
+B
+B is 
++
+1
++1, loss on 
+A
+A is 
+−
+1
+−1. Net payoff = 
+0
+0. Net profit = 
+P
+A
+−
+P
+B
+−
+fees
+P 
+A
+​
+ −P 
+B
+​
+ −fees.
+If 
+B
+B occurs but 
+A
+A does not (e.g. Chiefs win by 3 points), 
+B
+B pays 
++
+1
++1 and 
+A
+A pays 
+0
+0. You win both legs! Payout = 
++
+1.00
++1.00. Net profit = 
+1.00
++
+P
+A
+−
+P
+B
+−
+fees
+1.00+P 
+A
+​
+ −P 
+B
+​
+ −fees.
+If neither occurs, both pay 
+0
+0. Net profit = 
+P
+A
+−
+P
+B
+−
+fees
+P 
+A
+​
+ −P 
+B
+​
+ −fees. If entered when 
+P
+A
+−
+P
+B
+>
+fees
+P 
+A
+​
+ −P 
+B
+​
+ >fees, the trade has zero downside and an enormous positive payoff on 
+B
+∖
+A
+B∖A.
+Why it should have an edge: Retail bettors systematically overpay for high-payout lottery tickets (longshots/point spreads) relative to base moneyline markets. Existing bots scan for same-market Dutch books (
+∑
+P
+i
+<
+1.0
+∑P 
+i
+​
+ <1.0), but rarely map semantic relationships across different series.
+Falsification: Historical scan of all subsumption pairs in the Becker archive showing that 
+(
+P
+A
+−
+P
+B
+)
+−
+fees
+(P 
+A
+​
+ −P 
+B
+​
+ )−fees never exceeds 0 in executable books.
+Cheapest test: An offline Python script parsing Becker archive order books for pairs of (Moneyline, Spread) and (Strike 
+K
+1
+K 
+1
+​
+ , Strike 
+K
+2
+K 
+2
+​
+ ) to tally executable spread inversions after fees.
+F-15: Strategy Not Tried: Deterministic Post-Final Sports Oracle Front-Running
+Area: strategy
+Severity: medium
+Confidence: hypothesis
+Location: N/A — design-level
+ (extends src/main/strategies/sportsAnchor.ts
+)
+Claim: Polling free, real-time sports APIs (e.g. ESPN public endpoints) for STATUS_FINAL allows a low-latency taker to sweep residual resting bids on the losing team on Kalshi and Polymarket US before the exchange halts trading or receives the official settlement payload.
+Evidence / Mechanism: Handbook §9.6 and autoTrader.ts:3689
+ confirm that sports and esports markets frequently remain open and unhalted for minutes or hours after physical play terminates:
+"The close time cached at ENTRY can be badly stale: esports and sports markets finalize when play ends, and Kalshi then moves close_time earlier. Three finalized WINS were found sitting unbooked because our cached closeTime was over a day in the future..." When an MLB, NBA, or tennis game ends, ESPN publishes status.type.state = "post" / STATUS_FINAL within 5–15 seconds. Kalshi's settlement oracle often lags by 15 to 45 minutes. Retail limit orders (or stale market-maker bids) often sit resting at 1c, 2c, or 5c on the losing team, or asks sit at 92c–97c on the winning team. An automated taker can execute an immediate IOC sweep on the winning team's ask or the losing team's bid with 100% deterministic outcome certainty.
+
+Why it should have an edge: The outcome is physically determined; the probability is exactly 1.0 or 0.0. Any fill at 
+≤
+98
+c
+≤98c on the winner or 
+≥
+2
+c
+≥2c shorting the loser is pure arbitrage with zero outcome risk.
+Falsification: Live book logging of Kalshi sports markets at the exact second ESPN declares STATUS_FINAL showing zero resting bids 
+>
+1
+c
+>1c on the loser and zero asks 
+<
+99
+c
+<99c on the winner.
+Cheapest test: A standalone 60-line script monitoring 10 live MLB/tennis games via the free ESPN API; at STATUS_FINAL, immediately query Kalshi's /markets/{ticker}/orderbook
+ and record available depth.
+F-16: Strategy Not Tried: Cross-Venue Same-Figure Economic Print Arbitrage (Kalshi vs. ForecastEx)
+Area: strategy
+Severity: medium
+Confidence: verified
+Location: scripts/backtests/crossvenue_econ.py
+, docs/REVIEW-CHANGES-2026-09-06.md:4201–4212
+Claim: With IBKR now funded ($100), trading simultaneous cross-venue Dutch baskets between ForecastEx and Kalshi on macroeconomic releases that settle on identical government figures (CPI YoY, Non-Farm Payrolls, Unemployment Rate) captures verified 3c–4c structural spreads with zero basis risk.
+Evidence / Mechanism: In §120 and crossvenue_econ.py
+, the operator verified:
+ForecastEx and Kalshi settle on the exact same Bureau of Labor Statistics number for CPI YoY (KXCPIYOY vs CPIY), Unemployment (KXU3 vs UNR), and Payrolls (KXPAYROLLS vs PREMP).
+ForecastEx charges a flat $0.01/contract fee. Kalshi charges quadratic taker fees.
+§120 identified an immediate live divergence on Fed Funds: ForecastEx FF Oct 28 > 3.875 ask 0.54 + Kalshi KXFED-26OCT-T4.00 NO at 0.42 = 
+0.96
+f
+o
+r
+a
+0.96fora1.00 payout (a net 4c arbitrage).
+This was deferred previously because IBKR was unfunded. On 2026-09-19 (§125), the operator deposited $100 into IBKR, but no trading logic has been wired to execute cross-venue baskets.
+Why it should have an edge: The two venues serve non-overlapping clienteles: ForecastEx is accessible primarily via institutional and retail IBKR accounts (often trading macro hedges), while Kalshi is a standalone retail prediction market. Price discovery around economic releases occurs at different speeds.
+Falsification: Monitoring simultaneous top-of-book depth on KXCPIYOY and CPIY during the 60 minutes preceding the next CPI release; if the sum of asks never drops below $0.98 net of fees, the edge is inactive.
+Cheapest test: Extend crossvenue_econ.py
+ to record live executable depth and log every occurrence of 
+Ask
+FX
++
+Ask
+Kalshi, NO
+<
+0.98
+Ask 
+FX
+​
+ +Ask 
+Kalshi, NO
+​
+ <0.98 over a 7-day window.
+F-17: Total Absence of a Unified Portfolio Delta and Factor Risk Manager
+Area: missing / risk
+Severity: high
+Confidence: verified
+Location: N/A — design-level
+Claim: Risk limits are evaluated strictly within individual strategies and individual tickers, leaving the system with no unified portfolio-level delta, asset beta, or factor aggregator across venues.
+Evidence: In src/main/strategies/autoTrader.ts
+: entryBlocked() checks maxPerUnderlying (line 2818) and churn (line 2784) for Kalshi auto-trader signals. In leadLag.ts
+, windowDir limits sweeps to 2 coins per direction per window. However:
+LeadLagEngine places orders directly through adapter.placeOrder
+ and never registers positions in autoTrader.ts
+'s this.state.openTrades
+.
+cryptoConvergence.ts
+ places trades independently without consulting leadLag's window exposure.
+polyPaper.ts
+ and ibkrLab.ts
+ evaluate risk on isolated simulated ledgers.
+Failure: Crypto assets have an empirical correlation of 0.85–0.95 during momentum breaks. On a single afternoon, leadLag buys 2 coins on YES, cryptoConvergence buys YES on an hourly ladder strike, meanReversion buys YES on a daily crypto bracket, and a sports/macro strategy holds long exposure. The total portfolio holds 15 contracts betting on upward market movement. A sudden market drop causes all 15 positions to lose simultaneously, incurring a loss of 
+12
+–
+12–15 on a $60 account (20%–25% drawdown) despite every individual strategy complying with its local constraints.
+Test: Write a pure test helper simulating concurrent executions across leadLag, autoTrader, and cryptoConvergence on the same underlying (e.g. BTC) and assert that total simultaneous capital commitment is bounded.
+Top 5 Findings Ranked by Expected Dollar Impact
+Rank	Finding ID & Title	Severity	Expected Impact	Rationale
+1	F-04: Unmodelled Settlement Basis Divergence in Lead-Lag	High	~
+30
+–
+30–50 loss prevention	Lead-lag accounts for over 70% of total portfolio trading volume (3,849 of 5,485 lifetime contracts). An unmodelled basis penalty of 
+−
+1.2
+c/contract
+−1.2c/contract across thousands of contracts turns the system's primary earner into a systematic net loser. Fixing this with a basis reserve is essential to capital preservation.
+2	F-07: Daily Kill Switch Blindness to Mark-to-Market Unrealized Losses	High	~
+20
+–
+20–40 loss prevention	In an account with ~
+60
+c
+a
+s
+h
+a
+n
+d
+60cashand40 deployed across open positions, a market-wide adverse event can wipe out 35%+ of total equity without triggering the kill switch because losses are recognized only upon settlement. Adding mark-to-market losses prevents catastrophic account drawdown.
+3	F-02: 100-Trade Ladder Sign Rule Scales Up on Positive Sign Alone	High	~
+15
+–
+15–30 loss prevention	By scaling up any strategy that reaches 100 trades with net profit > \0.00
+,
+t
+h
+e
+l
+a
+d
+d
+e
+r
+d
+o
+u
+b
+l
+e
+s
+p
+o
+s
+i
+t
+i
+o
+n
+s
+i
+z
+e
+o
+n
+ 
+50
+,theladderdoublespositionsizeon 5010 stop at notch 2, multiple false promotions will drain the small account bankroll.
+4	F-01: IBKR / ForecastEx Exits Blocked When Portfolio Cap Is Reached	High	~
+10
+–
+10–20 loss prevention	If the operator enables live trading on ForecastEx, any strategy hitting its exit conditions while maxOpenPositions is reached will have its exit rejected, stranding live positions to expiry and converting winning trades into 100% losses.
+5	F-03: Consensus Arm Inverts Trades on 'No' Outcomes & Fictitious Shadow Edge	High	~
+10
+–
+10–15 loss prevention	The consensus arm trades real money on Kalshi based on an external feed where the most frequent outcome ('No') is inverted to 'YES', actively betting against the smart-money wallets it was designed to follow while relying on an invalid shadow backtest.
+Strongest Disagreement
+The belief most likely wrong: The operator's continued belief that a multi-strategy statistical edge exists across generic technical signals (momentum, mean-reversion, volume-spike, fade) on retail prediction markets, and that the ladder's checkpoint mechanism can separate real edges from noise on sample sizes of 20 to 100 trades.
+
+Commitment to position: The empirical record in TRADE-HISTORY-2026-09-18-what-won-what-lost.md
+ shows that every single technical/statistical arm tested on Kalshi and Polymarket US has either lost money or broken even:
+
+Weather maker: -$45.97 (dead)
+Book imbalance: -$12.42 (dead)
+Momentum: -$10.63 (stopped twice)
+Volume spike: -$4.80 (negative)
+Flow follow: -$3.20 (negative)
+Fade: +
+8.18
+o
+n
+243
+t
+r
+a
+d
+e
+s
+(
+8.18on243trades(z = +0.15$, identical to the favorite base rate; markout wholly negative)
+Sports: +
+8.98
+(
+e
+n
+t
+i
+r
+e
+l
+y
+o
+n
+e
+24
+c
+l
+o
+t
+t
+e
+r
+y
+t
+i
+c
+k
+e
+t
+o
+n
+E
+l
+c
+h
+e
+v
+s
+R
+e
+a
+l
+S
+o
+c
+i
+e
+d
+a
+d
+;
+−
+8.98(entirelyone24clotteryticketonElchevsRealSociedad;−13.35 without it)
+The only strategy that has ever generated positive net expectation is low-latency cross-venue latency arbitrage (lead-lag), and even that edge is fragile, latency-dominated, and eroded by settlement basis divergence.
+
+Prediction markets are not equity or FX markets:
+
+They are contract-capped, low-liquidity binary options with high proportional fee hurdles (7% quadratic taker fee on Kalshi).
+Taker fees of 1.5c–1.75c require an enormous gross mispricing (
+>
+3
+%
+>3%) to break even.
+Maker quoting suffers severe adverse selection from informed takers (demonstrated by the weather quoter's -1.70c/contract loss over 801k contracts).
+Evaluating 18 strategies at 20-trade checkpoints is statistically incapable of detecting a 1c–2c edge against a binary variance of 
+σ
+≈
+50
+c
+σ≈50c. To detect a 2c edge with 95% power requires:
+N
+≥
+(
+1.96
+×
+50
+2
+)
+2
+≈
+2
+,
+401
+ independent trades per arm
+N≥( 
+2
+1.96×50
+​
+ ) 
+2
+ ≈2,401 independent trades per arm
+Running a 20-trade checkpoint on a binary contract with 
+σ
+=
+50
+c
+σ=50c produces a standard error of 
+50
+20
+=
+11.2
+c
+20
+​
+ 
+50
+​
+ =11.2c. A 95% confidence interval spans 
+±
+22
+c
+±22c! Judging an edge of 1.5c with an instrument whose measurement uncertainty is 
+±
+22
+c
+±22c is statistical noise. The entire apparatus of 18 concurrent micro-arms is churning small fees to the exchange while mistaking random variance for signal.
+
+Recommendation: Cease treating Oracle Trader as a multi-strategy quantitative fund. Decommission all generic technical arms (momentum, reversion, volume spike, fade). Reallocate the entire engine to structural and mechanical prediction-market edges:
+
+Pure latency lead-lag (with an explicit settlement basis reserve and 1-contract cap).
+Deterministic same-event cross-venue economic Dutch books (Kalshi vs. ForecastEx).
+Deterministic post-final sports oracle sweeps.
+Could Not Check
+Private Venue Account State & Live Credentials:
+Real-time balances, open order status, and fill allocations live in %APPDATA%/oracle-trader
+ and Windows safeStorage. Could not inspect the live order-journal.jsonl
+, ladder.json
+, or kalshi-auto.json
+ runtime state directly.
+Exchange API Orderbook Depth for ForecastEx:
+Testing the depth and live bid/ask spreads of ForecastEx economic contracts (FF, CPIY, UNR) requires an active, authenticated connection to Interactive Brokers Gateway on port 4001, which is not available in this static code review.
+Kalshi API Settlement JSON Payload for Sale-Closed Positions:
+Could not verify from live exchange payloads whether Kalshi's /portfolio/settlements
+ endpoint emits a row when a position is closed to zero via a reduce_only marketable ask before expiration, or whether such trades are completely omitted from the settlement endpoint (relying exclusively on fill reconciler logs).
+Network Transport Latency from Local Host to Matching Engines:
+Could not measure the physical ping latency from the operator's Windows desktop in Eastern US to Kalshi's AWS us-east-2 matching engine and Polymarket's London infrastructure, which governs the physical upper bound on lead-lag sweep speed.

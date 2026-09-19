@@ -140,3 +140,16 @@ fetches per scan for signals outside the scan universe. It counted cache hits ag
 is stably ordered, so rows 11+ were refused `fetch-budget` every scan since the arm went live (51-75 of
 ~95 fresh signals a scan, measured 09-14 to 09-18). Only a real venue call now spends the budget. Entry
 rule, sizing, grading and the stop rule are unchanged; the grading cut is not moved.
+
+**Amendment 2026-09-19 (REVIEW-CHANGES §129, external review Gemini Flash F-03). The Kalshi leg of this
+registration is VOID to date.** The recorder's matcher fell back to any single-market Kalshi event that shared
+the fixture's name, and the app bought YES on it whatever the wallets had bought: of 12 open consensus positions
+on 09-19, six were "Both Teams To Score", four were "first inning over 0.5 runs", one a second-half spread. The
+shadow's +6.39c/contract at the Kalshi ask was graded against those same markets and is fiction; the settled
++0.12c on 260 contracts is what unrelated coin-flips at 50c produce. Fixed: game signals map only to GAME/MATCH
+winner events, the market is the named team's (or the Tie market), the wallets' 'No' is NO on it, totals and
+up/down signals have no Kalshi twin, non-game questions need every discriminating token present, and there is
+no single-market fallback. Rows carry `kalshi.side`; the app refuses rows without it and any ticker in a
+non-winner series. Dry run on rows since 09-17: 312 matches under the old rule, 39 under the new. Prior trades
+are kept under `consensus:pre-matcher-20260919`; the arm restarts its evidence from this amendment with the
+registered rule and stop unchanged. The 12 open positions hold to settlement (1 contract each).

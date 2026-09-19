@@ -492,7 +492,12 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
         reason: `${at}: ${THOROUGH_TRADES}+ trades and net positive, but the 5-min markout band (${ev.adverse!.lo.toFixed(2)}..${ev.adverse!.hi.toFixed(2)} over ${ev.adverse!.n}) is wholly negative - held at this size`
       }
     }
-    if (ev.netDollars > 0) return up(`${at}: ${THOROUGH_TRADES}+ trades and net positive (a small win is a win)`)
+    // A small win keeps the arm ALIVE at 100 trades; adding size still needs the confirmatory band (§12.14). Before
+    // 2026-09-19 a net of +$0.02 on 100 even-money trades doubled the notch (external review, Gemini Flash F-02).
+    if (ev.netDollars > 0 && lo95 <= 0) {
+      return { kind: 'hold', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net positive, but the 95% lower bound is ${lo95.toFixed(2)}${u} - a small win is a win, not a reason to add size` }
+    }
+    if (ev.netDollars > 0) return up(`${at}: ${THOROUGH_TRADES}+ trades, net positive and the 95% band clear of zero`)
     return { kind: 'stop', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net not positive` }
   }
   return { kind: 'hold', checkpoint, reason: `${at}: inconclusive, keep testing` }

@@ -269,7 +269,10 @@ class Matcher:
 
 
 MONTHS = {m: i for i, m in enumerate(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'], 1)}
-DERIVATIVE = re.compile(r'TOTAL|SPREAD|MAPS|HANDICAP|CONF|LEAVE|CHAMP|MVP|SERIES|SEASON|WINS\d|OVER|UNDER|PROP', re.I)
+DERIVATIVE = re.compile(r'TOTAL|SPREAD|MAPS|HANDICAP|CONF|LEAVE|CHAMP|MVP|SERIES|SEASON|WINS\d|OVER|UNDER|PROP|BTTS|RFI|1H|2H|CORNER|CARD', re.I)
+# Kalshi winner-type events for fixtures: KXNFLGAME, KXUCLGAME, KXATPMATCH, ... (never BTTS, RFI, TOTAL, SPREAD).
+WINNER_EVENT = re.compile(r'GAME|MATCH', re.I)
+NO_TWIN_OUTCOMES = {'over', 'under', 'up', 'down'}
 
 
 def poly_date(sig_slug):
@@ -294,11 +297,20 @@ def is_derivative_title(title):
 
 def match_kalshi(matcher, title, outcome, slug):
     """Best Kalshi event that names the same fixture on the same date, with the winner-type market for the outcome."""
+    oc = (outcome or '').strip().lower()
+    # Totals and 15-minute direction signals have no match-level Kalshi twin; matching them by fixture name
+    # produced "both teams to score" and first-inning markets (2026-09-19, external review).
+    if oc in NO_TWIN_OUTCOMES:
+        return None
     q = tokens(f'{title} {outcome}')
     qw = sum(matcher.idf.get(w, 3.0) for w in q) or 1.0
     pdate = poly_date(slug)
     derivative_ok = is_derivative_title(title)
-    is_game = ' vs' in (title or '').lower()
+    is_game = ' vs' in (title or '').lower() or bool(re.search(r'\bwin on \d{4}-\d{2}-\d{2}', title or '', re.I)) or bool(re.search(r'end in a (draw|tie)', title or '', re.I))
+    yes_no = oc in ('yes', 'no')
+    # Every discriminating token of a non-game question must be in the Kalshi event: "Will Harry Kane win the
+    # Ballon d'Or?" shared "harry kane 2026" with "Will Harry Kane be knighted?" and matched it.
+    need = set() if is_game else {w for w in tokens(title) if matcher.idf.get(w, 0) > 1.0 and w not in ('win', 'wins', 'winner')}
     # A per-map / per-set / per-half market has no Kalshi twin at the match level.
     if re.search(r'\b(game|map|set|half|quarter|period)\s*\d', title or '', re.I) or re.search(r'\b1st\b|\b2nd\b', title or ''):
         return None
@@ -319,6 +331,12 @@ def match_kalshi(matcher, title, outcome, slug):
             continue
         if not dates_agree(pdate, kdate):
             continue
+        # A game signal only ever maps to a winner event (Kalshi's GAME/MATCH series); a fixture name also
+        # matches its BTTS, totals, spread and first-inning events, which are not the same bet.
+        if is_game and not WINNER_EVENT.search(ticker):
+            continue
+        if need and not need <= tk:
+            continue
         # A game signal needs BOTH fixture names in the Kalshi event, not one team plus a stray word
         # (2026-09-08: Diamondbacks vs Royals matched an NWSL event through "Kansas City").
         if ' vs' in (title or '').lower():
@@ -330,22 +348,34 @@ def match_kalshi(matcher, title, outcome, slug):
         cands.append((score, ticker, ev, shared))
     if not cands:
         return None
-    ot = tokens(outcome)
+    # Which market inside the event, and which side of it. A Yes/No answer to "Will <team> win ...?" names the
+    # team in the TITLE, not the outcome; a draw question names the Tie market; otherwise the outcome is the
+    # team. 'No' is NO on that market. There is no single-market fallback any more: it is what matched
+    # knighthood and both-teams-to-score markets (2026-09-19).
+    if yes_no:
+        if re.search(r'end in a (draw|tie)', title or '', re.I):
+            want = {'tie', 'draw'}
+        else:
+            subject = re.sub(r'^\s*will\s+', '', title or '', flags=re.I)
+            subject = re.split(r'\s+win\b|\s+vs\.?\s|\?', subject, 1)[0]
+            want = {w for w in tokens(subject) if matcher.idf.get(w, 0) > 1.0} or tokens(subject)
+    else:
+        want = {w for w in tokens(outcome) if matcher.idf.get(w, 0) > 1.0} or tokens(outcome)
+    side = 'NO' if oc == 'no' else 'YES'
     best = None
     for score, ticker, ev, shared in cands:
-        # The winner market for the signalled side is the one whose sub-title overlaps the outcome
+        # The winner market for the signalled side is the one whose sub-title overlaps the wanted tokens
         # the most, and strictly more than any other (IG vs LGD both carry "Gaming").
-        overl = sorted(((len(ot & tokens(m['sub'])), m) for m in ev['markets']), key=lambda x: -x[0])
-        mk = None
-        if overl and overl[0][0] > 0 and (len(overl) == 1 or overl[0][0] > overl[1][0]):
-            mk = overl[0][1]
-        elif len(ev['markets']) == 1:
-            mk = ev['markets'][0]
-        rank = (1 if mk else 0, score)
-        if best is None or rank > best[0]:
-            best = (rank, score, ticker, mk, shared)
-    _, score, ticker, mk, shared = best
-    return {'event': ticker, 'score': round(score, 3), 'shared': shared, 'market': mk['ticker'] if mk else None, 'yes_bid': mk['yes_bid'] if mk else None, 'yes_ask': mk['yes_ask'] if mk else None}
+        overl = sorted(((len(want & tokens(m['sub'])), m) for m in ev['markets']), key=lambda x: -x[0])
+        if not (overl and overl[0][0] > 0 and (len(overl) == 1 or overl[0][0] > overl[1][0])):
+            continue
+        mk = overl[0][1]
+        if best is None or score > best[0]:
+            best = (score, ticker, mk, shared)
+    if best is None:
+        return None
+    score, ticker, mk, shared = best
+    return {'event': ticker, 'score': round(score, 3), 'shared': shared, 'market': mk['ticker'], 'side': side, 'yes_bid': mk['yes_bid'], 'yes_ask': mk['yes_ask']}
 
 
 def match_polyus(matcher, title, outcome, slug):
@@ -458,12 +488,21 @@ def grade(state):
             'hours_to_resolution': round((NOW_TS - dt.datetime.fromisoformat(s['ts']).timestamp()) / 3600, 1), 'category': (s.get('eventSlug') or '').split('-')[0]
         }
         k = s.get('kalshi')
-        if k and k.get('yes_ask') is not None:
-            # The Kalshi market is matched on the signal outcome's YES side.
-            px = k['yes_ask']
-            entry['kalshi_market'] = k['market']
-            entry['kalshi_price'] = px
-            entry['pnl_kalshi'] = round(((1 - px) if y else -px) - kalshi_fee(px), 4)
+        if k and k.get('market') and (k.get('yes_ask') is not None):
+            # Priced on the side the wallets took: YES at the YES ask, NO at one minus the YES bid. Rows written
+            # before 2026-09-19 carry no side and were matched to markets that were not the same bet; they are
+            # not graded on the Kalshi leg at all.
+            if k.get('side') == 'NO':
+                px = None if k.get('yes_bid') is None else round(1 - k['yes_bid'], 4)
+            elif k.get('side') == 'YES':
+                px = k['yes_ask']
+            else:
+                px = None
+            if px is not None:
+                entry['kalshi_market'] = k['market']
+                entry['kalshi_side'] = k['side']
+                entry['kalshi_price'] = px
+                entry['pnl_kalshi'] = round(((1 - px) if y else -px) - kalshi_fee(px), 4)
         u = s.get('polyus')
         if u and u.get('price') is not None:
             px = u['price']

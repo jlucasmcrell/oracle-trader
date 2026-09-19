@@ -1,0 +1,62 @@
+ID: F-01 Area: engineering / correctness Severity: critical Confidence: verified Location: src/main/strategies/leadLag.ts
+ (lines ~380-410 inside scanAndSweep) Claim: The LeadLagEngine bypasses the application's central RateLimiter and makes concurrent raw fetch calls to Kalshi, causing the API throttling that degraded its execution latency. Evidence: Instead of calling adapter.getMarket() or routing through adapter.http
+, the engine uses await fetch('${KALSHI_API}/markets...')
+ and await fetch('${KALSHI_API}/markets/${ticker}/orderbook...')
+. It fires these inside a Promise.allSettled
+ over 8 pairs, creating a simultaneous burst of 16 un-paced HTTP requests every 10 seconds. Failure: This burst concurrency routinely exceeds Kalshi's per-second API limits, directly causing the [leadlag] Kalshi leg failed errors and the HTTP 429s documented in BACKLOG item 146 (mmsim is being throttled...). These unmanaged bursts cause TCP drops/re-establishments that silently degraded LeadLag's latency to 14s, destroying the 70ms edge. Test: Route the Kalshi quote fetches in leadLag.ts
+ through adapter.http.get() so they respect the 10 reads/s queue limit, then observe if Kalshi 429s drop and mmsim survives.
+
+ID: F-02 Area: methodology Severity: high Confidence: verified Location: src/main/strategies/ibkrLab.ts:50
+ (inside status()) Claim: Evaluating 31 independent paper arms simultaneously against a 95% confidence lower-bound guarantees false-positive live promotions. Evidence: The liveEligible gate evaluates (confidenceLow??-1)>0 (a one-sided 97.5% / two-sided 95% test). With 31 simultaneous tests running across ibkrLab and polyPaper, the Family-Wise Error Rate (probability of at least one useless arm passing by pure chance) is 
+1
+−
+(
+0.975
+)
+31
+≈
+54
+%
+1−(0.975) 
+31
+ ≈54%. Failure: Pure market noise will eventually push a zero-edge strategy's confidenceLow above zero. The engine will wrongly classify it as liveEligible and allocate live funding to a mathematically expected loss. (While BACKLOG #156 notes resampling to observe the null false-promotion rate, the automated gate itself still lacks the statistical correction). Test: Implement a Bonferroni correction in the liveEligible boolean (e.g. use alpha = 0.05 / 31
+ for the critical value) or require strategies to clear a held-out forward test before live execution.
+
+ID: F-03 Area: profitability Severity: medium Confidence: verified Location: docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md
+ (Section 6a) Claim: The operator misinterprets the fade strategy's lack of a directional edge as a lack of overall edge, ignoring that its EV is structurally positive because it captures the spread as a MAKER. Evidence: The history report states "calibration z = +0.15: it wins exactly as often as its 0.95 entry prices imply. No edge; the profit is inside noise." But the same line notes mean win +$0.125, mean loss -$1.19
+. At exactly a 95% win rate, Expected Value per 
+1
+s
+t
+a
+k
+e
+i
+s
+1stakeis(0.95 \times 12.5¢) - (0.05 \times 119¢) = +5.9¢$. Failure: The operator risks decommissioning or under-sizing a genuinely profitable strategy because they treat spread-capture revenue as "noise" when the underlying signal is perfectly calibrated. Test: Split the strategy's P&L attribution into CLV (closing line value) and spread-capture. The positive EV will be entirely explained by the maker queue rebate/discount.
+
+ID: F-04 Area: profitability / methodology Severity: medium Confidence: verified Location: src/main/strategies/polyPaper.ts:79
+ and src/main/strategies/ibkrLab.ts:178
+ Claim: Paper lab "profit target" exits lock in absolute dollar losses because they measure movement from an entry mark that already bakes in the bid-ask spread and double fees. Evidence: p.mark
+ is calculated as exitNow - price - fee - exitFee, which is negative at inception (e.g., -5¢). The exit condition move = net - p.mark >= 0.03
+ triggers when the position improves by 3 cents relative to that negative mark. Failure: If a position improves by 3 cents, it exits for a "profit target", but net profit is still 
+−
+0.02
+−0.02. The paper lab systemically stunts its winners before they reach absolute profitability while logging them as successful targets, distorting the operator's view of which exit rules actually make money. Test: Change the profit target logic to evaluate net >= 0.03
+ (absolute profit) rather than relative movement, or explicitly rename the status to spread recovery exit.
+
+ID: F-05 Area: strategy / missing Severity: medium Confidence: hypothesis Location: N/A — design-level Claim: The system scans for mutually-exclusive Dutch books, but misses calendar/inclusivity arbitrages where one continuous market logically subsumes another. Evidence: Kalshi lists overlapping markets (e.g., "Will the Fed cut rates by September?" vs "Will the Fed cut rates by November?"). A November cut mathematically must happen if a September cut happens. If YES_ask(November) < YES_bid(September), an arbitrage exists. Failure: The dutchBook.ts
+ scanner only checks exhaustive slates within a single market grouping, leaving cross-duration structural mispricings completely unexploited despite carrying no external data risk. Test: Build a scanner that pairs markets sharing the same underlying metric but differing in expiration, logging instances where the longer-duration ask is cheaper than the shorter-duration bid.
+
+Top 5 findings ranked by expected dollar impact
+F-01 (LeadLag rate limit bypass) - Highest dollar impact. LeadLag is the only proven winner in the portfolio. Stopping it from effectively DDOSing Kalshi with raw un-paced fetches restores the API stability needed to capture the 70ms edge that drove the +8.94¢ era.
+F-02 (Multiple-comparisons false promotion) - High capital preservation impact. If the system trusts its uncorrected liveEligible gate across 31 concurrent tests, it will mathematically guarantee deploying real capital to losing strategies.
+F-03 (Misinterpreting maker edge) - Foregone revenue. Correctly recognizing maker spread-capture as a valid, exploitable edge unlocks the +5.9¢ EV on the fade strategy without requiring a predictive directional signal.
+F-04 (Paper lab exits locking in losses) - Misallocation risk. Tuning strategies based on simulated "profit targets" that are actually net dollar losses will optimize the arms for the wrong exit horizons.
+F-05 (Calendar arbitrage) - Uncaptured revenue, requiring new implementation but structurally risk-free if the spread allows.
+Strongest disagreement
+The operator's assertion in the TRADE-HISTORY report that the fade strategy has "No edge; the profit is inside noise" because its win rate matches its entry prices is wrong. This assumes that all edge must be directional. Because fade operates as a MAKER (fadeEntryMode = 'maker'), it buys below fair value by capturing the spread and avoiding taker fees. Winning exactly 95% of the time at 0.95 fair-value prices with a maker queue position yields a mathematically positive Expected Value (+5.9¢ per $1 staked in your own numbers). The spread capture is the edge, and the strategy should not be sidelined purely for lacking a predictive directional signal.
+
+Could not check
+Whether ForecastEx or IBKR impose hidden exchange, routing, or API-access fees not modeled by the flat 1-cent fee and 1-cent slippage in ibkrLab.ts
+. I would need runtime API access to IBKR's execution endpoints and a live account statement to verify true execution costs and determine if ForecastEx's "zero commission" marketing has hidden spread or platform costs.

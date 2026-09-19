@@ -207,7 +207,7 @@ export class TradingEngine {
    * gives the next order an exact count, so concurrent submission cannot share the last slot.
    */
   private async placeLiveOrderReserved(order: OrderRequest): Promise<OrderResult> {
-    let token!: number
+    let token: number | undefined
     const previous = this.entryQueues.get(order.venue) ?? Promise.resolve()
     let release!: () => void
     const current = new Promise<void>((resolve) => { release = resolve })
@@ -216,9 +216,13 @@ export class TradingEngine {
     try {
       const cap = this.stakeCapFor(order.venue)
       if (cap > 0 && order.amount > cap) throw new Error(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
-      const count = await this.countOpenPositions(order.venue)
-      if (count >= this.riskLimits.maxOpenPositions) throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)
-      token = this.reserveSlot(order.venue)
+      // An exit expressed as a buy of the opposite side (closeFrom, IBKR and Polymarket US) frees a slot; it must
+      // never be refused at the cap or reserve one (2026-09-19, external review: a full book could not exit).
+      if (!order.closeFrom) {
+        const count = await this.countOpenPositions(order.venue)
+        if (count >= this.riskLimits.maxOpenPositions) throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)
+        token = this.reserveSlot(order.venue)
+      }
     } finally {
       release()
       if (this.entryQueues.get(order.venue) === current) this.entryQueues.delete(order.venue)
@@ -229,16 +233,20 @@ export class TradingEngine {
     } catch (e) {
       // An explicit venue rejection holds nothing: release the slot. Any other error may conceal a fill: keep the token
       // counted until a later read has seen the aftermath, and drop the snapshot so the next entry re-reads.
-      if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) this.reservations.get(order.venue)?.delete(token)
-      else this.settleSlot(order.venue, token)
+      if (token !== undefined) {
+        if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) this.reservations.get(order.venue)?.delete(token)
+        else this.settleSlot(order.venue, token)
+      }
       this.openPositionCountCache.delete(order.venue)
       throw e
     }
     // Nothing held and nothing resting: give the reserved slot back. Otherwise it stays counted until a later read sees it.
-    if (!(res.shares > 0 || res.venueStatus === 'resting')) this.reservations.get(order.venue)?.delete(token)
-    else this.settleSlot(order.venue, token)
+    if (token !== undefined) {
+      if (!(res.shares > 0 || res.venueStatus === 'resting')) this.reservations.get(order.venue)?.delete(token)
+      else this.settleSlot(order.venue, token)
+    } else this.openPositionCountCache.delete(order.venue)
     if (order.marketQuestion) this.questionCache.set(order.marketId, order.marketQuestion)
-    this.recordFill(order.venue, order.marketId, order.outcome, 'buy', res, order.ref, order.marketQuestion, order.answerId)
+    this.recordFill(order.venue, order.closeFrom ?? order.marketId, order.outcome, order.closeFrom ? 'sell' : 'buy', res, order.ref, order.marketQuestion, order.answerId)
     return res
   }
 
@@ -247,7 +255,7 @@ export class TradingEngine {
     if (cap > 0 && order.amount > cap) {
       throw new Error(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
     }
-    if (this.riskLimits.maxOpenPositions > 0) {
+    if (this.riskLimits.maxOpenPositions > 0 && !order.closeFrom) {
       const count = await this.countOpenPositions(order.venue)
       if (count >= this.riskLimits.maxOpenPositions) {
         throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)

@@ -92,7 +92,9 @@ export class PolyPaperLab {
       }),positions:s.positions,orders:s.orders,trades:s.trades.slice(-60).reverse()}
   }
   private close(p:PolyPaperPosition,price:number,reason:string,now:number,settlement=false){
-    const fee=polyPaperOrderFee(PAPER_SHARES,price,now,settlement,p.market.feeRate),net=price-p.entry-p.fee-fee
+    // Settlement pays out fee-free; until 2026-09-19 the settlement flag landed in the `maker` parameter and credited a
+    // rebate on every settled position (external review, Gemini Flash F-08). Trading exits are takers (bid minus 1c).
+    const fee=settlement?0:polyPaperOrderFee(PAPER_SHARES,price,now,false,p.market.feeRate),net=price-p.entry-p.fee-fee
     this.state.cash[p.strategy]+=price-fee
     this.state.trades.push({...p,exit:price,exitFee:fee,net,closed:now,reason})
     this.state.positions=this.state.positions.filter(x=>x.id!==p.id)
@@ -103,8 +105,12 @@ export class PolyPaperLab {
     const s=this.state
     for(const p of [...s.positions].filter(p=>p.market.id===m.id)){
       const side=sideQuote(q,p.side),exit=Math.max(0,side.bid-.01),net=exit-p.entry-p.fee-polyPaperOrderFee(PAPER_SHARES,exit,now,false,m.feeRate)
+      // The profit target is ABSOLUTE net (+3c after both fees): until 2026-09-19 it was measured from the entry mark,
+      // which starts negative by the spread and both fees, so a "profit target" could close at a net loss (external
+      // review, Gemini Pro F-04). The loss stop stays relative to the mark - 5c of adverse movement - because a
+      // taker entry is already 3-5c under water at the fill and an absolute -5c stop fired on an unchanged quote.
       const hold=p.strategy==='longshot'||p.strategy==='favorite',move=p.mark===undefined?net:net-p.mark
-      if(!hold&&side.bidSize>=1&&(now-p.opened>=15*MINUTE||move>=.03||move<=-.05))this.close(p,exit,move>=.03?'profit target':move<=-.05?'loss stop':'15-minute exit',now)
+      if(!hold&&side.bidSize>=1&&(now-p.opened>=15*MINUTE||net>=.03||move<=-.05))this.close(p,exit,net>=.03?'profit target':move<=-.05?'loss stop':'15-minute exit',now)
     }
     s.orders=s.orders.filter(o=>o.expires>now)
     for(const o of [...s.orders].filter(o=>o.market.id===m.id)){

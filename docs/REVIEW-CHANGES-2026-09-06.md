@@ -4403,3 +4403,28 @@ the DeepSeek account had no credit; if it still has none, tomorrow's 06:00Z revi
 model at a fraction of a cent, which is the intended floor either way. The three-day paid callers are
 hunch-challenger (gpt-5.6-sol, 81 calls) and news vetting (deepseek-v4-pro); the critic already runs on Gemini
 flash. Those remain as configured (`hunchChallengerModel`, `intelligenceSecondaryModel`).
+
+## §129 - 2026-09-19 10:30Z: two more external reviews (Gemini Pro, Gemini Flash); one live arm was trading the wrong markets
+
+**Confirmed and fixed**
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| Gemini Flash F-03: consensus matched fixtures to any single-market Kalshi event and bought YES regardless of the wallets' side | verified in live state: 11 of 12 open positions were BTTS, first-inning or spread markets; the shadow's +6.39c was graded on the same mismatches | matcher rewritten (winner events only, team/Tie market, 'No' -> NO, no fallback, no totals); rows carry `side`; the app refuses rows without it or in a non-winner series; NO entries priced at the NO ask; grading follows the side. Evidence re-based (`consensus:pre-matcher-20260919`); pre-registration amended (Kalshi leg void to date) |
+| Gemini Flash F-01: an exit expressed as a buy of the opposite side (`closeFrom`) was refused at the position cap, reserved a slot and was recorded as a buy | verified (`placeLiveOrderReserved`, `placeOrderChecked`) | `closeFrom` orders skip the cap and reservation and record a sell of the closed position; regression test |
+| Gemini Flash F-02: the 100-trade sign rule scaled on a positive sign alone | verified (my §127 change left it) | at 100 trades a small win keeps the arm alive; adding size needs the 95% band too |
+| Gemini Pro F-04: the paper lab's "profit target" fired on +3c of movement from a negative entry mark, i.e. at a net loss | verified | target is absolute +3c net after both fees; the loss stop stays relative to the mark (an absolute -5c stop fired on an unchanged quote in the test suite); panel text corrected; lab reset |
+| Gemini Flash F-08: `close()` passed the settlement flag into the `maker` parameter, crediting a rebate on every settled paper position | verified | settlement is fee-free |
+| Gemini Flash F-06: live dutch settlement estimated P&L without the legs' entry fees | verified (single-market path subtracts them) | subtracted per leg (standard taker coefficient when the leg carries no rate) |
+| Gemini Flash F-05: convergence read only `floor_strike`; a between/less market would have been sided by its floor | verified as latent (the D series are "greater" markets) | explicit strike-type guard |
+| Gemini Flash F-09: the suite needed `GEMINI_API_KEY` to pass | verified (my own §128 test assumed it) | Gemini assertions conditional on the key |
+
+**Refuted / no change**
+
+- Gemini Pro F-01 (lead-lag's raw Kalshi reads "caused the 14 s latency"): the 14 s regime was the position-cap read on the order path (§108), measured and fixed; the burst is real (16 reads per cycle) and the log shows "Kalshi leg failed" on 24 cycles over two days (~1%). A 120 ms stagger was tried and reverted: it changed the direction-seat sequencing a regression test protects. Backlog 164 measures before pacing.
+- Gemini Pro F-03 (fade's spread capture IS the edge): fair as a description - realized +3.4c/trade after fees at a 93.5% win rate against a 90.5% break-even is maker spread capture, and the arm is not being sidelined; the record's "no edge" wording means no directional edge and no significance. Noted, no change.
+- Gemini Pro F-02 / Flash F-12: multiplicity (§127); Flash F-04 basis "-1.2c" double-counts windows the realized figures already include (backlog 158); Flash F-07 kill switch (backlog 159, operator); Flash F-10 IJC boundary (the script already excludes it in its notes; the 09-25 read excludes IJC baskets); Flash F-11/F-13 known; Flash F-17 (no portfolio-level delta) known as backlog 50.
+- Gemini Pro F-05 / Flash F-14 (subsumption arbitrage): within-ladder monotonicity was scanned and closed (backlog 76, 1.1M rows, no violation past fees). Cross-series pairs (a September cut inside a November cut; a spread inside a moneyline) were not: backlog 162.
+- Flash F-15 (post-final sports sweeps): the sports-books recorder already captures both books through game end; the 09-25 read (151) adds the post-final residual-liquidity question. Flash F-16 (cross-venue econ execution now that IBKR is funded): the 150 read decides.
+
+Tests 18/18. Lab reset to the live cash at the rule change; app restarted; the consensus recorder re-run once so fresh rows carry `side`.

@@ -336,6 +336,14 @@ export class CryptoConvergenceEngine {
           }
           inWindow++
 
+          // Only "greater" markets read spot > floor_strike as YES. A "less" market carries its threshold in
+          // cap_strike (skipped below by the null floor) and a "between" market would resolve NO above its cap;
+          // refuse anything else explicitly rather than trusting the floor alone (external review, 2026-09-19).
+          const strikeType = String((m as { strike_type?: string }).strike_type ?? 'greater')
+          if (!/^greater/.test(strikeType)) {
+            skip.strike++
+            continue
+          }
           const strike = num(m.floor_strike)
           if (strike === null || strike <= 0) {
             skip.strike++

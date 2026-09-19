@@ -1967,3 +1967,18 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   confirm `nightly-review` shows a flash model with status 200 and no frontier model.
 - **161. Lead-lag coin cohort forward window (§127, ChatGPT F-03).** Frozen from 2026-09-19 00:00Z; read at >= 400
   contracts and >= 5 day-clusters as one cohort (**2026-09-24** at the earliest). No membership change before then.
+- **162. Cross-series implication pairs (§129, Gemini Pro F-05 / Flash F-14).** Backlog 76 covered one ladder; this
+  covers pairs across series where A implies B (cut by September inside cut by November; a spread inside its
+  moneyline; conference champion inside national champion). GET-only scanner over the open catalog, logging every
+  `ask(B) < bid(A)` net of fees. Trigger: build by **2026-09-23**; read at 7 days.
+- **163. Post-final sports liquidity (§129, Flash F-15).** In the 151 read on **2026-09-25**: for each matched game,
+  the Kalshi book in the cycles after the Polymarket US book collapses to 0/1 (the free "final" signal) - resting
+  bids on the loser above 1c, asks on the winner below 99c, and for how many cycles.
+- **164. Lead-lag Kalshi read bursts (§129, Gemini Pro F-01).** Count `Kalshi leg failed` cycles per day from the
+  log. Trigger: **2026-09-26**; if above 2% of cycles on any day, pace the reads with the direction-seat
+  sequencing preserved (the 120 ms stagger changed it and was reverted).
+- **150 note (Flash F-10).** IJC baskets are excluded from any basket claim: Kalshi "at least" vs ForecastEx
+  "exceed" lose both legs on an exact-strike print.
+- **Consensus re-based (§129).** Trades before 2026-09-19 10:30Z live under `consensus:pre-matcher-20260919`.
+  Trigger: first read at >= 40 settled contracts on winner markets with `side`, or **2026-10-13** (the registered
+  deadline), whichever first.
