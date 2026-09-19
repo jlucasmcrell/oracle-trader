@@ -4454,3 +4454,28 @@ markets; 6,528 implication pairs) on list quotes, with every positive pair re-re
 violations**. Best pair -0.92c after two taker fees; median -39c; p90 -15c. The relation is priced at scan
 time, as the ladders were (76). Transient violations around line moves are the remaining question: task
 `OracleTrader-ImplicationScan` records the scan every 30 minutes for 8 days; backlog 162 reads it on 09-26.
+
+## §131 - 2026-09-19 10:40Z: the three free data items, built
+
+Operator: "let's do the free things". None needed anything from the operator.
+
+1. **Kalshi WebSocket agreement counters persist per UTC day** (backlog 56 at line 673: the counters were per
+   process and the app boots ~18x a day, so every daily reading of the promotion trigger was arithmetic across
+   different processes). `WsStats.day` / `dayLog` (14 closed days) are counted in `compare()`, rolled at
+   midnight, seeded from the persisted state at construction. The trigger now reads `dayLog`.
+2. **In-play MLB recorder** (`scripts/inplay-books.mjs`, task `OracleTrader-InplayBooks`, backlog 165): every
+   15 s per live game, the MLB Stats API linescore and current play with the feed's own timestamp, and the
+   Kalshi top-of-book for the game's GAME / RFI / TOTAL markets (255 markets across today's 15 games matched
+   by ticker team codes, 0 unmatched on the dry run). Read at 7 days: seconds from a scoring play to the
+   book's move, and whether a taker at the stale book clears the fee.
+3. **Polymarket CLOB WebSocket as a shadow feed for lead-lag** (`src/main/services/polyClobWs.ts`,
+   `docs/PREREGISTERED-leadlag-polyws-shadow.md`). Measured protocol: a `book` frame per token, then
+   `price_change` frames carrying `best_bid`/`best_ask`. Every dislocation row now carries `polyWs`
+   {bid, ask, ageMs, changes}; the engine still acts on the REST book. Read on 2026-09-24: agreement with REST
+   within 1c at ≥ 98%, and the median number of top changes per window - below 3 the socket is a
+   convenience and the registration closes. Opt-in from production only: the review suite hung when a test
+   scan opened a real socket, so tests never get one (`shadowFeed` constructor flag). New suite
+   `test:polyws` (19 suites).
+
+A 120 ms stagger of lead-lag's Kalshi reads (Gemini Pro F-01) is NOT in: it changed the direction-seat
+sequencing a regression test protects (§129); backlog 164 measures first.

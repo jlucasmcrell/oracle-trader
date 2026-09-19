@@ -679,6 +679,9 @@ export interface AutoStatus {
     lastError?: string
     guardTripped?: string
     convention?: string
+    /** Per-UTC-day agreement, persisted across restarts (backlog 56); the promotion trigger reads dayLog. */
+    day?: { date: string; compared: number; agreed: number }
+    dayLog?: { date: string; compared: number; agreed: number }[]
   }
   /** Sports sharp-anchor shadow ledger (gap evidence, never trades). */
   sportsShadow?: {

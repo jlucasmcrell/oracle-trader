@@ -730,7 +730,7 @@ export class AutoTrader {
   private leadLagTimer: ReturnType<typeof setInterval> | undefined
   private leadLagCycles = 0
   private leadLagFoundLast = -1
-  private leadLagEngine = new LeadLagEngine(join(app.getPath('userData'), 'leadlag.json'), (line) => console.log(line))
+  private leadLagEngine = new LeadLagEngine(join(app.getPath('userData'), 'leadlag.json'), (line) => console.log(line), true)
   private intelligence = new OracleIntelligenceEngine(app.getPath('userData'))
   /**
    * Polymarket smart-money consensus signals. The producer is the read-only
@@ -3943,6 +3943,7 @@ export class AutoTrader {
     if (!this.ws) {
       const url = adapter.wsUrl()
       this.ws = new KalshiWsClient(url, () => adapter.wsHeaders(url), (t, m) => this.alert(t, m))
+      this.ws.seedDay(this.state.wsStats?.day, this.state.wsStats?.dayLog)
     }
     this.ws.start(tickers.slice(0, 50))
     for (const b of restBooks) this.ws.compare(b.marketId, b)

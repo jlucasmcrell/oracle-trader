@@ -15,6 +15,7 @@
     "test:settlement-accounting": "node scripts/settlement-accounting-regression.mjs",
     "test:review": "node scripts/tests/run.cjs scripts/tests/review-fixes.test.ts",
     "test:ladder": "node scripts/tests/run.cjs scripts/tests/ladder.test.ts",
+    "test:polyws": "node scripts/tests/run.cjs scripts/tests/poly-clob-ws.test.ts",
     "test:adversarial": "node scripts/tests/run.cjs scripts/tests/adversarial.test.ts",
     "test:risk": "node scripts/tests/run.cjs scripts/tests/risk-controls.test.ts",
     "test:ibkr": "node scripts/tests/run.cjs scripts/tests/ibkr.test.ts",

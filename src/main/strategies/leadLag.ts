@@ -21,6 +21,7 @@ import type { VenueAdapter } from '../../shared/venue'
 import type { OrderResult } from '../../shared/types'
 import { HttpError } from '../util/http'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
+import { PolyClobWs } from '../services/polyClobWs'
 
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2'
 const POLY_GAMMA_API = 'https://gamma-api.polymarket.com'
@@ -93,6 +94,8 @@ export interface LeadLagDislocation {
   /** Price moves since the previous observation of the same window (lead/lag evidence). */
   dPolyCents?: number
   dKalshiCents?: number
+  /** The CLOB WebSocket's top at decision time - shadow only (PREREGISTERED-leadlag-polyws-shadow, §131). */
+  polyWs?: { bid: number; ask: number; ageMs: number; changes: number }
   /** Contracts the IOC actually filled, and the price they filled at. */
   filledContracts?: number
   fillPrice?: number
@@ -135,6 +138,8 @@ interface LeadLagState {
 interface PolyQuote {
   source: 'clob-book' | 'clob-mid'
   mid: number
+  /** Pushed top-of-book for the same token, when the socket has one (shadow). */
+  ws?: { bid: number; ask: number; ageMs: number; changes: number }
   bid?: number
   ask?: number
   marketId: string
@@ -291,8 +296,10 @@ export class LeadLagEngine {
 
   constructor(
     private readonly path: string,
-    private readonly log: (s: string) => void = console.log
+    private readonly log: (s: string) => void = console.log,
+    shadowFeed = false
   ) {
+    this.polyWs = shadowFeed ? new PolyClobWs((s) => this.log(s)) : null
     try {
       if (existsSync(path)) {
         this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<LeadLagState>) }
@@ -446,10 +453,26 @@ export class LeadLagEngine {
     return resolved
   }
 
+  /** Tokens seen this scan; the socket is (re)subscribed to them at the start of the next one. */
+  private wsTokens = new Set<string>()
+  /**
+   * Shadow feed, opt-in from production only (`shadowFeed` in the constructor): a test that drives a scan with
+   * mocked fetches must never open a real socket - an open socket and its ping timer keep the process alive,
+   * and the review suite hung on exactly that on 2026-09-19.
+   */
+  private readonly polyWs: PolyClobWs | null
+
+  private wsTop(upToken: string): PolyQuote['ws'] {
+    const t = this.polyWs?.top(upToken)
+    return t ? { bid: t.bid, ask: t.ask, ageMs: Math.max(0, Date.now() - t.at), changes: t.changes } : undefined
+  }
+
   private async polyQuote(slug: string): Promise<PolyQuote | null> {
     const resolved = await this.resolveSlug(slug)
     if (!resolved) return null
     const { upToken, marketId } = resolved
+    this.wsTokens.add(upToken)
+    const ws = this.wsTop(upToken)
     try {
       const bookRes = await fetch(`${POLY_CLOB_API}/book?token_id=${encodeURIComponent(upToken)}`, { signal: AbortSignal.timeout(6000) })
       if (bookRes.ok) {
@@ -459,7 +482,7 @@ export class LeadLagEngine {
         if (bids.length && asks.length) {
           const bid = Math.max(...bids)
           const ask = Math.min(...asks)
-          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId }
+          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId, ws }
         }
       }
     } catch {
@@ -470,7 +493,7 @@ export class LeadLagEngine {
       if (!midRes.ok) return null
       const mid = num(((await midRes.json()) as { mid?: string }).mid)
       if (mid === null) return null
-      return { source: 'clob-mid', mid, marketId }
+      return { source: 'clob-mid', mid, marketId, ws }
     } catch {
       return null
     }
@@ -517,6 +540,13 @@ export class LeadLagEngine {
 
       const pairs = leadLagPairs(windowStartEpoch, cfg.leadLagCoins)
       this.slugCache.prune(windowStartEpoch)
+      // Shadow feed: subscribe the socket to the tokens the previous scan resolved (one-scan lag on a window roll).
+      if (this.polyWs && this.wsTokens.size) this.polyWs.ensure([...this.wsTokens])
+      this.wsTokens = new Set()
+      if (this.polyWs && this.polyWs.stats.attempts > 0) {
+        const s = this.polyWs.stats
+        this.log(`[leadlag] poly ws: ${s.connected ? 'connected' : 'down'}, ${s.subscribed} tokens, ${s.books} books, ${s.priceChanges} changes, ${s.reconnects} reconnects${s.lastError ? `, last error ${s.lastError.slice(0, 60)}` : ''}`)
+      }
       if (this.windowEpoch !== windowStartEpoch) {
         this.windowEpoch = windowStartEpoch
         this.windowFills = new Map()
@@ -631,7 +661,8 @@ export class LeadLagEngine {
             feeCents,
             netCents,
             dPolyCents,
-            dKalshiCents
+            dKalshiCents,
+            polyWs: poly.ws
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
           if (this.worthNoting(d, now)) {
@@ -664,7 +695,8 @@ export class LeadLagEngine {
             feeCents,
             netCents,
             dPolyCents,
-            dKalshiCents
+            dKalshiCents,
+            polyWs: poly.ws
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
           if (this.worthNoting(d, now)) {

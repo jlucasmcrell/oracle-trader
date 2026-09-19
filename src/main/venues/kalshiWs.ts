@@ -73,6 +73,19 @@ export interface WsStats {
   guardTripped?: string
   /** Which no-ladder price convention the socket was measured to use. */
   convention?: string
+  /**
+   * Agreement for the CURRENT UTC day, persisted across restarts and rolled at midnight. `compared`/`agreed` above
+   * are per process (the app boots ~18x/day), which made every daily reading of the promotion trigger invalid
+   * (backlog 56, 2026-09-19). The trigger reads `dayLog`: one closed day per entry, newest last, 14 kept.
+   */
+  day?: WsDayAgreement
+  dayLog?: WsDayAgreement[]
+}
+
+export interface WsDayAgreement {
+  date: string
+  compared: number
+  agreed: number
 }
 
 export function defaultWsStats(): WsStats {
@@ -211,9 +224,26 @@ export class KalshiWsClient {
     const diff = Math.max(Math.abs(wsBid - rBid), Math.abs(wsAsk - rAsk)) * 100
     // 2¢ tolerance: the books are sampled at different instants.
     if (diff <= 2) this.stats.agreed++
+    this.countDay(diff <= 2)
     this.stats.maxDiffCents = Math.max(this.stats.maxDiffCents, Math.round(diff * 10) / 10)
     // Crossed books are impossible and mean the interpretation is wrong.
     if (wsAsk < wsBid) this.trip(`crossed book (bid ${wsBid.toFixed(2)} > ask ${wsAsk.toFixed(2)})`)
+  }
+
+  /** Restore the persisted day counters after a restart, so a new process continues the day instead of restarting it. */
+  seedDay(day?: WsDayAgreement, dayLog?: WsDayAgreement[]): void {
+    if (day && typeof day.date === 'string') this.stats.day = { ...day }
+    if (Array.isArray(dayLog)) this.stats.dayLog = dayLog.slice(-14)
+  }
+
+  private countDay(agreed: boolean): void {
+    const date = new Date().toISOString().slice(0, 10)
+    if (!this.stats.day || this.stats.day.date !== date) {
+      if (this.stats.day && this.stats.day.compared > 0) this.stats.dayLog = [...(this.stats.dayLog ?? []), this.stats.day].slice(-14)
+      this.stats.day = { date, compared: 0, agreed: 0 }
+    }
+    this.stats.day.compared++
+    if (agreed) this.stats.day.agreed++
   }
 
   private trip(reason: string): void {

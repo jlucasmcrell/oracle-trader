@@ -1998,3 +1998,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   earning arm needs, and the per-process agreement counter (item 56 above, 673) still blocks the promotion
   read. Trigger: fix the counter at the next lead-lag round; no paid data source until an arm clears its
   confirmatory read.
+- **56 (line 673) DONE 2026-09-19 (§131).** WS agreement persists per UTC day in `wsStats.day` / `dayLog`.
+  Trigger: read `dayLog` on **2026-09-26**; seven closed days at ≥ 99% agreement (2c tolerance) is the
+  pre-registered bar for promoting the socket book to the Kalshi read path.
+- **165 BUILT 2026-09-19 (§131).** `OracleTrader-InplayBooks` running; first live games 18:10Z today. Trigger: read
+  `data/inplay-books/` on **2026-09-26**: per scoring play (runs change in the feed), cycles until the
+  moneyline / RFI / totals top moves, and the cents available to a taker at the stale book minus the fee.
+- **167. Lead-lag Polymarket WebSocket shadow (§131, pre-registered).** Trigger: read on **2026-09-24** per
+  `docs/PREREGISTERED-leadlag-polyws-shadow.md`.
