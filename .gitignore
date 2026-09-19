@@ -5,7 +5,7 @@
 # PURPOSE: source + docs only. Everything that is runtime state,
 # build output, or credential-bearing is excluded.
 #
-# See docs/GIT-SETUP-2026-09-18.md for why each rule exists.
+# See docs/GIT-SETUP-AND-REPAIRS-2026-09-18.md for why each rule exists.
 # ============================================================
 
 # ---- dependencies / build output ----
