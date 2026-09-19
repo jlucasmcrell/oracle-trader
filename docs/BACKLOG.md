@@ -1986,3 +1986,15 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **Consensus re-based (§129).** Trades before 2026-09-19 09:39Z live under `consensus:pre-matcher-20260919`.
   Trigger: first read at >= 40 settled contracts on winner markets with `side`, or **2026-10-13** (the registered
   deadline), whichever first.
+- **165. In-play sports feed vs Kalshi in-game books (2026-09-19, operator asked "other APIs?").** Kalshi trades
+  game markets in play and lists first-inning / half markets. The official league feeds are free and public
+  (MLB Stats API play-by-play, NHL API, ESPN scoreboard JSON) at 5-20 s latency; the only question is whether
+  Kalshi's book lags them by more than the taker fee, i.e. lead-lag with a data feed as the leader. GET-only
+  recorder like `sports-books.mjs`: per live game, feed state and Kalshi book every 15 s from first pitch.
+  Trigger: build after the 151 read on **2026-09-25** confirms the sports-books capture is clean; read 7 days
+  later. Costs nothing; a real structural candidate in the one family (latency) that has ever earned.
+- **166. Order of data investment (2026-09-19).** Before any new source: the Kalshi WebSocket book (already
+  wired, shadow-only) and the Polymarket CLOB WebSocket for lead-lag - latency, not coverage, is what the
+  earning arm needs, and the per-process agreement counter (item 56 above, 673) still blocks the promotion
+  read. Trigger: fix the counter at the next lead-lag round; no paid data source until an arm clears its
+  confirmatory read.
