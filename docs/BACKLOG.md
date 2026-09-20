@@ -968,12 +968,20 @@ incident file lists more than ~5 near-identical signatures.
   30-60 s poll and does not transfer to sub-second. I said on 09-13 this was filed; it was not - filed now.
 
 
-- **200. Paper reset swaps brokers mid-order (2026-09-20, audit B-44).** `resetPaperAccounts()`/`clearHistory()`
+- **200 DONE 2026-09-20 (section 145).** `resetPaperAccounts` resets the EXISTING broker in place, so an order
+  holding the reference across an await can no longer persist its pre-reset balance over the fresh file. What
+  remains and is NOT fixed: an in-flight fill still lands in the just-cleared history, which is a cosmetic row
+  rather than a resurrection - re-read at the next reset. Original item: Paper reset swaps brokers mid-order
+  (2026-09-20, audit B-44). `resetPaperAccounts()`/`clearHistory()`
   apply immediately while `autoTrader.reset()` defers, so an in-flight paper buy completes on the discarded
   broker (which then persists over the fresh file) and lands in the just-cleared history. Paper only, and the
   fix is an ordering rework of the reset path - a behavioural change of its own, not a line in a 24-item round.
   Trigger: the next session that touches the paper reset path, or **2026-10-04** if nothing does.
-- **201. Polymarket US arm evidence mixes paper and live closes (2026-09-20, audit B-48).** `logResearch('closed',
+- **201 DONE 2026-09-20 (section 145).** Every research row now carries the execution mode it was written under,
+  stamped at the single chokepoint all six call sites pass through, and the ladder counts only `mode === 'live'`
+  rows. Rows written before this build carry no mode and are SKIPPED rather than guessed at, so a polyus stage
+  that began earlier re-baselines on its next capture - one-off evidence loss, chosen over trusting a mixture.
+  Original item: Polymarket US arm evidence mixes paper and live closes (2026-09-20, audit B-48). `logResearch('closed',
   ...)` carries no mode field (`miniAuto.ts`) and `miniRows` (`ladder.ts`) filters on type/strategy/ts only, so a
   paper session's closes enter a live arm's `n`/`mean`/`netDollars`. Needs a mode field written at the source plus
   a migration decision for rows already on file (undated rows cannot be attributed retrospectively). Every polyus

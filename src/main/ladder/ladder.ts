@@ -1274,8 +1274,12 @@ export class Ladder {
       for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
         if (!line) continue
         try {
-          const r = JSON.parse(line) as { type?: string; strategy?: string; ts?: string; pnl?: number; marketId?: string }
-          if (r.type === 'closed' && r.strategy === strategy && typeof r.pnl === 'number' && Date.parse(r.ts ?? '') >= since) out.push({ v: r.pnl, g: r.marketId ?? r.ts ?? String(out.length) })
+          const r = JSON.parse(line) as { type?: string; strategy?: string; ts?: string; pnl?: number; marketId?: string; mode?: string }
+          // LIVE closes only. The mode switch is global, so a paper session's closes used to land in a live
+          // arm's n, mean and netDollars with nothing to separate them (audit B-48). Rows written before the
+          // mode field existed carry none and are skipped rather than guessed at: a stage that began before
+          // this build re-baselines on its next capture, which costs evidence once instead of trusting it.
+          if (r.type === 'closed' && r.mode === 'live' && r.strategy === strategy && typeof r.pnl === 'number' && Date.parse(r.ts ?? '') >= since) out.push({ v: r.pnl, g: r.marketId ?? r.ts ?? String(out.length) })
         } catch {
           // skip bad line
         }

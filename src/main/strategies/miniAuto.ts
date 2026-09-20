@@ -1411,7 +1411,12 @@ export class MiniAuto {
   private logResearch(type: string, payload: Record<string, unknown>): void {
     if (this.venue !== 'polymarket-us') return
     try {
-      appendFileSync(this.researchLogPath, JSON.stringify({ ts: new Date().toISOString(), type, ...payload }) + '\n', 'utf8')
+      // Every row states the execution mode it was produced under. Without it a PAPER session's closes enter a
+      // LIVE arm's ladder evidence and cannot be told apart afterwards - the mode switch is global, and the
+      // ladder's miniRows filtered on type, strategy and timestamp only (audit B-48). Written here, at the one
+      // chokepoint all six call sites pass through, so no future row can forget it. Rows already on file carry
+      // no mode and are treated as unknown by the ladder rather than silently counted.
+      appendFileSync(this.researchLogPath, JSON.stringify({ ts: new Date().toISOString(), type, mode: this.engine.getExecutionMode(), ...payload }) + '\n', 'utf8')
     } catch {
       // Research telemetry must never interrupt order management.
     }

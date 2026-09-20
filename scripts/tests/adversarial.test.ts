@@ -341,7 +341,7 @@ async function main(): Promise<void> {
     await ladder.run()
     eq('E: manual on re-syncs to tiny-live', stage('quoter'), 'tiny-live')
     // micro-maker: evidence demotion, then trade-small re-entry after the cool-down
-    writeFileSync(join(dir2, 'mini-auto-polymarket-us.json-research.jsonl'), JSON.stringify({ type: 'closed', strategy: 'micro-maker', ts: new Date().toISOString(), pnl: -6 }))
+    writeFileSync(join(dir2, 'mini-auto-polymarket-us.json-research.jsonl'), JSON.stringify({ type: 'closed', mode: 'live', strategy: 'micro-maker', ts: new Date().toISOString(), pnl: -6 }))
     await ladder.run()
     eq('E: micro-maker demoted on the stop', { stage: stage('polyus-micro-maker'), on: mm, n: L.state.strategies['polyus-micro-maker'].demotions }, { stage: 'disabled', on: false, n: 1 })
     L.state.strategies['polyus-micro-maker'].cooldownUntil = 0
@@ -496,7 +496,7 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     // Polymarket US fade: 20 closes at +$0.10 in the research log -> x2
     // 16 x +$0.35 and 4 x -$0.50: +$3.60 net, $0.18 mean, two-sided, and wide enough for the 95% band (2026-09-19).
     ;(L.state.strategies['polyus-fade'] as { since?: number }).since = Date.now() - 6 * 86_400_000
-    writeFileSync(join(dir4, 'mini-auto-polymarket-us.json-research.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ type: 'closed', strategy: 'fade', ts: new Date(Date.now() - (i % 4) * 86_400_000).toISOString(), marketId: `pm-${i}`, pnl: i % 5 === 4 ? -0.5 : 0.35 })).join(String.fromCharCode(10)))
+    writeFileSync(join(dir4, 'mini-auto-polymarket-us.json-research.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ type: 'closed', mode: 'live', strategy: 'fade', ts: new Date(Date.now() - (i % 4) * 86_400_000).toISOString(), marketId: `pm-${i}`, pnl: i % 5 === 4 ? -0.5 : 0.35 })).join(String.fromCharCode(10)))
     await ladder.run()
     eq('G: Polymarket US fade scales on its research log', { stage: st('polyus-fade').stage, mult: (mcfg.strategySizeMult as Record<string, number>)?.fade }, { stage: 'live', mult: 2 })
     // lead-lag: 20 swept markets settled at +$0.05 through the venue ledger -> 2 contracts

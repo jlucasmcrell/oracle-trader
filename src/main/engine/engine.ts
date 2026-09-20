@@ -765,7 +765,12 @@ export class TradingEngine {
   /** Reset every paper broker to a fresh starting balance (for strategy testing). */
   resetPaperAccounts(): void {
     for (const adapter of this.registry.list()) {
-      const broker = this.makePaperBroker(adapter.id, adapter.currency)
+      // Reset the EXISTING broker in place. An order already past its quote fetch is holding this reference
+      // across an await, so swapping in a new instance let the discarded one complete the fill and then
+      // persist its pre-reset balance and positions over the fresh file - the reset undone by a trade that
+      // was in flight when it ran (audit B-44). A broker that is missing (a venue registered since the last
+      // reset) is still created here.
+      const broker = this.paperBrokers.get(adapter.id) ?? this.makePaperBroker(adapter.id, adapter.currency)
       broker.reset()
       this.paperBrokers.set(adapter.id, broker)
     }

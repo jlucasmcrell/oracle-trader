@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TradingEngine } from '../../src/main/engine/engine'
+import { Ladder } from '../../src/main/ladder/ladder'
 import { OrderJournal } from '../../src/main/store/orderJournal'
 import { HistoryStore } from '../../src/main/store/history'
 import { FillReconciler } from '../../src/main/store/fillReconciler'
@@ -386,6 +387,25 @@ async function main() {
     assert.equal(plan.skipped.filter(s => s.reason === 'not in the allow-list').length, proposals.length)
   })
 
+  await test('B-44: a paper reset keeps the broker object, so an in-flight order cannot undo it', async () => {
+    const adapter: any = { id: 'kalshi', currency: 'USD', init: async () => undefined }
+    const e = new TradingEngine({ get: () => adapter, list: () => [adapter] } as any, new HistoryStore(join(dir, 'h-b44.json')), { paperStateDir: join(dir, 'b44') })
+    await e.init()
+    const before = (e as any).paperBrokers.get('kalshi')
+    assert.ok(before, 'a broker exists for the venue')
+    e.resetPaperAccounts()
+    assert.equal((e as any).paperBrokers.get('kalshi'), before, 'the SAME broker is reset in place; an order holding the old reference cannot persist over the fresh file')
+  })
+  await test('B-48: the ladder counts only LIVE mini closes, and never a row with no mode', () => {
+    const p = join(dir, 'mini-auto-polymarket-us.json-research.jsonl')
+    const row = (mode: string | undefined, pnl: number, id: string) =>
+      JSON.stringify({ ts: new Date().toISOString(), type: 'closed', ...(mode ? { mode } : {}), strategy: 'micro-maker', pnl, marketId: id })
+    writeFileSync(p, [row('live', 0.5, 'a'), row('paper', -9, 'b'), row(undefined, -9, 'c')].join(String.fromCharCode(10)))
+    const L: any = Object.create(Ladder.prototype)
+    L.userData = dir
+    const rows = L.miniRows('micro-maker', 0)
+    assert.deepEqual(rows.map((r: any) => r.v), [0.5], 'the paper close and the mode-less legacy row are both excluded')
+  })
   console.log(`remaining-defects: ${passed} scenarios passed`)
 }
 main().catch(e => { console.error(e); process.exitCode = 1 }).finally(() => { globalThis.fetch = originalFetch; rmSync(dir, { recursive: true, force: true }) })

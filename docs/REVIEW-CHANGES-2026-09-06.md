@@ -5053,3 +5053,32 @@ from its gate, which would destroy far more evidence than the contamination it r
 one-directional and now measurable - more losses will be booked going forward than were booked before.
 
 20/20 suites. Restart: build 11:56:49Z, electron start 11:57:01Z under `agent.lock`.
+
+## §146 - 2026-09-20 12:15Z: the two deferred evidence fixes, and what the 07:00 maintenance run had already done
+
+**The scheduled maintenance session got to backlog 174 first.** Its 07:00 local run took the audit's twenty-four
+lows in one round and shipped eighteen of them at 11:20Z (`fa173cc`, its own §144, restart 11:15:43Z). This session
+had a 13-agent workflow designing the same batch at the time, so five of its design agents spent their pass
+rediscovering work that was already in the tree. The overlap cost tokens and produced one numbering collision -
+both rounds claimed §144 and backlog 200 - which is corrected here: this session's entries are §145 and §146, and
+its `freshAsk` item is backlog 206.
+
+The workflow was not wasted. Its verify stage became an independent adversarial audit of the maintenance session's
+shipped work, checking every anchor and every "already fixed" claim against the tree rather than against the
+commit message. Result: **every substantive verdict held.** The problems it found were in the plans' own citations
+- a wrong line number for `shares: totalShares`, a fabricated grep result in one evidence paragraph, an
+`App.tsx` block quoted with the wrong brace style - not in the code that shipped. Two edits it proposed would have
+broken on first run (one CRLF anchor, one that would throw), and neither was applied.
+
+**What this session then took, from the five the maintenance run deferred:**
+
+| item | what shipped |
+|---|---|
+| B-48 / backlog 201 | Every mini research row records the execution mode, stamped at the one chokepoint all six call sites pass through; the ladder counts only `mode === 'live'` rows. The mode switch is global, so a paper session's closes were entering a live arm's `n`, `mean` and `netDollars` with nothing to separate them afterwards. Rows written before this build carry no mode and are SKIPPED, not guessed at: a polyus stage that began earlier re-baselines on its next capture, which costs evidence once instead of trusting a mixture |
+| B-44 / backlog 200 | `resetPaperAccounts` resets the existing broker IN PLACE. An order already past its quote fetch holds that reference across an await, so swapping in a new instance let the discarded broker complete the fill and persist its pre-reset balance over the fresh file - the reset undone by a trade that was in flight when it ran. The remaining half (the in-flight fill lands in the just-cleared history) is cosmetic and stays filed |
+
+B-53, B-56 and B-59 stay deferred on the maintenance run's reasoning, which the verifiers endorsed: shortening the
+lead-lag guard would undo B-58, and B-59 is a measurement change that needs the bookmakers' own `last_update`
+recorded before anything is decided.
+
+20/20 suites. Restart: build 12:13:26Z, electron start 12:13:40Z under `agent.lock`.
