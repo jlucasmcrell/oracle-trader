@@ -487,6 +487,10 @@ export class CryptoConvergenceEngine {
                 timeInForce: 'immediate_or_cancel'
               })
               trade.filledContracts = res.shares > 0 ? res.shares : 0
+              // Grade at the price it FILLED at, not the quote the order was built from. An IOC inside its 1c
+              // limit fills better than the quote, and this arm is tiny-LIVE: its ladder evidence was reading the
+              // pre-POST number on every row (found alongside audit B-37, 2026-09-20).
+              if (res.shares > 0 && res.avgPrice > 0 && res.avgPrice < 1) trade.costPrice = +res.avgPrice.toFixed(4)
               trade.status = res.shares > 0 ? 'filled' : 'no_fill'
               if (res.shares > 0) ordersFired++
               this.log(`[convergence] ${res.shares > 0 ? 'EXECUTED' : 'NO FILL'} ${side} on ${m.ticker} x${res.shares.toFixed(2)} of ${count} @ ${(cost * 100).toFixed(1)}c (Order ID: ${res.orderId})`)

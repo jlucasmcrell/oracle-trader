@@ -357,7 +357,10 @@ export class NightlyReview {
       // The prompt used to promise that live strategies are never auto-applied. That is an operator switch, and
       // it is on: the same review's fade proposal, which the model itself marked "for operator review", was
       // applied (§141, BACKLOG 185).
-      autoApplyLive: cfg.reviewAutoApplyLive ?? false,
+      // Must match the APPLIER's own default below (`reviewAutoApplyLive ?? true`). It read `?? false` here, so
+      // the packet told the model live arms were protected while the applier was in fact applying to them - the
+      // §141 fix replaced one false promise in the prompt with a false value in the packet (audit B-46).
+      autoApplyLive: cfg.reviewAutoApplyLive ?? true,
       // `flat`, `byFamilyNet` and `unsettledMarketFees` exist so this block reconciles without guesswork:
       // wins + losses + flat === settlements, and byFamilyNet - unsettledMarketFees === realizedPnl. The
       // 2026-09-10 review spent a finding on both gaps because the packet withheld the closing terms.

@@ -406,6 +406,13 @@ async function main() {
     const rows = L.miniRows('micro-maker', 0)
     assert.deepEqual(rows.map((r: any) => r.v), [0.5], 'the paper close and the mode-less legacy row are both excluded')
   })
+  await test('the review packet states the same autoApplyLive the applier uses', () => {
+    const src = readFileSync(join(__dirname, '..', '..', 'src', 'main', 'intelligence', 'nightlyReview.ts'), 'utf8')
+    const packet = /autoApplyLive: cfg\.reviewAutoApplyLive \?\? (true|false)/.exec(src)?.[1]
+    const applier = /reviewAutoApplyParams \?\? true, kalshiCfg\.reviewAutoApplyLive \?\? (true|false)/.exec(src)?.[1]
+    assert.ok(packet && applier, 'both defaults are still expressed as ?? literals')
+    assert.equal(packet, applier, 'the packet may not tell the model live arms are protected while the applier applies to them')
+  })
   console.log(`remaining-defects: ${passed} scenarios passed`)
 }
 main().catch(e => { console.error(e); process.exitCode = 1 }).finally(() => { globalThis.fetch = originalFetch; rmSync(dir, { recursive: true, force: true }) })

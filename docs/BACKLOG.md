@@ -2301,3 +2301,18 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   98c-to-99c band, where the old sub-cent guard bit. Widening `freshAsk` would also change which markets an arm
   may ENTER, so it is not a low-severity edit. Trigger: decide with the **2026-09-26** gate read; the honest
   interim is that any arm holding such a position reports it in `unpriced` and the read says so.
+
+- **207. Convergence graded every live row at the quote, not the fill (2026-09-20, section 147).** FIXED: the trade
+  now records `res.avgPrice` as its `costPrice` when the IOC fills, so the arm's ladder evidence reads the price it
+  paid rather than the number the order was built from. Rows settled before this build keep the quote. Trigger: at
+  the **2026-09-26** read, report convergence's mean with and without the pre-fix rows and say whether the
+  difference moves its band.
+- **208. The kill-switch day split can outrun the 5,000-row history ring (2026-09-20, from audit B-41).** The ring
+  is FULL at 5,000 rows (4,547 kalshi, oldest 09-05), and only 101 of them predate the kill epoch. Once eviction
+  passes that epoch the legacy/current split silently loses its reference and every older settlement books as
+  current. Trigger: on **2026-09-27** count kalshi rows older than `killEpochTs`; at zero, the split needs its own
+  persisted marker rather than the ring.
+- **209. Convergence day-clusters a basket on the settlement clock, not the close (2026-09-20, from audit B-36).**
+  `recordExit` grades with `clusterDayOf(Date.now())` while the single-trade settlement paths use
+  `clusterDayOf(t.closeTime)`, so a basket settling after 00:00Z lands in the next day's cluster. Moves the
+  day-clustered SE, never the mean. Trigger: with the ladder read on **2026-10-03**.

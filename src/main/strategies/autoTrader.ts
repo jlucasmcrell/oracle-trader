@@ -3499,6 +3499,13 @@ export class AutoTrader {
         })
       } else if (filledTotal <= 0.005) {
         this.emit('autoexpired', { marketId: p.marketId, question: (p.question ?? '').slice(0, 80) })
+      } else if (filledTotal < p.promoted) {
+        // The venue reports FEWER fills than we have already promoted. That means the window we reconciled
+        // against (the newest 200 account fills, 356-687 a day) no longer reaches this order's earlier slice, so
+        // the remainder is invisible and neither branch above fires: the row is dropped silently (audit B-53).
+        // Nothing is promoted on a number we cannot trust - it stays a diagnostic until the window is widened.
+        console.warn(`[auto-trader] fill window too short for ${p.marketId}: venue reports ${filledTotal} against ${p.promoted} already promoted`)
+        this.episodes?.record('kalshi', 'pull', { marketId: p.marketId, strategy: p.strategy, orderId: p.orderId, reason: 'fill-window-short', filled: filledTotal, promoted: p.promoted, ageMin: Math.round((Date.now() - p.createdAt) / 60_000) })
       }
       this.removePending(p.orderId)
     }

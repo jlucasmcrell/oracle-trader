@@ -5082,3 +5082,31 @@ lead-lag guard would undo B-58, and B-59 is a measurement change that needs the 
 recorded before anything is decided.
 
 20/20 suites. Restart: build 12:13:26Z, electron start 12:13:40Z under `agent.lock`.
+
+## §147 - 2026-09-20 12:18Z: three residuals the deep read turned up, and the packet that understated its own switch
+
+Closing out the lows batch. None of these is in the audit's list; all three came out of the workflow's reads of
+the code around it.
+
+**The nightly review's packet told the model the opposite of the truth.** §141 replaced a false promise in the
+prompt ("live strategies are never auto-applied") with a value in the packet - and wrote that value as
+`cfg.reviewAutoApplyLive ?? false`, while the applier twenty lines later reads `?? true`. So with the switch
+unset the model was told live arms were protected on exactly the runs where they were not. Both now read `?? true`
+and a test fails if the two literals ever differ again. This is the second time this switch has been described
+wrongly in code; the switch itself is still the operator's call (BACKLOG 185).
+
+**Convergence graded every live row at the quote rather than the fill.** The trade recorded `costPrice` from the
+number the order was built from and never looked at `res.avgPrice`, so an IOC that filled inside its 1c limit was
+graded at the worse price on a tiny-LIVE arm. The fill price is now recorded when there is one; rows settled
+before this build keep the quote, and BACKLOG 207 has the read that says whether the difference moves the band.
+
+**A maker slice that falls between both branches now leaves a trace.** When the venue reports fewer fills than we
+have already promoted - the 200-fill reconcile window no longer reaching an earlier slice - neither the promote
+branch nor the expire branch fires and the row was dropped in silence. It now warns and records a `pull` episode
+with the filled and promoted counts and the row's age. Deliberately NOT promoted on a number we cannot trust:
+this is a diagnostic until BACKLOG 202 widens the window.
+
+Also filed from the same reads: the kill-switch day split can outrun the 5,000-row history ring once eviction
+passes the kill epoch (208), and a dutch basket day-clusters on the settlement clock rather than the close (209).
+
+20/20 suites. Restart: build 12:16:14Z, electron start 12:16:27Z under `agent.lock`.
