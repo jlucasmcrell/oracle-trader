@@ -46,16 +46,26 @@ def show(title, arms, bench_id, events_of=None):
     print(title)
     print('=' * 108)
     b = arms.get(bench_id)
+    # A control with no band of its own cannot anchor anything, and a "beats control" flag drawn against it is an
+    # artifact of ITS small sample rather than a result (external review GLM 5.3 F-07; section 143).
+    anchors = bool(b and b['lo'] is not None and b['n'] >= 30)
     bm = b['mean'] if b else 0.0
+    if not anchors:
+        print('  control: %s - every arm below is reported against ZERO, not against it'
+              % ('n=%d over %d day(s), no usable band' % (b['n'], b['G']) if b else 'no closed trades'))
     print('  %-22s %5s %7s %8s %9s %-20s %5s %7s' % ('arm', 'n', 'ct', 'net $', 'c/ct', '80% band', 'days', 'vs ctrl'))
     for k in sorted(arms, key=lambda x: -(arms[x]['mean'])):
         v = arms[k]
         bs = '[%+7.2f,%+7.2f]' % (v['lo'], v['hi']) if v['lo'] is not None else 'one day: none'
         star = ''
-        if v['lo'] is not None and v['lo'] > bm:
+        if anchors and v['lo'] is not None and v['lo'] > bm:
             star = '  BEATS CONTROL'
-        elif v['hi'] is not None and v['hi'] < bm:
+        elif anchors and v['hi'] is not None and v['hi'] < bm:
             star = '  below control'
+        elif v['lo'] is not None and v['lo'] > 0:
+            star = '  band clear of zero'
+        elif v['hi'] is not None and v['hi'] < 0:
+            star = '  band below zero'
         print('  %-22s %5d %7.1f %8.2f %9.2f %-20s %5d %7.2f%s'
               % (k + (' (control)' if k == bench_id else ''), v['n'], v['ct'], v['net'], v['mean'], bs, v['G'], v['mean'] - bm, star))
 
@@ -73,7 +83,7 @@ for t in P['trades']:
         continue
     arms[t['strategy']].append((time.strftime('%m-%d', time.gmtime(t['closed'] / 1000)), 1.0, t['net']))
 res = {k: band(v) for k, v in arms.items() if band(v)}
-show('POLYMARKET US paper lab - trades opened under the current rules (since 2026-09-18 21:41Z)', res, 'benchmark')
+show('POLYMARKET US paper lab - trades opened under the current rules (since %s)' % time.strftime('%Y-%m-%d %H:%MZ', time.gmtime(RULES / 1000)), res, 'benchmark')
 print('  legacy cohort (older rules, excluded):', dict(legacy) or 'none')
 print('  exit reasons:', collections.Counter(t.get('reason') for t in P['trades'] if t['opened'] >= RULES).most_common())
 # The maker seat is bracketed, never a point estimate: a 'probable' fill is a vanished price level, which is what
@@ -96,7 +106,7 @@ for t in I['trades']:
     arms[t['strategy']].append((time.strftime('%m-%d', time.gmtime(t['closedAt'] / 1000)), q, t['net']))
     events[t['strategy']].add('_'.join(t['marketId'].split('_')[:-1]))
 res = {k: band(v) for k, v in arms.items() if band(v)}
-show('IBKR ForecastEx paper lab - trades opened under the current rules (since 2026-09-17 07:31Z)', res, 'benchmark')
+show('IBKR ForecastEx paper lab - trades opened under the current rules (since %s)' % time.strftime('%Y-%m-%d %H:%MZ', time.gmtime(RULES_I / 1000)), res, 'benchmark')
 print('  legacy cohort (older rules, excluded):', dict(legacy) or 'none')
 print('\n  live-eligibility gate (30 closed, 10 events, 3 days, positive day-cluster lower bound):')
 for k in sorted(res, key=lambda x: -res[x]['mean']):
