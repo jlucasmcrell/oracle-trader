@@ -836,7 +836,8 @@ contractsPerNotch (2)`. `SIZES_VERSION` re-applies a changed size table once to 
 
 ### 11.3 Decisions (`decideStage()`)
 
-1. **Hard stop, every run**: net ≤ −max($5 × notch, 3 × stake) → stop.
+1. **Hard stop, every run**: net ≤ −max($5 × notch, 3 × stake) → stop. Lead-lag alone uses $10 × notch
+   (`LEADLAG_STOP_DOLLARS`, operator decision 2026-09-20, §139) and is exempt from the 100-trade sign stop (§138).
 2. **Checkpoints** every 20 settled trades (`CHECKPOINT_TRADES`). Between checkpoints only the hard stop acts.
 3. At a checkpoint, an 80% band (z 0.84; Student-t on day-clusters when there are ≥2).
 4. **Making money** (net > 0 and lower band > 0) → scale up, unless vetoed into a hold by the one-sided-sample guard

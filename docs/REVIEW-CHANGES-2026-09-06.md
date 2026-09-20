@@ -4777,3 +4777,22 @@ day-clusters, which the table says a +1.5c arm reaches in about a quarter of run
 
 Tests: F-04, F-06, the exemption (an exempt arm still stops on a negative band and on the hard stop). 20/20
 suites. Restart: build 00:00:15Z, electron start 00:01:02Z under `agent.lock`.
+
+## §139 - 2026-09-20 00:10Z: lead-lag's hard stop is $10 per notch (operator decision)
+
+BACKLOG 178, brought forward: the comparison was run the same night instead of on 09-26. The production stage rule
+at lead-lag's volume, sign-stop exempt, 600 thirty-day paths per cell (`scripts/ladder-power-sim.ts 60 30 600 exempt
+stop=N`):
+
+| hard stop per notch | a true +1.5c arm switched off within 30 d | a true -2c arm costs per cycle |
+|---|---|---|
+| $5 | 78% | $5.47 |
+| $10 | 62% | $8.41 |
+| $15 | 54% | $9.41 |
+| $25 | 52% | $9.73 |
+
+Past $10 the 80% band stop takes over and nothing improves. Operator: "$10 sounds good." `StageEvidence.stopDollars`
+carries a per-arm limit; `leadLagEvidence` sets `LEADLAG_STOP_DOLLARS = 10`; every other arm keeps
+`LIVE_STOP_DOLLARS = 5`. The daily kill switch (20% of equity, about $16) is unchanged and sits above it. Tests:
+default $5, -$7 inside $10, -$10 hits it, scales with the notch. 20/20 suites. Restart: build 00:08:25Z,
+electron start 00:08:38Z under `agent.lock`.

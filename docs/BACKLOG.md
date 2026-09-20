@@ -2105,8 +2105,9 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   consensus has >= 40 settled trades with a path. A rule is adopted only if it beats holding by more than its own
   day-clustered SE over >= 40 trades and >= 5 days, and it runs in shadow first.
 
-- **178. The -$5 hard stop is about one day's standard deviation at lead-lag volume (2026-09-19, §138, GLM F-02/F-09).
-  OPERATOR.** With the sign stop removed the hard stop still ends a true +1.5c arm in 72 of 100 thirty-day runs.
+- **178 DONE 2026-09-20 (§139; operator: "$10 sounds good").** Lead-lag's hard stop is $10 per notch; every
+  other arm keeps $5. Original item: The -$5 hard stop is about one day's standard deviation at lead-lag volume
+  (2026-09-19, §138, GLM F-02/F-09). OPERATOR. With the sign stop removed the hard stop still ends a true +1.5c arm in 72 of 100 thirty-day runs.
   It is a loss limit, so it is the operator's. Trigger: with the null simulation (156) on **2026-09-26**, put the
   table for -$5 / -$10 / -$15 per notch in front of the operator: stops of good arms avoided against dollars lost
   on bad ones, under the record's own distribution of arm edges.

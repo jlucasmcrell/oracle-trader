@@ -307,6 +307,12 @@ eq('stage: no cluster count cannot add size (2026-09-19)', decideStage({ n: 20, 
   eq('sign stop: an exempt arm holds on the same evidence', decideStage({ ...flat, signStopExempt: true }, 1, 5).kind, 'hold')
   eq('sign stop: an exempt arm still stops on a wholly negative band', decideStage({ ...flat, netDollars: -4, mean: -0.2, se: 0.05, signStopExempt: true }, 1, 5).kind, 'stop')
   eq('sign stop: an exempt arm still hits the hard stop', decideStage({ ...flat, netDollars: -5.01, signStopExempt: true }, 1, 5).kind, 'stop')
+  // Operator 2026-09-20: lead-lag's hard stop is $10 per notch; every other arm keeps $5.
+  const ll = { n: 60, netDollars: -7, mean: -0.12, se: 0.2, sd: 0.45, clusters: 2, unit: '$', stake: 0.5 }
+  eq('hard stop: the default is $5', decideStage(ll, 1, 3).kind, 'stop')
+  eq('hard stop: -$7 is inside a $10 limit', decideStage({ ...ll, stopDollars: 10 }, 1, 3).kind, 'hold')
+  eq('hard stop: -$10 hits it', decideStage({ ...ll, netDollars: -10, stopDollars: 10 }, 1, 3).kind, 'stop')
+  eq('hard stop: it scales with the notch', decideStage({ ...ll, netDollars: -15, stopDollars: 10 }, 2, 3).kind, 'hold')
 }
 
 console.log(`ladder: ${pass} passed, ${fail} failed`)

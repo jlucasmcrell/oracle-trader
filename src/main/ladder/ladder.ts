@@ -220,6 +220,13 @@ export interface StageEvidence {
    * rule was deciding the account's one earning arm on noise (external review GLM 5.3, F-02; 2026-09-19).
    */
   signStopExempt?: boolean
+  /**
+   * Hard stop in dollars per size notch, when it differs from LIVE_STOP_DOLLARS. Lead-lag: $10 (operator,
+   * 2026-09-20). Its results swing $4-5 on an ordinary day, so $5 sat inside one day's noise: the simulation
+   * (§138, scripts/ladder-power-sim.ts) had $5 switch off a true +1.5c arm in 78 of 100 thirty-day runs against 62
+   * at $10, for about $3 more lost per cycle if the arm is bad. Every other arm keeps the default.
+   */
+  stopDollars?: number
   /** Settled trades since the current stage began. */
   n: number
   netDollars: number
@@ -257,6 +264,8 @@ export interface Decision {
 
 export const QUOTER_GATE = { minFills: 30, minEvents: 40 }
 export const LIVE_STOP_DOLLARS = 5
+/** Lead-lag's own hard stop per notch (operator decision 2026-09-20, §139); see StageEvidence.stopDollars. */
+export const LEADLAG_STOP_DOLLARS = 10
 /** Weather contracts settle on Kalshi shard 0; below this a micro test is a rejected-order loop. */
 export const SHARD0_MIN_DOLLARS = 5
 /** Working balance kept on every shard that has traded (sports, crypto), fed from shard 0's surplus above the weather cap. */
@@ -444,7 +453,7 @@ export const CALIB_CLEARED_AT = Date.parse('2026-09-18T13:34:23Z')
 
 export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: number): StageDecision {
   // Hard stop: -$5 per size notch, or three per-trade stakes, whichever is larger.
-  const stop = Math.max(LIVE_STOP_DOLLARS * Math.max(1, notch), 3 * (ev.stake ?? 0))
+  const stop = Math.max((ev.stopDollars ?? LIVE_STOP_DOLLARS) * Math.max(1, notch), 3 * (ev.stake ?? 0))
   if (ev.netDollars <= -stop) return { kind: 'stop', checkpoint: lastCheckpoint, reason: `net $${ev.netDollars.toFixed(2)} hit the -$${stop} stop at size x${notch}` }
   const checkpoint = Math.floor(ev.n / CHECKPOINT_TRADES)
   if (checkpoint <= lastCheckpoint) {
@@ -1248,12 +1257,12 @@ export class Ladder {
       return null
     }
     const stake = 0.5 * notch
-    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true }
+    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS }
     const pnl = await this.engine.getLivePnl('kalshi').catch(() => null)
     if (!pnl?.details) return null
     const rows = pnl.details.filter((d) => d.timestamp >= since && swept.has(d.marketId))
     const ci = clusteredMean(rows.map((r) => ({ v: r.realizedPnl, g: new Date(r.timestamp).toISOString().slice(0, 10) })))
-    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake, signStopExempt: true }
+    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS }
   }
 
   /** Closed trades of one mini strategy since `since`: value = P&L dollars, group = market. */
