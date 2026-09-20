@@ -5017,7 +5017,7 @@ tsc clean, `electron-vite build` clean, **20/20 suites** (six new cases across `
 is clean - lead-lag, convergence, dutch, cross-venue, consensus, quoter-shadow and the IBKR lab all logging
 normally, no error or warn line since the restart, no `SAVE FAILED`.
 
-## §144 - 2026-09-20 12:00Z: both sides of one market, and the loss tail the promotion statistic never saw
+## §145 - 2026-09-20 12:00Z: both sides of one market, and the loss tail the promotion statistic never saw
 
 Three things the §143 completeness critic found and I filed rather than fixed. All three are IBKR paper-ledger
 only; nothing here changes what is sent to a venue.
@@ -5039,7 +5039,7 @@ every winner closed normally. Those positions stayed open and never entered `rea
 reads. The guard existed to avoid a negative exit price; the exit is now clamped at zero, which says the same thing
 truthfully. Scope, stated honestly: this un-censors 98c < ask <= 99c only. Above that `freshAsk` refuses the quote
 outright, which is a wider censor on the same tail, is shared with the ENTRY path, and therefore needs its own
-decision - BACKLOG 200.
+decision - BACKLOG 206.
 
 **The daily loss cap truncates day clusters conditional on losses.** The cap is a risk control and stays, but the
 UTC day is the cluster unit both standard errors are built on, and a capped day is a short day that is always a

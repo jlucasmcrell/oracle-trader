@@ -273,7 +273,7 @@ export class IbkrLab {
       // price; clamping at zero says the same thing truthfully, because a contract whose other side is offered at
       // 99c is worth nothing. This un-censors 98c < ask <= 99c only: above that `freshAsk` refuses the quote
       // outright (ask <= .99), which is a WIDER censor on the same tail and is shared with the entry path, so it
-      // needs its own decision (BACKLOG 200). Paper ledger only - the live path never comes through here.
+      // needs its own decision (BACKLOG 206). Paper ledger only - the live path never comes through here.
       const exit=Math.max(0,1-q.ask!-slippage),net=(exit-p.entry)*p.quantity-p.entryFee-fee*p.quantity
       // One exit policy, paper and live: price exits measure movement from the first fresh valuation at or after the
       // fill. Without one there is nothing to measure from; take it now (movement zero) rather than switch to the
