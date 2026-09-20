@@ -61,18 +61,22 @@ interface Bound {
   live: (k: AutoTraderConfig, m?: MiniAutoConfig) => boolean
 }
 
-/** Parameters the review may change on its own, with hard bounds. Nothing else is ever applied. */
+/**
+ * Parameters the review may change on its own, with hard bounds. Nothing else is ever applied.
+ *
+ * SIZE KNOBS ARE NOT IN HERE. `quoterMaxMarkets` and `convergenceMaxDailyTrades` were, and the ladder's
+ * `sizesFor` sets both - so the review was moving a live arm's size against the ladder's own decision,
+ * which the handbook promises it never does (audit 2026-09-19, B-46). Removed 2026-09-20.
+ */
 export const PARAM_BOUNDS: Record<'kalshi' | 'polymarket-us', Record<string, Bound>> = {
   kalshi: {
     quoterMinSpreadCents: { min: 2, max: 10, live: (k) => !!k.quoterEnabled },
     quoterMaxSpreadCents: { min: 5, max: 30, live: (k) => !!k.quoterEnabled },
     quoterMaxTouchDepth: { min: 10, max: 200, live: (k) => !!k.quoterEnabled },
-    quoterMaxMarkets: { min: 1, max: 8, live: (k) => !!k.quoterEnabled },
     quoterGuardF: { min: 1, max: 4, live: (k) => !!k.quoterEnabled },
     quoterNearF: { min: 0.5, max: 3, live: (k) => !!k.quoterEnabled },
     quoterMinHoursToClose: { min: 1, max: 12, live: (k) => !!k.quoterEnabled },
     quoterMaxHoursToClose: { min: 12, max: 72, live: (k) => !!k.quoterEnabled },
-    convergenceMaxDailyTrades: { min: 1, max: 6, live: (k) => !!k.convergenceLiveEnabled },
     settleMinMarginPct: { min: 1, max: 5, live: (k) => !!k.settleLiveEnabled },
     settleMaxMinutesToClose: { min: 10, max: 1440, live: (k) => !!k.settleLiveEnabled },
     fadeMinEdgeCents: { min: 1, max: 5, live: (k) => !!k.fadeEnabled },
@@ -108,7 +112,10 @@ export function planParameterChanges(
       skipped.push({ target: p.target, key: p.key, reason: 'target not eligible' })
       continue
     }
-    const bound = PARAM_BOUNDS[p.target][p.key]
+    // A plain lookup makes `constructor`, `__proto__`, `toString`, `hasOwnProperty` and `valueOf` truthy
+    // bounds with undefined min/max, which then get written onto the config as junk (audit B-47).
+    const table = PARAM_BOUNDS[p.target]
+    const bound = Object.prototype.hasOwnProperty.call(table, p.key) ? table[p.key] : undefined
     if (!bound) {
       skipped.push({ target: p.target, key: p.key, reason: 'not in the allow-list' })
       continue
@@ -280,7 +287,9 @@ export class NightlyReview {
     const live = await this.engine.getLivePnl('kalshi').catch(() => null)
     const fam = (t: string): string => (/^KX(HIGH|LOW)/.test(t) ? 'weather' : /^KX(BTC|ETH|SOL|XRP|DOGE)/.test(t) ? 'crypto' : 'other')
     const byFamily: Record<string, { n: number; wins: number; net: number }> = {}
-    const dayStart = Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z') - 86400_000
+    // Was yesterday 00:00Z, so the field summed 24 h PLUS the hours since midnight - 30 h at the 06:00Z
+    // run - and was reported as "last 24h" (audit B-49; a distinct cause from BACKLOG 134).
+    const dayStart = Date.now() - 86400_000
     let last24h = 0
     // What the family buckets actually sum to, before they are each rounded to the cent.
     let settlementsNet = 0

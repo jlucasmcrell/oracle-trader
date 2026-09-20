@@ -268,7 +268,7 @@ export default function AutoTraderPanel({ log, onChanged }: Props) {
           {cfg.liveArmed ? 'LIVE ARMED' : 'LIVE SAFE'}
         </span>
         {status.killSwitchTripped && (
-          <span className="badge warn" title="Daily loss limit hit - new entries halted and LIVE disarmed. Re-arm manually when ready.">
+          <span className="badge warn" title="Daily loss limit hit - new entries halted for the rest of the venue day. LIVE stays ARMED and entries resume by themselves at the UTC day roll; exits keep managing throughout.">
             STOP KILL SWITCH
           </span>
         )}
@@ -400,7 +400,7 @@ export default function AutoTraderPanel({ log, onChanged }: Props) {
           &lt;= % bal
           <input type="number" min={0} max={100} value={cfg.maxBalancePct} onChange={(e) => patch({ maxBalancePct: Number(e.target.value) })} />
         </label>
-        <label className="inline" title="Kill-switch: when today's realized loss reaches this % of balance, stop opening positions (exits keep managing) and disarm LIVE. 0 = off.">
+        <label className="inline" title="Kill-switch: when today's realized loss reaches this % of balance, stop opening positions for the rest of the venue day (exits keep managing). LIVE is NOT disarmed - entries resume at the UTC day roll. 0 = off.">
           day loss &lt;= %
           <input type="number" min={0} max={100} value={lossDraft ?? cfg.maxDailyLossPct} onChange={(e) => setLossDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}

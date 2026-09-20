@@ -4958,3 +4958,61 @@ dated the new cohort 10:00Z, an hour ahead of itself; polyPaper drops orders adm
 the lab discarded every order it created for thirteen minutes. Corrected to the restart instant and a test now
 refuses a cohort dated in the future. Verified live: `pressure` is resting four orders, each carrying the queue
 size ahead of it.)
+
+## §144 - 2026-09-20 11:20Z: the audit's twenty-four lows, taken in one round (backlog 174)
+
+The pre-registered read due today. `docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md` left B-36..B-59 untouched
+after the critical, the eight highs (§133) and the twenty-four mediums (§134); the registration said to take them
+in report order in one round once the §134 build had run 24 h clean.
+
+**The gate, checked first.** The registration named 2026-09-20 18:00Z as the end of the window; this run is at
+11:00Z and is the day's only session, so the gate was evaluated on its three observables over the ~20 h elapsed
+rather than deferred to a session that will not exist. No `.corrupt-` file has been written since 2026-09-03
+(one, `mini-auto-polymarket-us.json.corrupt-1788435253682`). `recovered-exit` and `dutch-unwind` appear zero times
+in main.log, ever. The only warn class in 24 h is the known IBKR gateway line (444 of 452 warn/error lines; the
+other eight are five Cloudflare 429s on the Polymarket US portfolio read, two IBKR timeouts and one Kalshi
+universe-fetch exhaustion). Clean.
+
+**Eighteen fixed.**
+
+| # | Defect | Fix |
+|---|---|---|
+| B-36 | `recordExit(realized, 'dutch')` passed no trade, so a Dutch basket was never graded (`netN` 0 forever, only the hard stop could act) and a detached basket ignored its `perfKey` | pass `t.perfKey ?? t.strategy` and the trade; `recordExit` already grades an ungraded trade over its shares |
+| B-37 | convergence graded settlement on the REQUESTED count, so a 0.4-of-1 partial IOC counted as a full contract | `filledContracts` recorded from `res.shares`, and `reconcileSettlements` prices `filledContracts ?? contracts` |
+| B-38 | the trade row was pushed only AFTER the POST returned; a process exit in between lost the fill and let a second IOC fire in the same T-5 window | row pushed and persisted BEFORE the POST as `uncertain`; `uncertain` blocks its event and appears in `heldTickers`, and is never graded |
+| B-39 | `strategyOn` was consulted at signal generation only, so a ladder stop landing during a 60-190 s scan did not stop that scan's remaining signals | re-checked in `executeSignal` |
+| B-40 | `executionMode` was never validated: a `null` or `'Paper'` in a hand-edited config matched neither mode test and took the live submission path | `ConfigStore.normalize()` on load and on every update forces anything unrecognised to `paper`; the IPC setter rejects it outright |
+| B-41 | `refreshVenueDay`'s legacy/current split read `getHistory()` = the newest 100 rows (under 13 h of fills), so older positions were booked as current | explicit 100,000 limit |
+| B-42 | one unparsable line voided the whole journal (`orders = []`): every reservation dropped out of the cap count, attribution lost its `clientOrderId`, and `ibkrLab` closed an uncertain live row as "rejected, net 0" | parse row by row and keep what parsed; a torn LAST line is named as such; `failure` still blocks new submissions either way |
+| B-43 | `PaperBroker.seq` is in-memory, so `paper-1` was reissued every launch and `recordMany`'s `venue:id` dedupe dropped all but one of the colliding fills | per-broker `randomUUID().slice(0,8)` id prefix |
+| B-45 | the degraded-read path returns the CACHED snapshot and `getPortfolio` re-stamped it `at: Date.now()`, so a multi-hour outage read as a 10-second-old balance to stake sizing | only stamp when the value is not the cached object; the test's log line now reads "serving last good snapshot from 10800s ago" |
+| B-46 | the nightly review's allow-list held `quoterMaxMarkets` and `convergenceMaxDailyTrades`, which the ladder's `sizesFor` sets as SIZE, and `reviewAutoApplyLive` (default true) means the `live` predicate is never consulted | both keys deleted from `PARAM_BOUNDS` |
+| B-47 | `PARAM_BOUNDS[target][key]` is a plain lookup, so `constructor`/`__proto__`/`toString`/`hasOwnProperty`/`valueOf` were truthy bounds with undefined min/max | `Object.prototype.hasOwnProperty.call` |
+| B-49 | `last24h` summed from yesterday 00:00Z - 24 h plus the hours since midnight, 30 h at the 06:00Z run | `Date.now() - 86400_000` |
+| B-50 | both operator-facing kill-switch tooltips said "LIVE disarmed. Re-arm manually" while the code sets `disarmed = false` and resumes at the UTC day roll | tooltips state what the code does |
+| B-51 | the "real account" view under paper execution never left "Loading P&L from the venue...": `livePnl` was fetched only in live mode but the block is keyed to the SHOWN snapshot's mode | fetched in both modes (it reads the venue's own ledger and does not depend on ours) |
+| B-52 | the stake cap was tested ABOVE the `closeFrom` exemption in both order paths, so a cheap large position entered under the cap could not be exited through the engine | `&& !order.closeFrom` on both cap tests |
+| B-54 | `getMarket(...).catch(() => undefined)` made a 429/5xx indistinguishable from an unresolved market, and the settled-early position was dropped as `orphan-ledger` without `recordExit` | a failed read decides nothing; the miss count keeps climbing and the first read that SUCCEEDS decides |
+| B-55 | `JsonStore.save` swallowed disk-full/EPERM in one `console.warn` and the trader kept running on state that never reached disk | consecutive-failure counter, logged at ERROR with a distinct signature the sentinel's log scan sees, plus `savesFailing()` |
+| B-57 | the Kalshi demo/production checkbox had no try/catch, so the main process's refusal (positions held) was an uncatchable rejection: no status line, no reason | the refusal is caught and shown in the status line and the activity log |
+| B-58 | stake-cap, position-cap, cap-read and journal refusals are plain `Error`s thrown before any POST, so lead-lag logged them as "uncertain order" and held the window's budget and direction seat for a sweep that never left the process | new `PreSubmitRefusal` on all six engine sites; lead-lag releases on it exactly as on an explicit rejection |
+
+**Five deferred, each with its own item and trigger** (backlog 200-204): B-44 paper reset ordering (paper only,
+an ordering rework of its own), B-48 the polyus research log's missing mode field (every polyus arm is on hold, so
+nothing live is contaminated today), B-53 the 200-fill reconcile window (derived, never observed - it needs a
+reproduction against the real fill stream), B-56 the lead-lag running guard (read and deliberately not changed:
+the guard is doing its job and shortening it would let a second sweep run against an order of unknown fate,
+the opposite of what B-58 just fixed), B-59 sports-anchor freshness (plumbing that changes what the arm trades).
+
+**Two things the round changed in the tests rather than in the code.** `ladder.test.ts` used
+`convergenceMaxDailyTrades` as its stand-in for "a live strategy's parameter"; with B-46 that key no longer
+exists, so the live case is carried by `settleMinMarginPct` and a new assertion refuses both deleted size knobs
+outright. `config-migration.test.ts`'s B-06 scaffolding gave the dutch basket a `getMarket` that always threw,
+which under B-54 is now "no evidence" rather than "drop it" - the mock resolves an unresolved market (preserving
+the held-leg property that test is actually about) and a new case asserts the B-54 behaviour on both sides: five
+failing reads never drop a trade, and the first successful read decides.
+
+tsc clean, `electron-vite build` clean, **20/20 suites** (six new cases across `risk-controls` and
+`remaining-defects`). Backup `MAINT-2026-09-20`. Restart 11:15:43Z; main.log resumed 11:15:44Z and the scan loop
+is clean - lead-lag, convergence, dutch, cross-venue, consensus, quoter-shadow and the IBKR lab all logging
+normally, no error or warn line since the restart, no `SAVE FAILED`.

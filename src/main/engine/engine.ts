@@ -21,6 +21,14 @@ import type {
 } from '../../shared/types'
 import type { EngineState, PortfolioSnapshot, RiskLimits } from '../../shared/ipc'
 
+/**
+ * A refusal raised before any request reached the venue: stake cap, position cap, a failed cap read, or the
+ * order journal. Callers that keep a reservation for an ambiguous response must release it for these, because
+ * no order exists (audit 2026-09-19, B-58 - lead-lag was logging them as "uncertain order" and holding the
+ * window's budget and direction seat for a sweep that never left the process).
+ */
+export class PreSubmitRefusal extends Error {}
+
 /** VWAP + available size for a simulated fill against the live book. */
 export interface PaperFillPlan {
   avgPrice: number
@@ -249,12 +257,13 @@ export class TradingEngine {
     await previous
     try {
       const cap = this.stakeCapFor(order.venue)
-      if (cap > 0 && order.amount > cap) throw new Error(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
       // An exit expressed as a buy of the opposite side (closeFrom, IBKR and Polymarket US) frees a slot; it must
       // never be refused at the cap or reserve one (2026-09-19, external review: a full book could not exit).
+      // The cap test sat ABOVE that exemption, so a cheap large position still could not be closed (audit B-52).
+      if (cap > 0 && order.amount > cap && !order.closeFrom) throw new PreSubmitRefusal(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
       if (!order.closeFrom) {
         const count = await this.countOpenPositions(order.venue)
-        if (count >= this.riskLimits.maxOpenPositions) throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)
+        if (count >= this.riskLimits.maxOpenPositions) throw new PreSubmitRefusal(`At max open positions (${this.riskLimits.maxOpenPositions})`)
         token = this.reserveSlot(order.venue)
       }
     } finally {
@@ -288,13 +297,14 @@ export class TradingEngine {
 
   private async placeOrderChecked(order: OrderRequest): Promise<OrderResult> {
     const cap = this.stakeCapFor(order.venue)
-    if (cap > 0 && order.amount > cap) {
-      throw new Error(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
+    // A close is an exit, not a new stake: refusing it at the cap traps the position (audit B-52).
+    if (cap > 0 && order.amount > cap && !order.closeFrom) {
+      throw new PreSubmitRefusal(`Order of ${order.amount} exceeds max stake per bet (${cap} on ${order.venue})`)
     }
     if (this.riskLimits.maxOpenPositions > 0 && !order.closeFrom) {
       const count = await this.countOpenPositions(order.venue)
       if (count >= this.riskLimits.maxOpenPositions) {
-        throw new Error(`At max open positions (${this.riskLimits.maxOpenPositions})`)
+        throw new PreSubmitRefusal(`At max open positions (${this.riskLimits.maxOpenPositions})`)
       }
     }
 
@@ -334,7 +344,14 @@ export class TradingEngine {
   private async submitLive(order: OrderRequest | SellRequest, side: 'buy' | 'sell'): Promise<OrderResult> {
     const adapter = this.requireAdapter(order.venue)
     const journaled = order.venue === 'kalshi' || order.venue === 'polymarket-us' || order.venue === 'ibkr'
-    const intent = journaled ? this.journal?.begin({ venue: order.venue, marketId: order.marketId, outcome: order.outcome, side, ref: order.ref }) : undefined
+    // A journal refusal (unreadable journal, unresolved submission on this market) happens before any
+    // request leaves the process, so it must not read as an ambiguous fill downstream (audit B-58).
+    let intent: JournalOrder | undefined
+    try {
+      intent = journaled ? this.journal?.begin({ venue: order.venue, marketId: order.marketId, outcome: order.outcome, side, ref: order.ref }) : undefined
+    } catch (e) {
+      throw new PreSubmitRefusal(e instanceof Error ? e.message : String(e))
+    }
     let submitted = false
     const request = { ...order, clientOrderId: intent?.clientOrderId ?? order.clientOrderId, onSubmit: () => {
       if (intent) this.journal!.update(intent, { submittedAt: Date.now() })
@@ -499,7 +516,10 @@ export class TradingEngine {
     let pending = this.portfolioInflight.get(key)
     if (!pending) {
       pending = this.computePortfolio(venue, mode).then(value => {
-        this.portfolioCache.set(key, { at: Date.now(), value })
+        // A failed live read returns the CACHED snapshot itself. Re-stamping it reset its age on every poll,
+        // so a multi-hour venue outage read as a 10-second-old balance to stake sizing (audit B-45).
+        const prev = this.portfolioCache.get(key)
+        if (!prev || prev.value !== value) this.portfolioCache.set(key, { at: Date.now(), value })
         return value
       }).finally(() => this.portfolioInflight.delete(key))
       this.portfolioInflight.set(key, pending)
@@ -837,14 +857,14 @@ export class TradingEngine {
     try {
       positions = (await adapter.getPositions()).length
     } catch (err) {
-      throw new Error(`Position cap check failed (venue positions unavailable): ${err instanceof Error ? err.message : String(err)}`)
+      throw new PreSubmitRefusal(`Position cap check failed (venue positions unavailable): ${err instanceof Error ? err.message : String(err)}`)
     }
     let resting = 0
     if (adapter.getOpenOrders) {
       try {
         resting = (await adapter.getOpenOrders()).length
       } catch (err) {
-        throw new Error(`Position cap check failed (open orders unavailable): ${err instanceof Error ? err.message : String(err)}`)
+        throw new PreSubmitRefusal(`Position cap check failed (open orders unavailable): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
     const base = positions + resting + (this.journal?.pending(venue).length ?? 0)

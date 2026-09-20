@@ -968,6 +968,45 @@ incident file lists more than ~5 near-identical signatures.
   30-60 s poll and does not transfer to sub-second. I said on 09-13 this was filed; it was not - filed now.
 
 
+- **200. Paper reset swaps brokers mid-order (2026-09-20, audit B-44).** `resetPaperAccounts()`/`clearHistory()`
+  apply immediately while `autoTrader.reset()` defers, so an in-flight paper buy completes on the discarded
+  broker (which then persists over the fresh file) and lands in the just-cleared history. Paper only, and the
+  fix is an ordering rework of the reset path - a behavioural change of its own, not a line in a 24-item round.
+  Trigger: the next session that touches the paper reset path, or **2026-10-04** if nothing does.
+- **201. Polymarket US arm evidence mixes paper and live closes (2026-09-20, audit B-48).** `logResearch('closed',
+  ...)` carries no mode field (`miniAuto.ts`) and `miniRows` (`ladder.ts`) filters on type/strategy/ts only, so a
+  paper session's closes enter a live arm's `n`/`mean`/`netDollars`. Needs a mode field written at the source plus
+  a migration decision for rows already on file (undated rows cannot be attributed retrospectively). Every polyus
+  arm is on operator hold today, so nothing live is being contaminated right now. Trigger: before any polyus arm
+  leaves hold, or **2026-09-30**.
+- **202. A maker slice can be lost to the 200-fill reconcile window (2026-09-20, audit B-53, "likely").** A rest
+  that partially filled earlier (`p.promoted` set) and completes after more than 200 later account fills
+  (356-687 fills/day observed) yields `filledTotal - p.promoted < 0`, so the last slice is never promoted and the
+  row is deleted; the orphan sweep does not compare share counts. The fix is either a wider window or a
+  share-count comparison in the sweep, and it needs a reproduction against the real fill stream first - it was
+  never observed, only derived. Trigger: **2026-09-27**, or the first `vanished maker order` line whose promoted
+  total exceeds the window.
+- **203. Lead-lag's running guard is held for the full 45 s HTTP timeout (2026-09-20, audit B-56, "likely").**
+  A POST that neither returns nor errors keeps `running` set until the wall clock expires, so poll ticks inside
+  that window no-op. Read and NOT fixed today: the guard is doing its job (one sweep at a time) and shortening it
+  would let a second sweep run against an order whose fate is unknown - the opposite of what B-58 just fixed.
+  The real question is whether the order POST deserves a shorter timeout than a read. Trigger: with the weekly
+  lead-lag basis reading on **2026-09-28**; measure how often a sweep exceeds 10 s before changing anything.
+- **204. Sports-anchor freshness is measured from receipt, and `last_update` is never read (2026-09-20, audit
+  B-59, "hypothesis").** `sportsAnchor.ts` has no `last_update` anywhere, and the Kalshi mid comes from a 10-minute
+  list cache, so the gap can be composed of two stale halves and is never re-derived before execution. Bounded
+  today because the arm is maker-first and rests 1c inside the live book, so only the taker fallback can execute
+  on a stale gap. The fix is plumbing (`last_update` through `lineConsensus`, a fresh book read before the taker
+  fallback) and it changes what the arm trades, so it belongs with the anchor's own evidence. Trigger: with the
+  **2026-09-22** IBKR calibration read, or the anchor's first checkpoint, whichever comes first.
+- **205. A partial maintenance run suppresses the day's catch-up (2026-09-20, seen this morning).** The 09-19
+  07:00 headless run exited 0 after deciding to wait for a background cull-gate, so `maintenance.ps1`'s
+  per-day guard ("today's maintenance already completed (exit 0 in log)") skipped the 11:30 catch-up, and
+  2026-09-19 has **no section in MAINTENANCE-LOG.md and no `docs/reports/2026-09-19.md`** - the operator got no
+  report for a day whose sessions committed ten changes. Exit 0 is not the right completion token; the written
+  report is. Trigger: next session that touches `scripts/maintenance.ps1` - key the guard on the existence of
+  `docs/reports/<date>.md` instead of on the exit code.
+
 ## Build queue, dated milestones (added 2026-09-14 09:20Z; the daily run checks EVERY trigger, acts on the FIRST met, records the rest)
 
 These continue the numbered queue above. A trigger is a date AND a data condition; before the date, record
@@ -2080,10 +2119,13 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `fill-reconciler-kalshi.json.fills.jsonl` after the §134 restart by `side`; if exits happened and no `sell`
   row exists, the legacy fields are gone: note it in the handbook and switch the archive consumers to the
   exposure model.
-- **174. Audit lows B-36..B-59 (2026-09-19).** Twenty-four low findings in
-  `docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md` are untouched. Trigger: after 24 h of clean operation on
-  the §134 build (**2026-09-20 18:00Z**: no new `.corrupt-` files, no recovered-exit or dutch-unwind alerts
-  that were wrong), take them in report order in one round.
+- **174 DONE 2026-09-20 (section 144).** Audit lows B-36..B-59, taken in report order in one round. The
+  clean-operation gate was checked at 11:00Z (the run is the day's only session; the registration named 18:00Z):
+  no `.corrupt-` file since 2026-09-03, zero `recovered-exit` and zero `dutch-unwind` lines in main.log ever, and
+  the only warn class in 24 h is the known IBKR gateway line (444). **Eighteen fixed** - B-36, B-37, B-38, B-39,
+  B-40, B-41, B-42, B-43, B-45, B-46, B-47, B-49, B-50, B-51, B-52, B-54, B-55, B-57, B-58 - with six regression
+  tests (risk-controls, remaining-defects), 20/20 suites green, tsc and build clean, app restarted 11:15:44Z.
+  **Five deferred** with their own items: B-44 -> 200, B-48 -> 201, B-53 -> 202, B-56 -> 203, B-59 -> 204.
 - **175. mmsim is dark for a large part of each day (2026-09-19, seen in §136).** It exits on `429-storm` (3
   throttles in an hour) about every 2.5-3 h since 09-17 16:04Z - ten halts in two days, `"event":"halt"` rows in
   `%APPDATA%\oracle-trader\mmsim\33249be26379-*.jsonl` - and waits for the sentinel's 3-hourly relaunch; each

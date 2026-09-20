@@ -20,6 +20,7 @@ import { dirname } from 'node:path'
 import type { VenueAdapter } from '../../shared/venue'
 import type { OrderResult } from '../../shared/types'
 import { HttpError } from '../util/http'
+import { PreSubmitRefusal } from '../engine/engine'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { PolyClobWs } from '../services/polyClobWs'
 
@@ -853,7 +854,9 @@ export class LeadLagEngine {
         // A timeout/5xx may conceal a fill. Keep its budget and direction seat
         // for the rest of this window, including across a restart. Only an
         // explicit rejection proves that the reservation can be released.
-        if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) {
+        // A PreSubmitRefusal (stake cap, position cap, cap-read failure, journal) is thrown before any POST:
+        // nothing can have filled, so the window's budget and direction seat go straight back (audit B-58).
+        if (e instanceof PreSubmitRefusal || (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status))) {
           this.adjustWindow(d.kalshiTicker, -count, -(count * legCost))
           if (newSeat) dir.delete(d.underlying)
         } else {

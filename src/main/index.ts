@@ -156,6 +156,9 @@ function kalshiCreds(): { apiKeyId?: string; privateKey?: string; demo: boolean 
 function registerIpc(): void {
   ipcMain.handle(IPC.engineGetState, () => engine.getState())
   ipcMain.handle(IPC.engineSetMode, (_e, mode: ExecutionMode) => {
+    // The renderer can only send the two literals, but an IPC argument is untrusted input and the engine
+    // has no validation of its own: anything else would take the live submission path (audit B-40).
+    if (mode !== 'paper' && mode !== 'live') throw new Error(`Unknown execution mode ${JSON.stringify(mode)}`)
     const current = engine.getExecutionMode()
     if (mode !== current) {
       // A flip mid-session contaminates the ledgers: paper positions can

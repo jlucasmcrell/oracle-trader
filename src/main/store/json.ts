@@ -72,8 +72,20 @@ export class JsonStore<T extends object> {
       writeFileSync(tmp, JSON.stringify(this.data, null, 2), { encoding: 'utf-8', flush: true })
       renameSync(tmp, this.path)
     } catch (err) {
-      console.warn('[json-store] save failed:', err)
+      // One warn line was all a disk-full or EPERM ever produced, and the trader kept running on state that
+      // never reached disk; a later restart then loads the last successful file (audit B-55). Count the run
+      // and log at ERROR so the sentinel's log scan sees it - the store cannot safely throw at its callers.
+      this.saveFailures++
+      console.error(`[json-store] SAVE FAILED (${this.saveFailures} consecutive) for ${this.path}:`, err)
+      return
     }
+    this.saveFailures = 0
+  }
+
+  /** Consecutive failed saves; back to 0 once a write lands. */
+  private saveFailures = 0
+  savesFailing(): number {
+    return this.saveFailures
   }
 
   get(): T {

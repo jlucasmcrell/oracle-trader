@@ -60,8 +60,7 @@ export class ConfigStore {
           // deep-merge nested configs so newly added fields get defaults
           riskLimits: { ...DEFAULTS.riskLimits, ...(parsed.riskLimits ?? {}) }
         }
-        if (false) {
-        }
+        this.normalize()
         if (this.data.kalshiApiKeyId) {
           this.data.kalshiApiKeyId = this.decrypt(this.data.kalshiApiKeyId)
         }
@@ -119,8 +118,22 @@ export class ConfigStore {
 
   update(patch: Partial<AppConfig>): AppConfig {
     this.data = { ...this.data, ...patch }
+    this.normalize()
     this.save()
     return this.get()
+  }
+
+  /**
+   * `executionMode` was never validated on load or on the IPC write. A `null` or `'Paper'` in a hand-edited
+   * config.json matches neither `mode === 'paper'` nor `mode === 'live'`, so orders took the live submission
+   * path while the paper-only and live-only guards (liveArmed, the boot reconcile) both fell through
+   * (audit 2026-09-19, B-40). Anything unrecognised is paper: the safe end.
+   */
+  private normalize(): void {
+    if (this.data.executionMode !== 'paper' && this.data.executionMode !== 'live') {
+      console.warn(`[config] executionMode ${JSON.stringify(this.data.executionMode)} is not 'paper' or 'live'; forcing 'paper'`)
+      this.data.executionMode = 'paper'
+    }
   }
 
   private encrypt(value: string): string {

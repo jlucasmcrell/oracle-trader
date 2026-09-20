@@ -73,18 +73,17 @@ export default function App() {
       .get()
       .then((cfg) => setKalshiDemo(cfg.kalshiDemo === true))
       .catch(() => undefined)
-    if (s.executionMode === 'live') {
-      window.api.portfolio
-        .livePnl(v)
-        .then((lp) => {
-          if (venueRef.current === v) setLivePnl(lp)
-        })
-        .catch(() => {
-          if (venueRef.current === v) setLivePnl(null)
-        })
-    } else {
-      setLivePnl(null)
-    }
+    // Fetched in BOTH modes. The P&L block is keyed to the SHOWN snapshot's mode, so under paper execution
+    // the "real account" view asked for a number nothing ever fetched and sat on "Loading P&L from the
+    // venue..." forever (audit B-51). The read is the venue's own ledger and does not depend on our mode.
+    window.api.portfolio
+      .livePnl(v)
+      .then((lp) => {
+        if (venueRef.current === v) setLivePnl(lp)
+      })
+      .catch(() => {
+        if (venueRef.current === v) setLivePnl(null)
+      })
   }, [])
 
   const doSearch = useCallback(

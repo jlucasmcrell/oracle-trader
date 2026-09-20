@@ -151,13 +151,16 @@ eq('meanCi mean', ci.mean, 2.5)
 eq('meanCi n', ci.n, 4)
 
 // ---- nightly review parameter plan ----
-const kalshi = { quoterEnabled: false, quoterMaxSpreadCents: 20, quoterGuardF: 2, convergenceLiveEnabled: true, convergenceMaxDailyTrades: 3, fadeEnabled: false, fadeMinEdgeCents: 1.5, maxLlmPerScan: 12 } as unknown as AutoTraderConfig
+// `convergenceMaxDailyTrades` and `quoterMaxMarkets` used to stand in for "a live strategy's parameter"
+// here; both were removed from the allow-list on 2026-09-20 because the ladder sets them as SIZE (audit
+// B-46), so the live case is carried by the settlement arm's margin instead.
+const kalshi = { quoterEnabled: false, quoterMaxSpreadCents: 20, quoterGuardF: 2, settleLiveEnabled: true, settleMinMarginPct: 3, fadeEnabled: false, fadeMinEdgeCents: 1.5, maxLlmPerScan: 12 } as unknown as AutoTraderConfig
 const poly = { microMakerEnabled: true, microMakerMinSpreadCents: 1 } as unknown as MiniAutoConfig
 const plan = planParameterChanges(
   [
     { target: 'kalshi', key: 'quoterMaxSpreadCents', value: 15 },
     { target: 'kalshi', key: 'quoterGuardF', value: 9 },
-    { target: 'kalshi', key: 'convergenceMaxDailyTrades', value: 2 },
+    { target: 'kalshi', key: 'settleMinMarginPct', value: 2 },
     { target: 'kalshi', key: 'liveArmed', value: 1 },
     { target: 'kalshi', key: 'maxLlmPerScan', value: 12 },
     { target: 'polymarket-us', key: 'microMakerMinSpreadCents', value: 2 },
@@ -169,13 +172,14 @@ const plan = planParameterChanges(
 )
 eq('review applies in-bounds non-live', plan.apply.map((a) => [a.key, a.to]), [['quoterMaxSpreadCents', 15]])
 eq('review skips out of bounds', plan.skipped.find((s) => s.key === 'quoterGuardF')?.reason, 'outside bounds [1, 4]')
-eq('review skips live strategy', plan.skipped.find((s) => s.key === 'convergenceMaxDailyTrades')?.reason, 'strategy is live; recorded for the operator')
+eq('review skips live strategy', plan.skipped.find((s) => s.key === 'settleMinMarginPct')?.reason, 'strategy is live; recorded for the operator')
+eq('review never touches a ladder size knob', planParameterChanges([{ target: 'kalshi', key: 'quoterMaxMarkets', value: 8 }, { target: 'kalshi', key: 'convergenceMaxDailyTrades', value: 2 }], kalshi, {}, true, true).apply.length, 0)
 eq('review never touches arms', plan.skipped.find((s) => s.key === 'liveArmed')?.reason, 'not in the allow-list')
 eq('review skips unchanged', plan.skipped.find((s) => s.key === 'maxLlmPerScan')?.reason, 'unchanged')
 eq('review skips live mini', plan.skipped.find((s) => s.key === 'microMakerMinSpreadCents')?.reason, 'strategy is live; recorded for the operator')
 eq('review skips an unknown target', plan.skipped.find((s) => s.key === 'fadeMinLiquidity')?.reason, 'target not eligible')
 eq('review respects auto-apply off', planParameterChanges([{ target: 'kalshi', key: 'quoterMaxSpreadCents', value: 15 }], kalshi, {}, false).apply.length, 0)
-eq('review applies to live strategies when allowed', planParameterChanges([{ target: 'kalshi', key: 'convergenceMaxDailyTrades', value: 2 }], kalshi, {}, true, true).apply.map((a) => [a.key, a.to]), [['convergenceMaxDailyTrades', 2]])
+eq('review applies to live strategies when allowed', planParameterChanges([{ target: 'kalshi', key: 'settleMinMarginPct', value: 2 }], kalshi, {}, true, true).apply.map((a) => [a.key, a.to]), [['settleMinMarginPct', 2]])
 
 // ---- one-sided samples cannot justify a scale-up (2026-09-09: fade promoted on 19W/0 settlement losses) ----
 // The real checkpoint: 20 trades, net $2.65, mean 5.23c/contract, se 0.589 -> band 4.73..5.72. The sample

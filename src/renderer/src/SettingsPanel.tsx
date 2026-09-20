@@ -121,15 +121,24 @@ export default function SettingsPanel({ log }: Props) {
               type="checkbox"
               checked={settings?.kalshiDemo ?? false}
               onChange={async (e) => {
-                const conn = await window.api.settings.setKalshiDemo(e.target.checked)
-                setKalshiStatus(
-                  e.target.checked
-                    ? `DEMO exchange${conn.connected ? ` - balance $${conn.balance?.toFixed(2)}` : ' - paste your DEMO API keys above'}`
-                    : conn.connected
-                      ? `Production - balance $${conn.balance?.toFixed(2)}`
-                      : 'Production - paste your production API keys above'
-                )
-                log(`Kalshi adapter  ->  ${e.target.checked ? 'DEMO' : 'PRODUCTION'} exchange`)
+                const want = e.target.checked
+                try {
+                  const conn = await window.api.settings.setKalshiDemo(want)
+                  setKalshiStatus(
+                    want
+                      ? `DEMO exchange${conn.connected ? ` - balance $${conn.balance?.toFixed(2)}` : ' - paste your DEMO API keys above'}`
+                      : conn.connected
+                        ? `Production - balance $${conn.balance?.toFixed(2)}`
+                        : 'Production - paste your production API keys above'
+                  )
+                  log(`Kalshi adapter  ->  ${want ? 'DEMO' : 'PRODUCTION'} exchange`)
+                } catch (err) {
+                  // The main process refuses this switch while positions are held. Without a catch the
+                  // refusal was an uncaught rejection: the box sprang back with no reason (audit B-57).
+                  const msg = err instanceof Error ? err.message : String(err)
+                  setKalshiStatus(`Exchange switch refused: ${msg}`)
+                  log(`Kalshi exchange switch refused: ${msg}`)
+                }
               }}
             />
             Demo exchange

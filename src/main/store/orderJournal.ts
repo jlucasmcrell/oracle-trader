@@ -23,13 +23,32 @@ export class OrderJournal {
   private orders: JournalOrder[] = []
   private failure?: string
   constructor(private readonly path: string) {
+    // Parse row by row and KEEP what parsed. This is an append-only file, so a crash tears the last line
+    // and nothing else; voiding the whole journal for it dropped every reservation from the cap count,
+    // lost fill attribution, and let ibkrLab close an uncertain live row as "rejected" with net 0 (audit
+    // B-42). `failure` still blocks new submissions either way - the rows are for reading, not trusting.
+    const rows: JournalOrder[] = []
     try {
       if (existsSync(path)) {
-        const rows: JournalOrder[] = readFileSync(path, 'utf8').split('\n').filter(s => s.trim()).map(s => JSON.parse(s))
-        if (rows.some(r => !r.clientOrderId || !r.marketId || !r.venue || !['pending', 'acknowledged', 'rejected'].includes(r.state))) throw new Error('Invalid journal')
-        this.orders = [...new Map(rows.map(r => [r.clientOrderId, r])).values()]
+        const lines = readFileSync(path, 'utf8').split('\n').filter(s => s.trim())
+        for (let i = 0; i < lines.length; i++) {
+          let r: JournalOrder
+          try { r = JSON.parse(lines[i]) as JournalOrder } catch {
+            // "Torn" only when complete rows precede it: a file whose ONLY line is garbage is simply unreadable.
+            this.failure = rows.length > 0 && i === lines.length - 1
+              ? 'Torn last journal line; new submissions blocked until reconciled'
+              : 'Unreadable order journal; new submissions blocked until reconciled'
+            break
+          }
+          if (!r.clientOrderId || !r.marketId || !r.venue || !['pending', 'acknowledged', 'rejected'].includes(r.state)) {
+            this.failure = 'Unreadable order journal; new submissions blocked until reconciled'
+            break
+          }
+          rows.push(r)
+        }
       }
     } catch { this.failure = 'Unreadable order journal; new submissions blocked until reconciled' }
+    this.orders = [...new Map(rows.map(r => [r.clientOrderId, r])).values()]
   }
   pending(venue: VenueId): JournalOrder[] { return this.orders.filter(r => r.venue === venue && r.state === 'pending') }
   attribution(venue: VenueId, orderId: string): JournalOrder | undefined { return this.orders.find(r => r.venue === venue && r.orderId === orderId) }

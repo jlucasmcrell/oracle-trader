@@ -8,6 +8,7 @@ import type {
   VenueId
 } from '../../shared/types'
 import type { PaperFillPlan } from './engine'
+import { randomUUID } from 'node:crypto'
 import { JsonStore } from '../store/json'
 import { kalshiOrderFeeDollars } from '../util/kalshiFee'
 
@@ -46,6 +47,9 @@ export class PaperBroker {
   private balance: number
   private positions = new Map<string, PaperPosition>()
   private seq = 0
+  /** Per-broker id prefix: `seq` is in-memory, so `paper-1` was reissued every launch and `recordMany`'s
+   *  `venue:id` dedupe then dropped all but one of the colliding fills (audit B-43). */
+  private readonly idPrefix = randomUUID().slice(0, 8)
   private store: JsonStore<PaperState> | null = null
 
   constructor(
@@ -142,7 +146,7 @@ export class PaperBroker {
 
     return {
       venue: this.venue,
-      orderId: `paper-${++this.seq}`,
+      orderId: `paper-${this.idPrefix}-${++this.seq}`,
       marketId: order.marketId,
       outcome: order.outcome,
       amount: spend,
@@ -177,7 +181,7 @@ export class PaperBroker {
     this.persist()
     return {
       venue: this.venue,
-      orderId: `paper-${++this.seq}`,
+      orderId: `paper-${this.idPrefix}-${++this.seq}`,
       marketId: req.marketId,
       outcome: req.outcome,
       amount: proceeds,

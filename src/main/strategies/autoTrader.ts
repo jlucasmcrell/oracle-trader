@@ -3030,6 +3030,12 @@ export class AutoTrader {
       sig.error = 'dry-run — not executed'
       return
     }
+    // The hourly ladder can stop an arm DURING a 60-190 s scan. `strategyOn` was checked only when the
+    // signal was generated, so the rest of that scan still executed a stopped arm's signals (audit B-39).
+    if (!this.strategyOn(sig.strategy)) {
+      sig.error = 'strategy switched off mid-scan'
+      return
+    }
     const mode = this.engine.getExecutionMode()
     if (mode === 'live' && !this.config.liveArmed) {
       sig.error = 'LIVE not armed'
@@ -4058,7 +4064,9 @@ export class AutoTrader {
         }
       }
       this.removeTrade(t.id)
-      this.recordExit(realized, 'dutch')
+      // Grade the basket like every other settlement: passing no trade left `netN` at 0 forever, so only the
+      // hard stop could ever act on this arm, and 'dutch' ignored a detached basket's perfKey (audit B-36).
+      this.recordExit(realized, t.perfKey ?? t.strategy, t)
       this.emit('autoexited', { marketId: t.marketId, outcome: 'NO', reason: 'settled (dutch)', realized: round2(realized) })
       return
     }
@@ -4236,7 +4244,11 @@ export class AutoTrader {
       const misses = (this.venueMiss.get(t.id) ?? 0) + 1
       this.venueMiss.set(t.id, misses)
       if (misses < 3) continue
-      const mk = await adapter.getMarket(t.legs?.[0]?.marketId ?? t.marketId).catch(() => undefined)
+      const mk = await adapter.getMarket(t.legs?.[0]?.marketId ?? t.marketId).catch(() => null)
+      // A 429/5xx on this read is not evidence of an orphan: it used to make `mk` undefined and drop a
+      // position that had actually settled, losing its grade and its P&L (audit B-54). The miss count keeps
+      // climbing, so the next pass whose read SUCCEEDS decides - on evidence, not on an outage.
+      if (mk === null) continue
       if (mk?.resolved || mk?.resolution !== undefined) continue   // settlement path will book it
       console.warn(`[auto-trader] ledger trade not held at venue on ${misses} checks, dropping: ${t.marketId} ${t.outcome} x${t.shares}`)
       this.episodes?.record('kalshi', 'orphan-ledger', { marketId: t.marketId, outcome: t.outcome, shares: t.shares, entryPrice: t.entryPrice, ageMin: Math.round((now - t.createdAt) / 60_000) })
@@ -4865,7 +4877,9 @@ export class AutoTrader {
       const epoch = this.config.killEpochTs ?? 0
       const firstFill = new Map<string, number>()
       if (epoch > 0) {
-        for (const h of this.engine.getHistory(undefined, VENUE)) {
+        // `getHistory()` defaults to the newest 100 rows - under 13 h of fills - so every older position's
+        // settlement missed its first fill and was booked as current instead of legacy (audit B-41).
+        for (const h of this.engine.getHistory(100_000, VENUE)) {
           if (!h.timestamp) continue // any fill (maker sells included) marks when the position was first entered
           const prev = firstFill.get(h.marketId)
           if (prev === undefined || h.timestamp < prev) firstFill.set(h.marketId, h.timestamp)

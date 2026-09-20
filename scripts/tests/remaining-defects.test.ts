@@ -13,6 +13,8 @@ import { cfObservation } from '../../src/main/venues/cfReferenceShadow'
 import { loadJsonOrQuarantine } from '../../src/main/store/json'
 import { LeadLagEngine } from '../../src/main/strategies/leadLag'
 import { entryFeeDollars } from '../../src/main/strategies/autoTrader'
+import { PaperBroker } from '../../src/main/engine/paper'
+import { PARAM_BOUNDS, planParameterChanges } from '../../src/main/intelligence/nightlyReview'
 
 const dir = mkdtempSync(join(tmpdir(), 'oracle-remaining-'))
 const originalFetch = globalThis.fetch
@@ -326,6 +328,64 @@ async function main() {
       assert.equal(q.source, 'clob-book')
     } finally { globalThis.fetch = saved }
   })
+  // ----- audit 2026-09-19 lows, fixed 2026-09-20 (backlog 174) -----
+  await test('B-42: a torn last journal line keeps every row before it and still blocks submissions', () => {
+    const p = join(dir, 'b42-journal.jsonl')
+    const good = { clientOrderId: 'c1', venue: 'kalshi', marketId: 'M1', outcome: 'YES', side: 'buy', version: 'v', requestedAt: 1, state: 'pending' }
+    const acked = { clientOrderId: 'c2', venue: 'kalshi', marketId: 'M2', outcome: 'YES', side: 'buy', version: 'v', requestedAt: 2, state: 'acknowledged', orderId: 'o2' }
+    writeFileSync(p, JSON.stringify(good) + '\n' + JSON.stringify(acked) + '\n' + '{"clientOrderId":"c3","ven')
+    const j = new OrderJournal(p)
+    assert.equal(j.pending('kalshi').length, 1, 'the reservation before the torn line survives')
+    assert.equal(j.attribution('kalshi', 'o2')?.clientOrderId, 'c2', 'attribution before the torn line survives')
+    assert.throws(() => j.begin({ venue: 'kalshi', marketId: 'M9', outcome: 'YES', side: 'buy' } as any), /Torn last journal line/)
+  })
+  await test('B-43: two paper sessions never issue the same order id', () => {
+    const a: any = new PaperBroker('kalshi', 'USD', 100, join(dir, 'b43-a.json'))
+    const b: any = new PaperBroker('kalshi', 'USD', 100, join(dir, 'b43-b.json'))
+    const quote = { price: 0.5, bid: 0.49, ask: 0.51 } as any
+    const plan = { avgPrice: 0.5, maxShares: 10 } as any
+    const idA = a.buy({ venue: 'kalshi', marketId: 'M', outcome: 'YES', amount: 1 }, quote, plan).orderId
+    const idB = b.buy({ venue: 'kalshi', marketId: 'M', outcome: 'YES', amount: 1 }, quote, plan).orderId
+    assert.notEqual(idA, idB, 'paper-1 was reissued every launch and the venue:id dedupe dropped the collisions')
+    assert.match(idA, /^paper-/)
+  })
+  await test('B-45: a degraded portfolio read does not restart the snapshot age', async () => {
+    let fail = false
+    const adapter: any = {
+      currency: 'USD',
+      getAccount: async () => { if (fail) throw new Error('429'); return { balance: 50 } },
+      getPositions: async () => { if (fail) throw new Error('429'); return [] },
+      getOpenOrders: async () => []
+    }
+    const e: any = new TradingEngine({ get: () => adapter } as any, { record: () => undefined } as any)
+    e.setExecutionMode('live')
+    const first = await e.getPortfolio('kalshi')
+    const stampedAt = e.portfolioCache.get('live:kalshi').at
+    fail = true
+    const realNow = Date.now
+    Date.now = () => realNow() + 3 * 3600_000
+    try {
+      const again = await e.getPortfolio('kalshi')
+      assert.equal(again, first, 'the degraded read serves the last good snapshot')
+      assert.equal(e.portfolioCache.get('live:kalshi').at, stampedAt, 'and does not re-stamp it as fresh')
+    } finally { Date.now = realNow }
+  })
+  await test('B-46/B-47: the review allow-list holds no size knob and no prototype key', () => {
+    assert.equal(Object.prototype.hasOwnProperty.call(PARAM_BOUNDS.kalshi, 'quoterMaxMarkets'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(PARAM_BOUNDS.kalshi, 'convergenceMaxDailyTrades'), false)
+    const proposals: any[] = [
+      { target: 'kalshi', key: '__proto__', value: 3 },
+      { target: 'kalshi', key: 'constructor', value: 3 },
+      { target: 'kalshi', key: 'toString', value: 3 },
+      { target: 'kalshi', key: 'hasOwnProperty', value: 3 },
+      { target: 'kalshi', key: 'quoterMaxMarkets', value: 8 },
+      { target: 'kalshi', key: 'convergenceMaxDailyTrades', value: 6 }
+    ]
+    const plan = planParameterChanges(proposals, { fadeEnabled: true } as any, {}, true, true)
+    assert.equal(plan.apply.length, 0, 'nothing on this list may be applied')
+    assert.equal(plan.skipped.filter(s => s.reason === 'not in the allow-list').length, proposals.length)
+  })
+
   console.log(`remaining-defects: ${passed} scenarios passed`)
 }
 main().catch(e => { console.error(e); process.exitCode = 1 }).finally(() => { globalThis.fetch = originalFetch; rmSync(dir, { recursive: true, force: true }) })

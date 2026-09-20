@@ -69,8 +69,11 @@ export interface ConvergenceTrade {
   modeledWinProbability?: number
   strategyVersion?: string
   contracts: number
+  /** Contracts the venue actually filled. Absent on rows written before 2026-09-20 (audit B-37). */
+  filledContracts?: number
   closeTime: string
-  status: 'no_fill' | 'error' | 'shadow' | 'filled' | 'settled'
+  /** `uncertain` = the order POST was in flight when the process exited; never graded, blocks its event (audit B-38). */
+  status: 'no_fill' | 'error' | 'shadow' | 'filled' | 'settled' | 'uncertain'
   result?: 'yes' | 'no'
   realizedPnlCents?: number
 }
@@ -257,7 +260,9 @@ export class CryptoConvergenceEngine {
       const won = resolution === t.outcome
       t.status = 'settled'
       t.result = resolution.toLowerCase() as 'yes' | 'no'
-      t.realizedPnlCents = +((won ? (1 - t.costPrice) * 100 : -t.costPrice * 100) * t.contracts - t.feeCents * t.contracts).toFixed(2)
+      // A 0.4-of-1 partial IOC used to be graded as a full contract in this arm's ladder evidence (audit B-37).
+      const size = t.filledContracts ?? t.contracts
+      t.realizedPnlCents = +((won ? (1 - t.costPrice) * 100 : -t.costPrice * 100) * size - t.feeCents * size).toFixed(2)
       if (won) this.state.wins++
       else this.state.losses++
       this.state.realizedPnlCents += t.realizedPnlCents
@@ -270,7 +275,7 @@ export class CryptoConvergenceEngine {
    */
   /** Kalshi tickers with a filled, unsettled convergence position (audit 2026-09-19, B-27/B-28). */
   heldTickers(): Set<string> {
-    return new Set(this.state.trades.filter((t) => t.status === 'filled').map((t) => t.marketTicker))
+    return new Set(this.state.trades.filter((t) => t.status === 'filled' || t.status === 'uncertain').map((t) => t.marketTicker))
   }
 
   async scanAndExecute(
@@ -402,7 +407,7 @@ export class CryptoConvergenceEngine {
           // observations, not positions; permit up to three bounded retries
           // in the fixed T-5 window instead of idling after one missed quote.
           const sameEvent = this.state.trades.filter((t) => (t.eventTicker ?? t.marketTicker) === eventTicker)
-          if (sameEvent.some((t) => t.status === 'filled' || t.status === 'settled') || sameEvent.filter((t) => t.status === 'no_fill' || t.status === 'error').length >= 3) {
+          if (sameEvent.some((t) => t.status === 'filled' || t.status === 'settled' || t.status === 'uncertain') || sameEvent.filter((t) => t.status === 'no_fill' || t.status === 'error').length >= 3) {
             skip.event++
             continue
           }
@@ -452,12 +457,18 @@ export class CryptoConvergenceEngine {
             strategyVersion: 'convergence-v2-vol-0.20-0.40',
             contracts: count,
             closeTime: m.close_time,
-            status: canTrade ? 'no_fill' : 'shadow'
+            status: canTrade ? 'uncertain' : 'shadow'
           }
 
           this.log(`[convergence] QUALIFIED ${side} on ${m.ticker} (Strike $${strike} vs Spot $${spot}, Margin ${(margin * 100).toFixed(2)}%): Cost ${(cost * 100).toFixed(1)}c | Net Edge +${netEdgeCents.toFixed(1)}c/contract (T-${minutesToClose.toFixed(1)}m, Size: ${count})`)
 
+          // The row reaches disk BEFORE the POST. A process exit between the venue's fill and the push lost
+          // the fill outright, and after a restart nothing stopped a second IOC inside the same T-5 window
+          // (audit B-38). It stays `uncertain` - blocking its event, never graded - until the POST answers.
+          this.state.trades.push(trade)
+          this.state.totalTrades++
           if (canTrade) {
+            this.persist()
             try {
               const yesLegPrice = side === 'YES' ? cost : (yesBid ?? +(1 - cost).toFixed(4))
               const limit = side === 'YES'
@@ -475,17 +486,17 @@ export class CryptoConvergenceEngine {
                 limitPrice: limit,
                 timeInForce: 'immediate_or_cancel'
               })
+              trade.filledContracts = res.shares > 0 ? res.shares : 0
               trade.status = res.shares > 0 ? 'filled' : 'no_fill'
               if (res.shares > 0) ordersFired++
-              this.log(`[convergence] ${res.shares > 0 ? 'EXECUTED' : 'NO FILL'} ${side} on ${m.ticker} x${count} @ ${(cost * 100).toFixed(1)}c (Order ID: ${res.orderId})`)
+              this.log(`[convergence] ${res.shares > 0 ? 'EXECUTED' : 'NO FILL'} ${side} on ${m.ticker} x${res.shares.toFixed(2)} of ${count} @ ${(cost * 100).toFixed(1)}c (Order ID: ${res.orderId})`)
             } catch (e) {
               trade.status = 'error'
               this.log(`[convergence] place failed on ${m.ticker}: ${e instanceof Error ? e.message : String(e)}`)
             }
+            this.persist()
           }
 
-          this.state.trades.push(trade)
-          this.state.totalTrades++
           try {
             // Was `/\\.json$/` (a literal backslash in the pattern, never
             // matching) plus a backslash-newline line continuation, so the log

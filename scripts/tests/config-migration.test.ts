@@ -140,7 +140,10 @@ try {
     // B-06: a dutch basket keyed by its event ticker is held while any leg is held.
     {
       let positions: any[] = [{ venue: 'kalshi', marketId: 'EV-1-A', outcome: 'NO', shares: 1, avgPrice: 0.35 }]
-      const adapter: any = { getPositions: async () => positions, getMarket: async () => { throw new Error('no such market') } }
+      // The market read must SUCCEED and report an unresolved market for the drop to be evidence-based; a
+      // throwing read is the B-54 case and is asserted separately below.
+      let marketReadFails = false
+      const adapter: any = { getPositions: async () => positions, getMarket: async () => { if (marketReadFails) throw new Error('429'); return { id: 'EV-1-A', status: 'active' } } }
       const t: any = new AutoTrader({ getExecutionMode: () => 'live', getAdapter: () => adapter } as any, join(adir, 'dutch.json'))
       t.persist = () => {}
       t.state.openTrades = [{ id: 'd1', marketId: 'EV-1', question: 'q', outcome: 'NO', shares: 2, amount: 0.7, entryPrice: 0.35, strategy: 'dutch', createdAt: Date.now() - 11 * 60_000,
@@ -150,6 +153,14 @@ try {
       positions = []
       for (let i = 0; i < 3; i++) await t.reconcileLedgerWithVenue()
       assert.equal(t.state.openTrades.length, 0, 'a basket with no held leg is still dropped after three misses')
+      // B-54: a 429/5xx on the market read is not evidence of an orphan. The row waits for a read that works.
+      t.state.openTrades = [{ id: 'd2', marketId: 'EV-2', question: 'q', outcome: 'NO', shares: 1, amount: 0.35, entryPrice: 0.35, strategy: 'fade', createdAt: Date.now() - 11 * 60_000 }]
+      marketReadFails = true
+      for (let i = 0; i < 5; i++) await t.reconcileLedgerWithVenue()
+      assert.equal(t.state.openTrades.length, 1, 'a failed market read never drops a trade')
+      marketReadFails = false
+      await t.reconcileLedgerWithVenue()
+      assert.equal(t.state.openTrades.length, 0, 'the first successful read decides')
     }
     // B-09: a venue position the journal explains (an acknowledged buy of ours) is adopted under its strategy.
     {

@@ -3896,3 +3896,216 @@ the sentinel to the first sign that the walk is pushing the account's own reads 
 as backlog 156 with a 2026-09-19 trigger. **No restart:** nothing of this session's needed deploying, and
 `Start-ScheduledTask OracleTrader-App` would have put that minutes-old, never-run-in-production walk live
 with no way to verify it here; that restart belongs to the session that owns `1388cb7`.
+
+## 2026-09-20 11:00Z - daily maintenance (headless, task OracleTrader-Maintenance)
+
+## 1. Liveness
+
+Everything was already up; nothing needed reviving before the work started.
+
+| Check | State |
+|---|---|
+| App process | UP (pid 30316) → restarted for today's deploy, now pid 24188, started 11:15:43Z |
+| main.log | written 11:00:29Z at the start of the run, 11:15:59Z after the restart |
+| ladder.json `lastRunAt` | 10:47:59Z (2 min before the check) |
+| BTC collector | UP (pid 31316, `node scripts/btc-collector.mjs`) |
+| Nightly review | `reviews/2026-09-20.md` present, 1 attempt, no error |
+| Sentinel | `status.json` at 10:50:01Z (10 min), task Running, 0 repair sessions today |
+| HrrrShadow | forecasts.jsonl 10:20Z |
+| MentionShadow / PolyConsensus | run.log 10:50Z / 11:00Z |
+| MetaculusShadow | task last ran 10:35Z result 0; `last-mc.json` 10:35Z (pairs.jsonl only grows when a new pair appears) |
+| SpotShadow / ladder15 / crypto15 / mmsim / books recorders | all processes present, heartbeats 11:00Z |
+
+**Sentinel.** No incident files are OPEN — the newest is 2026-09-18T23:20Z and it is closed. Since yesterday's
+run the digest holds three mmsim relaunches (09-19 15:50Z after 133 min dark, 09-19 23:20Z, 09-20 09:20Z, all
+after the `429-storm` exit that is backlog 175, read due tomorrow), the standing "Kalshi position closes more
+than 45 days out" note on KXNCAAMBUAC-27-EKY, and the OpenRouter credit note. No repairs were dispatched and
+none were needed.
+
+## 2. Evidence
+
+**Venue-true P&L, last 24 h** (`venue-pnl.py` on fresh read-only dumps taken 11:01Z):
+
+- Kalshi **+$5.47** after $2.19 of fees, 105 settlements. Best: KXBTC15M +$1.93 over 20, KXBNB15M +$1.58 over 9,
+  KXKBOGAME +$2.44 on one. Worst: KXMLBRFI −$3.99 over 4, KXNCAAFGAME −$2.04 over 6, KXXRP15M −$1.73 over 7.
+- Polymarket US **$0.00** — 0 resolutions; every polyus arm is on operator hold. Balance $39.85, no positions.
+- Kalshi cash $62.39 + open positions at cost $28.89 = $91.29 (at market $91.09). 28 positions, 6 resting.
+- Shard balances: shard 0 **$3.94**, shard 1 $0.00, shard 2 $31.07, shard 3 $27.38. Weather trades need shard 0
+  and both weather arms are on hold, so $3.94 is not blocking anything today — but it is the shard to watch if
+  weather ever comes off hold.
+
+**Gates.** `btc-gate` FAIL/NOT YET: 820 strike-trades over 312 events and 19 days, net −0.18c/contract,
+Bonferroni LB −2.71c, day-clustered LB −1.38c. The event count passes; the edge does not exist yet.
+`quoter-shadow-gate`: insufficient sample for the ALLOWED cohort (42 settled proxy fills over 23 events; the bar
+is 30 over 40). The BLOCKED cohort is −4.54c with a CI that excludes zero, which keeps saying the gates refuse
+quotes that would have lost.
+
+**Sharp anchor.** `gradedN` 926, `gradedBrier` 106.85 (a SUM — backlog 44), `ruleN` 470, `ruleNet` **+22.28**.
+`anchor-grades.jsonl` gained **133 rows** since yesterday's run (930 total). The out-of-sample rule is still the
+only anchor number that is positive; the live arm is not (see §3).
+
+**Odds API spend.** 09-15 456, 09-16 534, 09-17 490, 09-18 496, **09-19 644**, 09-20 294 by 11:00Z. The cap is
+645/day and yesterday came within one credit of it. Nothing failed, but the margin is gone — noted for the
+operator below, no action taken (changing the poll plan is a behavioural change and today's was already spent).
+
+**Silent strategies.** The `[convergence]` scan note reads `found 0 setups, fired 0 orders` on every cycle and
+has for days — that is backlog 197 (our scan geometry, not the venue), already written up in §143. The
+`[quoter]` "fair-value on N of M" line has not appeared since 2026-09-07 because the quoter is disabled on an
+operator hold; the shadow meter is still running (34 candidates, 4 gated, would quote 0).
+
+**Log.** 452 warn/error lines in 24 h. 444 are the one IBKR gateway line (`Gateway API not available yet`).
+The other eight: five Cloudflare 429s on the Polymarket US open-orders read (absorbed by the degraded-read
+path), two IBKR request timeouts, one exhausted Kalshi universe fetch in the hunch pass. No errors at all since
+the restart.
+
+**Shadows.**
+
+- Mention base-rate: Brier **0.2132 base vs 0.1112 market** — the base rate is well behind the price (fed
+  n=48 0.1716 vs 0.0959; trump-period n=34 0.2719 vs 0.1328). Counterfactual 15c-gap taker trades: 39, mean
+  **−1.97c/contract**. Build-queue item 12's go-live trigger requires the base rate to BEAT the price after
+  fees. It loses. Not promoted, and the live-tracking half (backlog 179, latency rather than base rate) remains
+  the only reason to keep the corpus running.
+- Polymarket smart-money consensus: 9,960 signals, 8,736 graded, hit 0.71 at mean price 0.71, Brier 0.0910;
+  **+5.29c/contract at the Kalshi ask net of fee** (1,369 matched) and +4.27c at the Polymarket US price net of
+  fee (1,440). Build-queue item 13 is already BUILT (2026-09-14, §90) and `kalshi-consensus` is live on the
+  ladder at tiny-live, so this is confirmation, not a new trigger. Live consensus is +$2.52 over 18 settled.
+- Metaculus: 120 pairs on file, **no graded pairs yet** — nothing to report until the first resolution.
+
+## 3. Ladder
+
+`lastRunAt` 10:47:59Z, `lastPromotionAt` 2026-09-17T09:16Z. Twenty arms; the ladder is deciding on its own and
+its verdicts match the venue ledger.
+
+| Arm | Stage | Notch | Verdict / evidence since stage start |
+|---|---|---|---|
+| kalshi-fade | tiny-live | 1 | 36 settled, net −$0.12; calib −5.21c CI [−15.34, +4.93] |
+| kalshi-leadlag | tiny-live | 1 | 38 settled, net **+$1.57** (hard stop $10/notch since §139) |
+| kalshi-consensus | tiny-live | 1 | 18 settled, net **+$2.52**; CLV +15.0c, but adverse fills flagged |
+| kalshi-volume-spike | tiny-live | 1 | 4 settled, net −$1.30 |
+| kalshi-cross-venue | tiny-live | 1 | 2 settled, net −$0.73 |
+| convergence | tiny-live | — | 1 settled, net +$0.05; fires nothing (backlog 197) |
+| kalshi-dutch / mean-reversion / news / sports-anchor | tiny-live | 1 | 0 settled each; news −$0.11, sports-anchor −$0.50 |
+| kalshi-book-imbalance | disabled | 1 | cool-down to 2026-09-25 after 2 stops |
+| kalshi-momentum | disabled | 1 | cool-down to 2026-09-27 after 2 stops |
+| kalshi-flow-follow, kalshi-weather-morning, quoter, settlement, all four polyus arms | disabled | 1 | operator hold |
+
+Trade-quality flags the same arms the ladder has already stopped or is watching: book-imbalance −$12.42 over 37,
+momentum −$10.63 over 54, sports-anchor −$5.64 over 11 with adverse fills, volume-spike −$5.03 over 72,
+flow-follow −$3.20 over 14. The live consensus cohort `consensus:pre-matcher-20260919` is −$7.13 over 114, which
+is the pre-matcher stage and is correctly detached from the current one.
+
+Two ladder notes carried forward, neither actionable today: no arm has a `baseline.wTrades` yet (backlog 172,
+read due 2026-09-26), and `lastPromotionAt` has not moved in three days.
+
+## 4. What changed — backlog 174, the audit's twenty-four lows (REVIEW-CHANGES §144)
+
+Today's due read was the one pre-registered item: take B-36..B-59 from
+`docs/reports/AUDIT-BUG-CORRECTNESS-2026-09-19.md` in report order, in one round, once the §134 build had run
+24 h clean.
+
+**The gate was checked first.** The registration named 18:00Z as the end of the window and this run is at 11:00Z,
+so it was evaluated on its three observables over the ~20 h elapsed rather than deferred to a session that will
+not exist today: no `.corrupt-` file since 2026-09-03, zero `recovered-exit` and zero `dutch-unwind` lines in
+main.log ever, and the only warn class in 24 h is the known IBKR gateway line. Clean.
+
+**Eighteen fixed.** The ones that touch money or evidence: a Dutch basket is now graded at all (B-36 — `netN`
+was stuck at 0 forever, so only the hard stop could ever act on that arm); convergence grades the FILLED size
+instead of the requested one (B-37); a convergence order is on disk before the POST, so a crash between the
+venue's fill and our push can no longer lose the fill or let a second IOC fire in the same window (B-38); a
+ladder stop now stops the rest of the scan it lands in (B-39); an unrecognised `executionMode` can no longer
+take the live submission path (B-40); the stake cap no longer refuses an EXIT (B-52 — a cheap large position
+was untradeable out through the engine); a failed market read no longer drops a settled position as an orphan
+(B-54); and a refusal thrown before any POST is no longer logged by lead-lag as an "uncertain order" holding
+the window's budget (B-58, new `PreSubmitRefusal`). The rest: B-41 (venue-day split read 100 rows), B-42 (one
+torn journal line voided the whole journal), B-43 (paper order ids collided across sessions), B-45 (a degraded
+portfolio read re-stamped itself fresh — a multi-hour outage read as 10 seconds old to stake sizing), B-46 (the
+nightly review's allow-list held two ladder SIZE knobs and `reviewAutoApplyLive` is true by default, so it was
+moving live arm size against the ladder — both keys deleted), B-47 (prototype-named keys bypassed the
+allow-list), B-49 ("last 24h" was 24–48 h), B-50/B-51/B-57 (three operator-facing lies in the UI: tooltips
+claiming a disarm the code never does, a P&L panel that loaded forever, a refused exchange switch that said
+nothing).
+
+**Five deferred with their own items and triggers** — backlog 200 (B-44 paper reset ordering), 201 (B-48 polyus
+research log has no mode field; every polyus arm is on hold so nothing live is contaminated today), 202 (B-53
+200-fill reconcile window — derived, never observed, needs a reproduction), 203 (B-56 lead-lag running guard —
+read and deliberately NOT changed: shortening it would let a second sweep run against an order of unknown fate,
+the opposite of what B-58 just fixed), 204 (B-59 sports-anchor freshness — plumbing that changes what the arm
+trades).
+
+**Verification.** tsc clean, `electron-vite build` clean, **20/20 suites** with six new regression cases
+(`risk-controls`: the closeFrom exit above the cap, and `PreSubmitRefusal` vs a venue rejection;
+`remaining-defects`: the torn journal line, paper id collision, the portfolio-age re-stamp, the allow-list).
+Two existing tests were updated rather than the code: `ladder.test.ts` used a now-deleted allow-list key as its
+"live strategy" example, and `config-migration.test.ts`'s dutch scaffolding had a `getMarket` that always threw,
+which under B-54 is now "no evidence" — both were corrected and B-54 gained its own assertions on both sides.
+Backup `MAINT-2026-09-20`. Restart 11:15:43Z, main.log resumed 11:15:44Z, no error or warn line since.
+
+## 5. Build-queue trigger checks
+
+1. **Critic skill check** — trigger MET, rule does NOT fire, nothing changed (fourth consecutive day).
+   The script's own aggregate: vetoes below the rest, **−0.027 vs +0.042 per contract** (274 settled VETO, 310
+   ABSTAIN, 65 ERROR, 15 ALLOW_UNCHANGED) — conditions (i) and (ii) pass on the raw read. Condition (iii) fails,
+   and amendment 2 (currently enabled arms only) fails it twice over. The enabled arms present in BOTH cohorts
+   are cross-venue, fade, mean-reversion and volume-spike; the critic is skilled in two (cross-venue −6.7c,
+   volume-spike −23.4c per contract) and anti-skilled in two (fade +0.3c, mean-reversion +17.9c) — two of four is
+   not a strict majority, and ties count against. Restricted to those four arms VETO is **+$1.85 over 109 trades**
+   against ABSTAIN's +$13.09 over 222, so VETO's own net is ABOVE zero and condition (i) fails as well.
+   The `intelligenceEnabled: false` clause is not reached: skill is present in some arms and absent in others,
+   which is composition, not absence.
+2. **WebSocket book for execution** — not computable as written (backlog 56, needs a persisted per-UTC-day pair).
+3. **HRRR forecast source** — trigger is 2026-09-21, tomorrow. `hrrr-shadow.mjs report` runs then.
+4/5. **Kalshi fill channel, Avellaneda-Stoikov** — gated on a quoter notch ≥ 2 or a positive quoter checkpoint;
+   the quoter is disabled on an operator hold and its shadow cohort is still under sample. Not met.
+6/7. **Sports anchor on Polymarket US / player props** — gated on the Kalshi anchor's first checkpoint being net
+   positive. The live arm is −$5.64 over 11 with adverse fills. Not met.
+12. **Mention base-rate go-live** — not met and moving away: the base rate's Brier is nearly double the market's.
+13. **Polymarket consensus go-live** — already BUILT and live (2026-09-14); today's report confirms the edge.
+
+Today's item was the due read (174), which is what the build-queue rule asks for: the first item whose trigger
+is met, finished end to end. No second behavioural change was taken.
+
+## 6. For the operator
+
+**Nothing is needed from you.** The three standing notes, none of which block anything:
+
+- OpenRouter credit is **$12.04** and falling ~$0.25/day. The nightly review and the hunch pass fall back to
+  Ollama when it runs out; they do not stop.
+- The Odds API spent **644 of 645** credits yesterday. Nothing failed, but the daily margin is now one credit.
+  If it ever overruns, the sharp anchor's polls thin out — it does not cost money.
+- Kalshi shard 0 holds **$3.94**. Weather trades need shard 0 and both weather arms are on hold, so this is
+  inert today; it would matter the day weather comes off hold.
+
+## 7. Delivery
+
+This headless runner has no `SendUserFile` and no `PushNotification` (see MAINTENANCE-PROMPT §10). This file is
+`docs/reports/2026-09-20.md`; the 08:30 desktop task delivers it.
+
+## 8. Ten-line summary
+
+1. Everything was up: app, collector, ladder ticking, sentinel fresh, all six shadows within their windows, no
+   open incidents, nothing needed reviving.
+2. Venue-true last 24 h: **Kalshi +$5.47** on 105 settlements after $2.19 of fees; Polymarket US $0.00 (0
+   resolutions, all arms on hold).
+3. Today's pre-registered read was backlog 174 — the audit's twenty-four lows, B-36..B-59, in one round. The
+   clean-operation gate was checked and passed on all three observables.
+4. **Eighteen fixed**, five deferred with their own triggers (backlog 200–204). The consequential ones: a Dutch
+   basket is graded at all, convergence grades the filled size and journals before the POST, a ladder stop stops
+   the scan it lands in, the stake cap stops refusing exits, a failed market read stops dropping settled
+   positions, and lead-lag stops treating a pre-POST refusal as an uncertain fill.
+5. The nightly review's allow-list held two ladder SIZE knobs and `reviewAutoApplyLive` is true by default — it
+   lowered `convergenceMaxDailyTrades` 10→4 last night against the ladder's own setting. Both keys are gone.
+6. Verified: tsc clean, build clean, **20/20 suites** with six new regression cases; backup taken; app restarted
+   11:15:43Z and the scan loop is clean with no error or warn line since.
+7. Ladder unchanged and running: leadlag +$1.57/38 and consensus +$2.52/18 are the two positive live arms; fade
+   is −$0.12/36; book-imbalance and momentum are in cool-down; seven arms sit on operator holds.
+8. Sharp anchor `ruleNet` **+22.28** over 470, 133 new graded rows today; the live anchor arm is still −$5.64/11.
+9. Shadows: the mention base rate LOSES to the market (Brier 0.2132 vs 0.1112) and is not promotable; the
+   Polymarket consensus is +5.29c/contract net of fee over 8,736 graded, confirming an arm that is already live.
+10. **Nothing is needed from you.** Watch items only: OpenRouter $12.04, the Odds API at 644 of 645 credits
+    yesterday, and $3.94 left on Kalshi shard 0.
+
+**Gap noted:** MAINTENANCE-LOG.md has no 2026-09-19 section and there is no `docs/reports/2026-09-19.md`.
+The 09-19 07:00 run exited 0 while waiting on a background cull-gate, and `maintenance.ps1`'s per-day
+guard then skipped the 11:30 catch-up as "already completed". Filed as backlog 205; the guard should key
+on the written report, not the exit code. No attempt was made to reconstruct that day here - the ten
+changes it produced are all recorded in REVIEW-CHANGES sections 133-139.

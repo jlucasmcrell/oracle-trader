@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TradingEngine } from '../../src/main/engine/engine'
+import { PreSubmitRefusal } from '../../src/main/engine/engine'
 import { LeadLagEngine } from '../../src/main/strategies/leadLag'
 import { AutoTrader } from '../../src/main/strategies/autoTrader'
 import { Ladder, decideStage } from '../../src/main/ladder/ladder'
@@ -388,6 +389,48 @@ async function main(): Promise<void> {
     await rec.run()
     assert.equal(lines.filter(l => l.includes('run failed')).length, 2)
   })
+  // 2026-09-20 (audit B-52): the stake cap sat ABOVE the closeFrom exemption, so a cheap large position
+  // entered under the cap could not be exited through the engine at all.
+  await test('B-52: a closeFrom exit above the stake cap is not refused', async () => {
+    const placed: any[] = []
+    const venue: any = {
+      getPositions: async () => [],
+      getOpenOrders: async () => [],
+      placeOrder: async (o: any) => { placed.push(o); return { venue: 'ibkr', marketId: o.marketId, outcome: o.outcome, orderId: 'x', shares: 80, amount: o.amount, avgPrice: 0.2, timestamp: Date.now(), status: 'filled' } }
+    }
+    const e = new TradingEngine({ get: () => venue } as any, { record: () => undefined } as any)
+    e.setExecutionMode('live')
+    e.setRiskLimits({ maxStakePerBet: 10, maxOpenPositions: 80 })
+    await assert.rejects(() => e.placeOrder({ venue: 'ibkr', marketId: 'B', outcome: 'NO', amount: 65 }), /max stake per bet/)
+    const res = await e.placeOrder({ venue: 'ibkr', marketId: 'A', outcome: 'NO', amount: 65, closeFrom: 'A' } as any)
+    assert.equal(res.shares, 80)
+    assert.equal(placed.length, 1, 'the exit reached the venue')
+  })
+  // 2026-09-20 (audit B-58): a refusal raised before any POST must be distinguishable from an ambiguous
+  // response, or lead-lag logs it as an "uncertain order" and holds the window's budget and direction seat
+  // for a sweep that never left the process.
+  await test('B-58: pre-submission refusals are a PreSubmitRefusal, a venue rejection is not', async () => {
+    const offline: any = {
+      getPositions: async () => { throw new Error('positions offline') },
+      getOpenOrders: async () => [],
+      placeOrder: async () => { throw new HttpError(400, 'rejected') }
+    }
+    const e = new TradingEngine({ get: () => offline } as any, { record: () => undefined } as any)
+    e.setExecutionMode('live')
+    e.setRiskLimits({ maxStakePerBet: 1, maxOpenPositions: 80 })
+    await assert.rejects(() => e.placeOrder({ venue: 'kalshi', marketId: 'A', outcome: 'YES', amount: 9 }),
+      (err: any) => err instanceof PreSubmitRefusal && /max stake per bet/.test(err.message))
+    e.setRiskLimits({ maxStakePerBet: 0, maxOpenPositions: 2 })
+    await assert.rejects(() => e.placeOrder({ venue: 'kalshi', marketId: 'A', outcome: 'YES', amount: 0.5 }),
+      (err: any) => err instanceof PreSubmitRefusal && /Position cap check failed/.test(err.message))
+    const up: any = { ...offline, getPositions: async () => [] }
+    const open = new TradingEngine({ get: () => up } as any, { record: () => undefined } as any)
+    open.setExecutionMode('live')
+    open.setRiskLimits({ maxStakePerBet: 0, maxOpenPositions: 80 })
+    await assert.rejects(() => open.placeOrder({ venue: 'kalshi', marketId: 'A', outcome: 'YES', amount: 0.5 }),
+      (err: any) => err instanceof HttpError && !(err instanceof PreSubmitRefusal))
+  })
+
   console.log(`risk-controls: ${passed} scenarios passed`)
   finished = true
 }
