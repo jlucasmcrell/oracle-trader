@@ -300,5 +300,14 @@ eq('stage: no cluster count cannot add size (2026-09-19)', decideStage({ n: 20, 
   eq('weighted: no trades, no stats', weightedTraderStats(c, {}, 0), null)
 }
 
+// External review GLM 5.3, F-02: the 100-trade sign stop does not decide lead-lag; the band and the hard stop do.
+{
+  const flat = { n: 120, netDollars: -0.4, mean: -0.0033, se: 0.05, sd: 0.45, clusters: 5, unit: '$', stake: 0.5 }
+  eq('sign stop: an ordinary arm at 100+ trades and net not positive stops', decideStage(flat, 1, 5).kind, 'stop')
+  eq('sign stop: an exempt arm holds on the same evidence', decideStage({ ...flat, signStopExempt: true }, 1, 5).kind, 'hold')
+  eq('sign stop: an exempt arm still stops on a wholly negative band', decideStage({ ...flat, netDollars: -4, mean: -0.2, se: 0.05, signStopExempt: true }, 1, 5).kind, 'stop')
+  eq('sign stop: an exempt arm still hits the hard stop', decideStage({ ...flat, netDollars: -5.01, signStopExempt: true }, 1, 5).kind, 'stop')
+}
+
 console.log(`ladder: ${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

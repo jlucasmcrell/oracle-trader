@@ -213,6 +213,13 @@ export interface AdverseEvidence {
   coverage?: number
 }
 export interface StageEvidence {
+  /**
+   * Exempt from the 100-trade SIGN stop (band stop and hard stop still apply). Set for lead-lag only: its rows
+   * disperse ~45c around an edge measured in single cents, and `scripts/ladder-power-sim.ts` (the production
+   * decideStage on a true +1.5c arm at its volume) had the sign rule stop it in 67 of 100 thirty-day runs - the
+   * rule was deciding the account's one earning arm on noise (external review GLM 5.3, F-02; 2026-09-19).
+   */
+  signStopExempt?: boolean
   /** Settled trades since the current stage began. */
   n: number
   netDollars: number
@@ -534,6 +541,9 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
       return { kind: 'hold', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net positive, but the 95% lower bound is ${lo95.toFixed(2)}${u} - a small win is a win, not a reason to add size` }
     }
     if (ev.netDollars > 0) return up(`${at}: ${THOROUGH_TRADES}+ trades, net positive and the 95% band clear of zero`)
+    if (ev.signStopExempt) {
+      return { kind: 'hold', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net not positive - held, not stopped: at this arm's variance the sign of the net cannot separate its measured edge from zero; the 80% band stop and the hard stop still apply` }
+    }
     return { kind: 'stop', checkpoint, reason: `${at}: ${THOROUGH_TRADES}+ trades and net not positive` }
   }
   return { kind: 'hold', checkpoint, reason: `${at}: inconclusive, keep testing` }
@@ -1238,12 +1248,12 @@ export class Ladder {
       return null
     }
     const stake = 0.5 * notch
-    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake }
+    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true }
     const pnl = await this.engine.getLivePnl('kalshi').catch(() => null)
     if (!pnl?.details) return null
     const rows = pnl.details.filter((d) => d.timestamp >= since && swept.has(d.marketId))
     const ci = clusteredMean(rows.map((r) => ({ v: r.realizedPnl, g: new Date(r.timestamp).toISOString().slice(0, 10) })))
-    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake }
+    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake, signStopExempt: true }
   }
 
   /** Closed trades of one mini strategy since `since`: value = P&L dollars, group = market. */

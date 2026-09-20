@@ -191,7 +191,11 @@ function registerIpc(): void {
     return adapter.getOrderBook(marketId)
   })
   ipcMain.handle(IPC.portfolioGet, (_e, venue: VenueId, mode?: ExecutionMode) => engine.getPortfolio(venue, mode))
-  ipcMain.handle(IPC.portfolioLivePnl, (_e, venue: VenueId) => engine.getLivePnl(venue))
+  ipcMain.handle(IPC.portfolioLivePnl, async (_e, venue: VenueId) => {
+    const pnl = await engine.getLivePnl(venue)
+    // The panel shows the newest rows; the full list stays in the engine for the ladder's evidence (GLM F-04).
+    return pnl?.details && pnl.details.length > 1000 ? { ...pnl, details: pnl.details.slice(0, 1000) } : pnl
+  })
   ipcMain.handle(IPC.portfolioOpenOrders, async (_e, venue: VenueId) => {
     if (engine.getExecutionMode() !== 'live') return []
     const adapter = engine.getAdapter(venue)

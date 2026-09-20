@@ -675,7 +675,10 @@ export class TradingEngine {
         toTs: times.length ? Math.max(...times) : undefined,
         // Totals above cover the whole history; the row list crosses IPC to
         // the renderer on every poll, so cap it at the newest 1,000 rows.
-        details: [...settlements].sort((a, b) => b.timestamp - a.timestamp).slice(0, 1000)
+        // Every row: the ladder's lead-lag and quoter evidence join against this list, and a 1,000-row cap
+        // silently dropped a stage's oldest settlements once the account passed it (1,420 lifetime on 2026-09-19;
+        // external review GLM 5.3, F-04). The renderer's copy is trimmed at the IPC boundary instead.
+        details: [...settlements].sort((a, b) => b.timestamp - a.timestamp)
       }
     }
     // A fills feed is not automatically a realized-P&L feed. Polymarket US

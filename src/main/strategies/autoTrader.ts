@@ -4707,6 +4707,10 @@ export class AutoTrader {
         s.markoutN = (s.markoutN ?? 0) + 1
         s.markoutSq = (s.markoutSq ?? 0) + trade.markout5mCents * trade.markout5mCents
         s.markoutSqN = (s.markoutSqN ?? 0) + 1
+        // Per-day sums: the markout veto's band is still unclustered (external review GLM 5.3, F-08; BACKLOG 183).
+        const md = ((s.markoutByDay ??= {})[nowDate()] ??= { n: 0, sum: 0 })
+        md.n++
+        md.sum += trade.markout5mCents
       } else {
         // Counted, because the trades that miss a markout are not a random sample of the arm's trades -
         // they are the ones that closed inside five minutes, and those are measurably the losers.

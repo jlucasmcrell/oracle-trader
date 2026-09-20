@@ -19,6 +19,7 @@ Split: SELECTION half (trades before 2025-07-01) and EVALUATION half (2025-07-01
 import argparse
 import datetime as dt
 import math
+from bands import cluster_se, t90
 import os
 import random
 import sys
@@ -128,8 +129,12 @@ def clustered_excess(cells):
         return None, None, 0
     m = sum(100.0 * c[1] - c[2] - c[3] for c in cells) / sw
     # residual sums per cluster around the pooled mean
-    se = math.sqrt(sum((100.0 * c[1] - c[2] - c[3] - m * c[0]) ** 2 for c in cells)) / sw
-    return m, se, len(cells)
+    # Returns the 80% HALF-WIDTH, not the SE: G/(G-1)-corrected cluster SE times t(0.90, G-1) (bands.py; external
+    # review GLM 5.3, F-01 - the tables used 1.28 x an uncorrected SE at any cluster count).
+    se = cluster_se([100.0 * c[1] - c[2] - c[3] - m * c[0] for c in cells], sw)
+    if se is None:
+        return None, None, len(cells)
+    return m, t90(len(cells) - 1) * se, len(cells)
 
 
 sections = []
@@ -204,12 +209,12 @@ for grp in groups:
             mm, mse, _ = clustered_excess(mk)
             band_rows.append((grp, half, f'{lo_c:02d}-{hi_c:02d}', D, contracts, m, se, mm, mse))
 
-head = ('| group | half | price paid | day-clusters | contracts | taker net c | +-1.28 SE | maker net c (no fee) | +-1.28 SE |\n'
+head = ('| group | half | price paid | day-clusters | contracts | taker net c | +-80% (t, G-1 df) | maker net c (no fee) | +-80% (t, G-1 df) |\n'
         '|---|---|---|---|---|---|---|---|---|\n')
 body = ''
 for grp, half, band, D, c, m, se, mm, mse in band_rows:
-    flag = ' **' if (m - 1.28 * se) > 0 else ''
-    body += f'| {grp} | {half} | {band} | {D} | {c:,.0f} | {m:+.2f}{flag} | {1.28 * se:.2f} | {mm:+.2f} | {1.28 * mse:.2f} |\n'
+    flag = ' **' if (m - se) > 0 else ''
+    body += f'| {grp} | {half} | {band} | {D} | {c:,.0f} | {m:+.2f}{flag} | {se:.2f} | {mm:+.2f} | {mse:.2f} |\n'
 sections.append(('Net excess return of buying the side at its traker price, cents per contract after the taker fee, '
                  'by group, half and 10c band of the price paid (** = day-clustered 80% lower bound above zero)', head + body))
 
@@ -230,8 +235,8 @@ for htc in htcs:
             if contracts < 5000:
                 continue
             pol_rows.append((htc, half, f'{lo_c:02d}-{hi_c:02d}', D, contracts, m, se))
-head = '| horizon | half | price paid | day-clusters | contracts | taker net c | +-1.28 SE |\n|---|---|---|---|---|---|---|\n'
-body = ''.join(f'| {h} | {half} | {b} | {D} | {c:,.0f} | {m:+.2f}{" **" if (m - 1.28 * se) > 0 else ""} | {1.28 * se:.2f} |\n'
+head = '| horizon | half | price paid | day-clusters | contracts | taker net c | +-80% (t, G-1 df) |\n|---|---|---|---|---|---|---|\n'
+body = ''.join(f'| {h} | {half} | {b} | {D} | {c:,.0f} | {m:+.2f}{" **" if (m - se) > 0 else ""} | {se:.2f} |\n'
                for h, half, b, D, c, m, se in pol_rows)
 sections.append(('Politics only: taker net by horizon, half and band', head + body))
 
@@ -247,8 +252,8 @@ for grp in groups:
     if m is None or D < 5:
         continue
     bias_rows.append((grp, D, sum(c[0] for c in cells), m, se))
-head = '| group | day-clusters | contracts | realised YES minus price (c) | +-1.28 SE |\n|---|---|---|---|---|\n'
-body = ''.join(f'| {g} | {D} | {c:,.0f} | {m:+.2f} | {1.28 * se:.2f} |\n' for g, D, c, m, se in bias_rows)
+head = '| group | day-clusters | contracts | realised YES minus price (c) | +-80% (t, G-1 df) |\n|---|---|---|---|---|\n'
+body = ''.join(f'| {g} | {D} | {c:,.0f} | {m:+.2f} | {se:.2f} |\n' for g, D, c, m, se in bias_rows)
 sections.append(('Mean bias of YES price 10-90c, evaluation half (what calibratedYesRate() assumes is zero)', head + body))
 
 md = [f'# Calibration slopes by domain, Becker Kalshi archive ({today})', '',

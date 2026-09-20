@@ -13,6 +13,7 @@ and "what the IOC actually filled" is visible rather than assumed away.
 """
 import json, math, os, sys, time, urllib.parse, urllib.request
 from collections import defaultdict
+from bands import cluster_band
 from datetime import datetime, timezone
 
 A = os.path.join(os.environ['APPDATA'], 'oracle-trader')
@@ -88,8 +89,9 @@ def band(xs, days):
     m = sum(xs) / n
     g = defaultdict(float)
     for x, dd in zip(xs, days): g[dd] += x - m
-    se = math.sqrt(sum(v * v for v in g.values())) / n
-    return m, m - 1.28 * se, m + 1.28 * se, len(g)
+    # bands.py: G/(G-1) correction and t on G-1 df, the app's own convention (external review GLM 5.3, F-01).
+    _, lo, hi, G = cluster_band(m, list(g.values()), n)
+    return m, (float('nan') if lo is None else lo), (float('nan') if hi is None else hi), G
 
 
 def show(label, rs):

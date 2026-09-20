@@ -891,7 +891,7 @@ async function leadLagContainmentTests(): Promise<void> {
     const u = String(url)
     if (u.includes('gamma-api.polymarket.com/events')) {
       const coin = (/slug=([a-z0-9]+)-updown/i.exec(u)?.[1] ?? 'x').toUpperCase()
-      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, clobTokenIds: JSON.stringify([`${coin}_TOKEN`]) }] }] } as unknown as Response
+      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, outcomes: JSON.stringify(['Up', 'Down']), clobTokenIds: JSON.stringify([`${coin}_TOKEN`, `${coin}_DOWN`]) }] }] } as unknown as Response
     }
     if (u.includes('clob.polymarket.com/book')) return { ok: true, json: async () => ({ bids: [{ price: '0.59', size: '100' }], asks: [{ price: '0.61', size: '100' }] }) } as unknown as Response
     if (u.includes('/orderbook')) return bookFor(u)
@@ -940,7 +940,7 @@ async function leadLagContainmentTests(): Promise<void> {
     const u = String(url)
     if (u.includes('gamma-api.polymarket.com/events')) {
       const coin = (/slug=([a-z0-9]+)-updown/i.exec(u)?.[1] ?? 'x').toUpperCase()
-      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, clobTokenIds: JSON.stringify([`${coin}_TOKEN`]) }] }] } as unknown as Response
+      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, outcomes: JSON.stringify(['Up', 'Down']), clobTokenIds: JSON.stringify([`${coin}_TOKEN`, `${coin}_DOWN`]) }] }] } as unknown as Response
     }
     if (u.includes('clob.polymarket.com/book')) return { ok: true, json: async () => ({ bids: [{ price: '0.59', size: '100' }], asks: [{ price: '0.61', size: '100' }] }) } as unknown as Response
     if (u.includes('/orderbook')) return bookFor(u)
@@ -973,7 +973,7 @@ async function leadLagContainmentTests(): Promise<void> {
     const u = String(url)
     if (u.includes('gamma-api.polymarket.com/events')) {
       const coin = (/slug=([a-z0-9]+)-updown/i.exec(u)?.[1] ?? 'x').toUpperCase()
-      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, clobTokenIds: JSON.stringify([`${coin}_TOKEN`]) }] }] } as unknown as Response
+      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, outcomes: JSON.stringify(['Up', 'Down']), clobTokenIds: JSON.stringify([`${coin}_TOKEN`, `${coin}_DOWN`]) }] }] } as unknown as Response
     }
     if (u.includes('clob.polymarket.com/book')) return { ok: true, json: async () => ({ bids: [{ price: '0.59', size: '100' }], asks: [{ price: '0.61', size: '100' }] }) } as unknown as Response
     if (u.includes('/orderbook')) return bookFor(u)

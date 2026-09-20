@@ -19,6 +19,7 @@ import sys
 import time
 import urllib.request
 from collections import defaultdict
+from bands import cluster_band
 from datetime import datetime, timezone
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -152,8 +153,9 @@ def band_stats(ds):
     g = defaultdict(float)
     for d in ds:
         g[d[5]] += d[4] - m
-    se = math.sqrt(sum(v * v for v in g.values())) / n
-    return n, len(g), sum(1 for d in ds if d[3]), m, m - Z * se, m + Z * se
+    # bands.py: G/(G-1) correction and t on G-1 df, the app's own convention (external review GLM 5.3, F-01).
+    _, lo, hi, G = cluster_band(m, list(g.values()), n)
+    return n, G, sum(1 for d in ds if d[3]), m, (float('nan') if lo is None else lo), (float('nan') if hi is None else hi)
 
 
 print(f'\nsettled tickers with a qualifying book: {len({d[0] for d in decisions})}; unsettled (excluded) {unsettled}')

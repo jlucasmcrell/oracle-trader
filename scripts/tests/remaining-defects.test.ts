@@ -213,6 +213,33 @@ async function main() {
     const opened: any = { createdAt: Date.now(), entryPrice: 0.1, entrySideMid: 0.07 }
     t.stampDayMark(opened); assert.equal(opened.dayMark.mid, 0.07, 'the spread paid at entry is not a loss')
   })
+  await test('GLM F-06: the Up token is found by outcome name; a market that names none is skipped', async () => {
+    const saved = globalThis.fetch
+    const gamma = (outcomes: unknown) => (async () => ({ ok: true, json: async () => [{ markets: [{ id: 'pm1', outcomes, clobTokenIds: '["tokA","tokB"]' }] }] })) as any
+    try {
+      const a: any = new LeadLagEngine(join(dir, 'll-f06a.json'), () => undefined)
+      globalThis.fetch = gamma('["Down", "Up"]')
+      assert.equal((await a.resolveSlug('btc-updown-15m-1'))?.upToken, 'tokB', 'a reversed listing resolves to the token named Up')
+      globalThis.fetch = gamma('["Up", "Down"]')
+      assert.equal((await a.resolveSlug('btc-updown-15m-2'))?.upToken, 'tokA')
+      const logs: string[] = []
+      const b: any = new LeadLagEngine(join(dir, 'll-f06b.json'), (s: string) => logs.push(s))
+      globalThis.fetch = gamma('["Yes", "No"]')
+      assert.equal(await b.resolveSlug('x-updown-15m-3'), null)
+      assert.equal(await b.resolveSlug('x-updown-15m-3'), null)
+      assert.equal(logs.filter((l) => /do not identify the Up token/.test(l)).length, 1, 'refused once in the log, not every poll')
+      globalThis.fetch = gamma(undefined)
+      assert.equal(await b.resolveSlug('x-updown-15m-4'), null, 'no outcomes array: skipped, never guessed')
+    } finally { globalThis.fetch = saved }
+  })
+  await test('GLM F-04: settlement evidence is not truncated at 1,000 rows', async () => {
+    const rows = Array.from({ length: 1500 }, (_, i) => ({ venue: 'kalshi', marketId: 'M' + i, realizedPnl: 0.01, fee: 0, shares: 1, timestamp: 1_789_000_000_000 + i * 1000 }))
+    const adapter: any = { id: 'kalshi', getSettlements: async () => rows }
+    const e = new TradingEngine({ get: () => adapter, list: () => [adapter] } as any, new HistoryStore(join(dir, 'h-f04.json')), { paperStateDir: join(dir, 'f04') })
+    const pnl: any = await e.getLivePnl('kalshi' as any)
+    assert.equal(pnl.details.length, 1500)
+    assert.equal(pnl.details[0].marketId, 'M1499', 'newest first')
+  })
   await test('B-31: an unparseable state file is moved aside, never overwritten by the next persist', () => {
     const p = join(dir, 'state-b31.json')
     writeFileSync(p, '\ufeff{"trades": [1, 2')

@@ -426,6 +426,9 @@ export class LeadLagEngine {
 
   /** Live Polymarket price for the window: CLOB book first, CLOB midpoint second, never Gamma's stale outcomePrices. */
   /** Slug -> (up token, market id), from the cache when the window has been seen, else one Gamma lookup. */
+  /** Slugs refused for their outcomes array, so a standing refusal logs once and not every 10 s poll. */
+  private slugRefused = new Set<string>()
+
   private async resolveSlug(slug: string): Promise<{ upToken: string; marketId: string } | null> {
     const cached = this.slugCache.get(slug)
     if (cached) return cached
@@ -452,7 +455,26 @@ export class LeadLagEngine {
     } catch {
       tokenIds = []
     }
-    const upToken = tokenIds[0]
+    // Which token is "Up" comes from the market's own outcomes array, never from position: a market listed
+    // ["Down","Up"] would invert every gap computed on it - the arm would buy the wrong Kalshi side at real money
+    // and it would read as one more slightly negative market (external review GLM 5.3, F-06). Gamma lists
+    // ["Up","Down"] today (checked 2026-09-19); a market that names no Up outcome is skipped, not guessed.
+    let outcomes: string[] = []
+    try {
+      const rawO = pmMarket.outcomes
+      outcomes = typeof rawO === 'string' ? (JSON.parse(rawO) as string[]) : Array.isArray(rawO) ? (rawO as string[]) : []
+    } catch {
+      outcomes = []
+    }
+    const upIdx = outcomes.findIndex((o) => /^up$/i.test(String(o).trim()))
+    if (upIdx < 0 || outcomes.length !== tokenIds.length) {
+      if (!this.slugRefused.has(slug)) {
+        this.slugRefused.add(slug)
+        this.log(`[leadlag] ${slug}: outcomes ${JSON.stringify(outcomes)} do not identify the Up token among ${tokenIds.length}; pair skipped`)
+      }
+      return null
+    }
+    const upToken = tokenIds[upIdx]
     if (!upToken) return null
     const resolved = { upToken, marketId: String(pmMarket.id ?? slug) }
     this.slugCache.set(slug, resolved)

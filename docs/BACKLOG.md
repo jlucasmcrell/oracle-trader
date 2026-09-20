@@ -2104,3 +2104,33 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `minSideMid`/`maxSideMid`. Trigger: run `python scripts/stop-analysis.py` on **2026-10-03**, or sooner once
   consensus has >= 40 settled trades with a path. A rule is adopted only if it beats holding by more than its own
   day-clustered SE over >= 40 trades and >= 5 days, and it runs in shadow first.
+
+- **178. The -$5 hard stop is about one day's standard deviation at lead-lag volume (2026-09-19, §138, GLM F-02/F-09).
+  OPERATOR.** With the sign stop removed the hard stop still ends a true +1.5c arm in 72 of 100 thirty-day runs.
+  It is a loss limit, so it is the operator's. Trigger: with the null simulation (156) on **2026-09-26**, put the
+  table for -$5 / -$10 / -$15 per notch in front of the operator: stops of good arms avoided against dollars lost
+  on bad ones, under the record's own distribution of arm edges.
+- **179. Mention markets: the live-tracking half (2026-09-19, GLM F-10).** The record built the base-rate half and
+  measured it to lose; the winners' other half is latency - the market settles YES the instant the phrase is
+  said. Falsification first, no trading: over >= 10 broadcasts record (a) utterance-to-caption lag on the public
+  caption feed (yt-dlp, already the toolchain), (b) caption-to-95c-pin lag on Kalshi, (c) ask depth <= 95c at the
+  pin. Trigger: build the recorder onto the existing MentionShadow task by **2026-09-26**; dead if the book pins
+  within seconds or the depth is zero.
+- **180. Same-timestamp twins on slower horizons (2026-09-19, GLM F-11).** Lead-lag runs on 15-minute twins only;
+  whether hourly/daily Kalshi strikes have Polymarket twins that settle on the same index at the same instant is
+  unmeasured, and a slower horizon is less latency-sensitive. Trigger: one catalog scan by **2026-09-27**; no
+  aligned twins -> closed for the reason temperature arb closed (§119); any -> cadence shadow under a new
+  pre-registration.
+- **181. Polymarket US liquidity incentives and a benchmark-relative lab column (2026-09-19, GLM F-12/F-07).** Read
+  the published incentive pools once and add expected incentive per market-minute to the maker arms; and report
+  every lab arm against the benchmark arm as well as against zero. The §138 re-read with fills at the book price
+  flipped no label (every arm 3-9c negative), so nothing is being suppressed today. Trigger: the lab read on
+  **2026-09-24**.
+- **182. Settlement rows and contracts sold before settlement (2026-09-19, GLM F-13).** Unverified whether a Kalshi
+  settlement row nets out contracts sold earlier; every live arm holds, so impact is nil today. Trigger: on
+  **2026-09-25**, reconcile one buy-sell-settle specimen from the execution archive (fill direction is right from
+  the §134 build) against its settlement row.
+- **183. Day-cluster the markout veto band (2026-09-19, GLM F-08).** `statsBand` on the 5-minute markouts is a
+  plain band on same-day-correlated rows. No arm is held by it today. Per-day markout sums accumulate from the
+  §138 build (`markoutByDay`). Trigger: **2026-10-03**, or the first ladder reason that cites the markout band:
+  switch the veto to the day-clustered band once an arm has >= 30 bucketed markouts.

@@ -1,0 +1,700 @@
+Independent Review: oracle-trader (2026-09-19)
+Scope note. I read the repo at G:\PROJECTS\oracle-trader
+ in the operator's specified order (README → handbook → trade history → REVIEW-CHANGES → BACKLOG → pre-registrations → code). Runtime state under %APPDATA%\oracle-trader
+ was not available, so every live-behavior number is taken from the record, not re-measured. The working tree moved during this review — a maintenance session ran concurrently (autoTrader.ts grew 5,174→5,418 lines, leadLag.ts and ladder.ts also changed). Every citation below was re-verified against the final state I saw.
+
+I deliberately exclude §16 known defects and the findings already triaged in REVIEW-CHANGES §127/§129 and the two LLM Reviews/
+ files (ChatGPT's lab-estimand and fractional-C findings, DeepSeek Pro's era-A/regime argument — the record already adopted those).
+
+Findings
+F-01 / methodology / high / verified
+Location: scripts/backtests/leadlag_counterfactual.py:91-92
+, leadlag_orderbook_baseline.py:101-102, politics_favourite_live.py:37,155, calibration_slopes.py:207-212 vs src/main/ladder/ladder.ts:283,352-359
+, src/main/strategies/polyPaper.ts:86
+
+Claim: The research scripts that produce the record's published confidence bands use a clustered SE without the finite-cluster correction and with a fixed normal multiplier, contradicting the correction the app itself adopted after §127 — so every small-cluster band quoted in the docs is too narrow.
+
+Evidence: The scripts compute se = math.sqrt(sum(v*v for v in g.values())) / n
+ and return m, m - 1.28 * se, m + 1.28 * se (leadlag_counterfactual.py:91-92). The ladder's own clusteredSe carries the comment "The G/(G-1) finite-cluster correction. Without it this estimator is biased LOW, worst at the three-to-six clusters that a few days of trading produces - which is precisely when the ladder is deciding whether to double a live arm's size on it" (ladder.ts:354-359), and clusterT's comment reads "with two day-clusters the correct multiplier is 1.376, so a band drawn with 0.84 is 39% too narrow" (ladder.ts:283). Even polyPaper applies the correction: Math.sqrt(days/(days-1)*...)
+ (polyPaper.ts:86). The research scripts never got either fix.
+
+Failure: The trade history's headline — graded signal "+1.35c/contract (n=354, 80% band [+1.07, +1.63])" — is a G=2 band. Drawn with the ladder's own convention (t at 1 df, plus √(G/(G−1))=1.41 SE inflation) it widens to roughly [+0.4, +2.3]. Same convention produced the era-D gap-bucket cells at n=4–8, the per-coin reads, the politics closure, and every ** significance flag in the calibration-slope tables ("flag = ' **' if (m - 1.28 * se) > 0'", calibration_slopes.py:211). The pending verdicts — gap floor 10-02, ETH/HYPE 10-21, coin-cohort auto-narrow 10-04 — will all be read through these scripts. A band 2–3× too narrow converts "undecided" into "confirmed" for zero-edge rules.
+
+Test: Re-run one existing output (the era-D counterfactual) with clusteredSe's G/(G−1) and clusterT/clusterT95; the gap-floor pre-registration's judgment should require the ladder's helper, byte-identical.
+
+F-02 / methodology / high / verified (arithmetic assumptions stated)
+Location: docs/PREREGISTERED-leadlag-gap-floor.md:49-53
+, src/main/ladder/ladder.ts:252,273-277,304,434,453-461,514-518,1222-1247
+, docs/DEVELOPER-HANDBOOK.md §12.17
+, docs/reports/TRADE-HISTORY-2026-09-18-what-won-what-lost.md:206,229
+
+Claim: The decision bars cannot adjudicate the effect size the record itself plans for. At +1.5c/contract, the promote bars are unreachable (they require ~7–15c effects or months of clusters) and the only rule that fires — the 100-row sign rule — fires on noise about a third of the time even when the arm is genuinely profitable.
+
+Evidence and arithmetic: Planning number "+1.5c/contract" (TRADE-HISTORY:229, handbook §12.17). Gap-floor judgment: ">= 60 settled contracts across >= 5 day-clusters" (gap-floor.md:49). A 15m binary at mid prices has per-contract sd ≈ √(p(1−p)) ≈ 40–50c; 60 contracts over 5 clusters is 12/day → day-mean sd ≈ 11.5c → clustered SE ≈ 5.2c → the day-clustered 95% lower bound clears zero only at mean ≳ 2.13×5.2 ≈ +11c — 7× the planning number. The ladder's scale-up bar (clusterT95, ladder.ts:453-461) with ~75 settled markets/day, per-row sd ≈ 
+0.5
+:
+S
+E
+(
+G
+)
+≈
+0.5:SE(G)≈0.10/√G vs the +1.5c mean of ≈ 
+0.021
+/
+r
+o
+w
+→
+∗
+∗
+≳
+125
+d
+a
+y
+−
+c
+l
+u
+s
+t
+e
+r
+s
+∗
+∗
+.
+T
+h
+e
+T
+H
+O
+R
+O
+U
+G
+H
+s
+i
+g
+n
+r
+u
+l
+e
+(
+l
+a
+d
+d
+e
+r
+.
+t
+s
+:
+514
+−
+518
+)
+a
+t
+100
+r
+o
+w
+s
+:
+e
+x
+p
+e
+c
+t
+e
+d
+s
+u
+m
++
+0.021/row→∗∗≳125day−clusters∗∗.TheTHOROUGHsignrule(ladder.ts:514−518)at100rows:expectedsum+2.1, sd of sum ≈ 
+5.0
+→
+P
+(
+s
+t
+o
+p
+a
+t
+r
+u
+l
+y
++
+1.5
+c
+a
+r
+m
+)
+=
+1
+−
+Φ
+(
+0.42
+)
+≈
+∗
+∗
+o
+n
+e
+t
+i
+m
+e
+i
+n
+t
+h
+r
+e
+e
+∗
+∗
+.
+T
+h
+a
+t
+r
+u
+l
+e
+a
+l
+r
+e
+a
+d
+y
+f
+i
+r
+e
+d
+:
+t
+h
+e
+09
+−
+16
+s
+t
+o
+p
+a
+t
+−
+5.0→P(stopatruly+1.5carm)=1−Φ(0.42)≈∗∗onetimeinthree∗∗.Thatrulealreadyfired:the09−16stopat−0.82 on 200 rows is noise by this arithmetic.
+
+Failure: Between roughly +1.5c and −10c per contract, the ladder emits no band verdict it can stand behind; the operative decisions become calendar deadlines (10-02 starvation, 10-04 auto-narrow) and sign-rule coin flips. The machinery produces the appearance of adjudication while the data cannot support any verdict it offers — including for the arm the record calls its only measured edge.
+
+Test: Inject a synthetic +1.5c/contract edge into the deferred ladder null simulation (BACKLOG 156) and measure stop/hold/promote rates per checkpoint. That single run either confirms or refutes this finding, and it should run before the 10-02/10-04 deadlines fire.
+
+F-03 / fees / medium / verified (structure)
+Location: src/main/util/kalshiFee.ts:39-51
+ (fee model), docs/FEE-MODEL-VERIFICATION-LIVE-2026-09-18.md
+, TRADE-HISTORY:229
+
+Claim: The Kalshi taker fee at mid prices (1.75c) exceeds the entire planned net edge (+1.5c). Any signal with gross edge under ~2c at mid is structurally unprofitable as a Kalshi taker; only maker entries ($0 on plain quadratic series), extreme-price entries (fee → 0 as p→0/1), or venues that pay makers can monetize thin edges. The record knows the fee but never states this as a constraint on its strategy space.
+
+Evidence: Fee = ceil₄ₖₗ 0.07 × C × p(1−p); at p=0.5 that is 7×0.25 = 1.75c > +1.5c. The 6c-floor lead-lag trade at mid gives 29% of its raw signal to the venue before latency costs.
+
+Failure: Arms with 1–2c gross signals get tried as takers and bleed by construction; the fade's maker-first design and mmsim's maker test are the right responses, but the record's "strategies not tried" section doesn't apply the fee-floor filter to its own candidate list.
+
+Test: For each arm, state entry style against its fee floor before any new live test. (One line in the handbook's §12 doctrine would do it.)
+
+F-04 / correctness / medium / verified
+Location: src/main/engine/engine.ts:678
+, src/main/ladder/ladder.ts:1128,1244
+
+Claim: computeLivePnl caps details at the newest 1,000 settlement rows, and the ladder's evidence gatherers join against that capped list — so evidence silently truncates once a stage outlives 1,000 account-wide settlements.
+
+Evidence: engine.ts:678: details: [...settlements].sort((a, b) => b.timestamp - a.timestamp).slice(0, 1000). leadLagEvidence: pnl.details.filter((d) => d.timestamp >= since && swept.has(d.marketId)) (ladder.ts:1244); quoterEvidence filters the same list (ladder.ts:1128). The account already has 1,420 lifetime settled markets (per the record), and lead-lag alone adds ~30–70 settlements/day at era-D volume.
+
+Failure: A stage whose since predates the 1000th-newest settlement loses rows from every read: n shrinks, the mean re-biases toward the newest settlements, and clusters vanish — with no error surfaced. Latent today for young stages; guaranteed to bite at current volume.
+
+Test: Assert settlement-store count vs details.length
+ in getLivePnl (or give the evidence path a since-bounded query). One log line at the boundary makes it observable.
+
+F-05 / fees / low-medium / verified (code) + hypothesis (impact)
+Location: src/main/strategies/leadLag.ts:672,707
+, src/main/util/kalshiFee.ts:15,96-103,174
+, scripts/backtests/leadlag_counterfactual.py:25
+
+Claim: The lead-lag fee gate hardcodes the 1× taker rate while the venue bills sub-1× multipliers on other series; if any KX<COIN>15M series carries a multiplier ≠ 1, both the live gate and the graded signal misprice fees by that factor.
+
+Evidence: kalshiTakerFeeCentsFor(kYesAsk, sweepSizeFor(...)) passes no multiplier (leadLag.ts:672/707); kalshiTakerFeeCentsFor(yesPrice, contracts, multiplier?) defaults to rate 0.07 (kalshiFee.ts:174, 96-103). The header documents the hardcode ("leadLag.ts … hardcoded 0.07", kalshiFee.ts:15) and the D1 audit found 0.5×-shaped residual buckets plus 71 anomalous fills ("venue fee implies count/4") never resolved to series. The counterfactual script hardcodes the same 0.07 (leadlag_counterfactual.py:25).
+
+Failure: Conservative if the multiplier is <1 (gate over-estimates the fee, blocks marginal trades) — but then the graded "+1.35c" is also under-stated and the arm is being judged against a pessimistic counterfactual. Material either way at a 1.5c edge: a 0.5× multiplier is worth +0.87c/contract at mid.
+
+Test: One public, unauthenticated GET per series (/series/KXBTC15M
+ … KXHYPE15M) for fee_multiplier; cross-tab the 71 anomalous fills by series. Ten minutes, zero cost.
+
+F-06 / correctness / medium / verified
+Location: src/main/strategies/leadLag.ts:448-459
+
+Claim: resolveSlug takes tokenIds[0] as the Up token with no verification against the Gamma outcomes array. A single market with flipped token ordering silently inverts every trade on it.
+
+Evidence: Lines 448-459: tokenIds parsed from clobTokenIds, then const upToken = tokenIds[0] (455), cached via slugCache.set
+. No outcomes check anywhere in the resolve path; the up-token assumption flows into the WS subscription and the REST book.
+
+Failure: A flipped market's Poly book is inverted, so every computed gap has the wrong sign — the arm systematically buys the wrong Kalshi side, at real money, and it looks in aggregate like one more slightly-negative market. Undetectable without per-market reconciliation; the cache pins the flip for hours.
+
+Test: Assert outcomes[0] === 'Up' (or resolve by outcome name) at resolve time; log-and-skip on mismatch. This is the cheapest fix in the report: one line plus a test with a mocked reversed Gamma payload.
+
+F-07 / methodology / medium / verified
+Location: src/main/strategies/polyPaper.ts:52,91,96,107,120
+, src/main/strategies/ibkrLab.ts:14
+, handbook §107
+
+Claim: Both paper labs charge ~2c/round-trip phantom friction beyond what live fills pay, then anchor each arm's assessment at zero instead of at the benchmark control arm's measured floor — so any true edge below ~4–7c/trade reads negative and the labs structurally cannot qualify plausible microstructure edges.
+
+Evidence: Taker orders are priced at the ask+1c limit and filled AT that limit: price=o.maker?o.limit:side.ask+.01
+ (polyPaper.ts:120, with the limit built at :52), exits at exit=Math.max(0,side.bid-.01) (:107). Live IOC fills pay the book's price, not the limit — the lab over-charges by ~2c/round-trip. Assessment: lower!>0?'Promising; paper only':upper!<0?'Negative; reassess':'Inconclusive' (:91) — anchored at zero, while the benchmark arm is labeled 'Control only' and never used as the null. ibkrLab does the same (fee=.01, slippage=.01
+, fills at ask+slippage). The friction is deliberate (:96: "Trading exits are takers (bid minus 1c)") — but deliberate conservatism in the fill price combined with a zero anchor is a bias, and the benchmark arm exists precisely to absorb that bias once. Minor doc mismatch: §107 says settlement controls "buy at the ask"; the code buys ask+1c.
+
+Failure: A true +3c/trade edge reads ≈ −1c and is filed "Negative; reassess." The labs can produce false negatives, never false positives — which defeats their stated purpose (qualifying arms for the operator-hold-protected live venue) and is the exact opposite failure mode from the §127-screen issue.
+
+Test: Make the assessment anchor the benchmark arm's lower bound (or charge fills at the book price and keep the +1c as a displayed slippage reserve). Rerun the current standings — if any arm's label flips, the labs have been suppressing a candidate.
+
+F-08 / methodology+risk / low / verified
+Location: src/main/ladder/ladder.ts:1190
+, src/main/strategies/ledgerAudit.ts:150-165
+, handbook §12.3
+
+Claim: The 5-minute markout veto — the gate currently holding the fade — uses an unclustered 80% band on same-day-correlated observations, violating the record's own day-clustering doctrine.
+
+Evidence: statsBand(p?.markoutN, p?.markoutSum, p?.markoutSq, p?.markoutSqN, CONFIDENCE_Z) (ladder.ts:1190) is a plain mean ± z×SE (ledgerAudit.ts:150-165) with the normal 0.84 at any n. Markouts taken within one day share the day's regime; §12.3 says bands are day-clustered, and the app fixed this class of defect everywhere else after §127.
+
+Failure: Direction is conservative (narrower SE makes the "wholly negative" veto easier to fire → arms held, opportunity cost not cash) — but the fade's hold today may be an artifact of a doctrine-violating band, and the record presents it as a settled verdict.
+
+Test: Day-cluster the markout band (the byDay accumulators already exist in the calibration ledger) and recompute the fade's veto. If it flips, the doctrine fix changes a live decision.
+
+F-09 / profitability+risk / medium / verified (from record) + arithmetic
+Location: docs/DEVELOPER-HANDBOOK.md §11.1
+ (trade-small re-entry), src/main/ladder/ladder.ts:252
+ (−$5 stop), TRADE-HISTORY:13-17, handbook §12.14, BACKLOG 156
+
+Claim: The trade-small re-entry doctrine ("nothing is dead forever") plus the 80% one-sided screen converts statistical permissiveness into a recurring dollar tax that has cost more than the account's only earner makes.
+
+Evidence: "Other" −
+16.36
+o
+n
+747
+c
+o
+n
+t
+r
+a
+c
+t
+s
+(
+−
+2.19
+c
+)
+a
+n
+d
+c
+r
+y
+p
+t
+o
+/
+c
+o
+m
+m
+o
+d
+i
+t
+y
+d
+a
+i
+l
+i
+e
+s
+−
+16.36on747contracts(−2.19c)andcrypto/commoditydailies−14.00 on 578 (−2.42c) (TRADE-HISTORY:14-15) ≈ 
+30
+o
+v
+e
+r
+21
+d
+a
+y
+s
+,
+v
+s
+l
+e
+a
+d
+−
+l
+a
+g
+′
+s
+e
+n
+t
+i
+r
+e
+g
+r
+o
+s
+s
+o
+f
++
+30over21days,vslead−lag 
+′
+ sentiregrossof+11.96 on 3,849 contracts (:16). Each re-admitted zero-edge arm bleeds until the −$5-per-notch hard stop or a sign-rule stop; §12.14 concedes "a fifth of zero-edge arms clear [the screen] at any one look" with no fleet-wide correction, and the check that would price this (backlog 156, the ladder null simulation) is deferred.
+
+Failure: At ~18 arms and repeated cool-down cycles on ~
+60
+e
+q
+u
+i
+t
+y
+,
+t
+h
+e
+d
+o
+c
+t
+r
+i
+n
+e
+r
+e
+−
+a
+r
+m
+s
+m
+e
+a
+s
+u
+r
+e
+d
+−
+n
+e
+g
+a
+t
+i
+v
+e
+a
+r
+m
+s
+t
+o
+r
+e
+l
+e
+a
+r
+n
+s
+e
+t
+t
+l
+e
+d
+q
+u
+e
+s
+t
+i
+o
+n
+s
+a
+t
+ 
+60equity,thedoctrinere−armsmeasured−negativearmstorelearnsettledquestionsat 5 a cycle — a structural bleed that dominates every other dollar flow in the account except the retired weather seat (−
+45.97
+o
+f
+t
+h
+e
+−
+45.97ofthe−54.32 total, :13, retired only after the seat measured −1.70c/contract over 801k contracts, :117).
+
+Test: Make backlog 156 output the doctrine's expected dollars (screen admit rate × mean bleed per admit), and require re-entry to clear at least the bar of first entry — currently re-entry is the default after cool-down.
+
+F-10 / strategy (missing) / medium / verified-as-missing
+Location: docs/BACKLOG.md:281,288,298,1150
+ (mention markets), handbook:509 (yt-dlp toolchain)
+
+Claim: The record names the winners' method for mention/"say" markets — "transcript word frequencies (base rates) plus live tracking" (BACKLOG:281) — but only built the base-rate half, and the base-rate half is measured to lose (favourites in mention series lose 5–15c, BACKLOG:1150; the shadow's base rate is under-confident at middle strikes, :298). The live-tracking half is the actual edge: "a Kalshi mention market settles YES the instant the phrase is said" (BACKLOG:288), and the venue pins to 99c only seconds-to-minutes later. Buying YES ≤95c immediately after a detected utterance — on public YouTube captions via yt-dlp, already the record's own data source (handbook:509) — is a latency edge on a free feed that the winners demonstrably monetize.
+
+Failure mode if untried: the program keeps optimizing a −EV base-rate approach on a market whose payoff is mechanically knowable before the venue prices it. Falsification first, never trade first: over ≥10 broadcasts measure (a) utterance→caption lag, (b) caption→Kalshi 95c-pin lag, (c) ask depth ≤95c at pin time. If the book pins within seconds or depth is zero, it's dead — and the test costs nothing: extend the existing hourly OracleTrader-MentionShadow task with a caption recorder for one week. No authenticated session, no scraping of paywalled feeds.
+
+F-11 / strategy / low-medium / hypothesis
+Location: src/main/strategies/leadLag.ts
+ (pair machinery is horizon-agnostic), REVIEW-CHANGES §119 (how basis kills twins)
+
+Claim: Lead-lag runs only on 15m twins; whether same-timestamp twins exist on slower horizons (Kalshi KXBTCD-style strikes vs Polymarket global price-level markets) is unmeasured, and a slower horizon is far less latency-sensitive — the one weakness era D exposed.
+
+Failure: Unmeasured opportunity with existing infrastructure (pair resolution, gap math, sweep caps, polyClobWs). The kill condition is known from §119: twins must settle on the same index at the same timestamp — the 15m edge exists because the windows align exactly.
+
+Test: One-day catalog scan for same-timestamp twins across horizons. If none align, dead for the same reason temperature arb died; if some do, run the existing cadence shadow on them before any config change, as a new pre-registration (the coin cohort's frozen window covers coins, not series).
+
+F-12 / missing / low-medium / verified-as-excluded
+Location: docs/RESEARCH-PROGRAM-2026-09-18.md
+ (LIP exclusion), BACKLOG 153 (rebate-only modeling)
+
+Claim: The Polymarket US Liquidity Incentive Program is excluded from the labs ("needs the live schedule") but the schedule is published per-market and fetchable once. It is the only zero-edge-required income available at this capital: Kalshi maker pays $0, ForecastEx coupon rates are unpublished. The labs' maker arms understate the one seat that could clear zero without any signal being right.
+
+Test: Read the published pools once; add expected LIP per market-minute to the maker arms' P&L; if join/improve + LIP clears zero after the F-07 fix, the PolyUS maker seat becomes a candidate tiny-live arm whose economics do not depend on being right about anything.
+
+F-13 / correctness / low / hypothesis
+Location: venue-pnl.py
+ settlement formula (hold-to-settlement-shaped), src/main/strategies/autoTrader.ts:346-356
+ (holdsToSettlement)
+
+Claim: Whether Kalshi settlement rows include contracts sold before settlement is unverified; the venue-true formula (revenue/100 + min(yes,no) − costs − fees) is hold-to-settlement-shaped. Every live arm currently holds to settlement, so impact today is nil — but any future selling arm (or manual UI exit) would be silently misattributed by the doctrine's truth-source.
+
+Test: One market from the execution archive with a buy→sell→settle round trip (the momentum churn fills are natural specimens); reconcile app-vs-settlement P&L on it.
+
+Top 5 findings by expected dollar impact
+F-02 (bars vs effect size). Lead-lag is the account's only earning stream (~
+2
+/
+d
+a
+y
+g
+r
+o
+s
+s
+a
+t
+e
+r
+a
+−
+D
+v
+o
+l
+u
+m
+e
+a
+n
+d
+t
+h
+e
++
+1.5
+c
+p
+l
+a
+n
+n
+i
+n
+g
+n
+u
+m
+b
+e
+r
+)
+.
+T
+h
+e
+s
+i
+g
+n
+r
+u
+l
+e
+t
+h
+a
+t
+g
+o
+v
+e
+r
+n
+s
+i
+t
+s
+t
+o
+p
+s
+a
+g
+e
+n
+u
+i
+n
+e
+l
+y
+p
+r
+o
+f
+i
+t
+a
+b
+l
+e
+a
+r
+m
+ 
+1
+/
+3
+o
+f
+t
+h
+e
+t
+i
+m
+e
+p
+e
+r
+c
+h
+e
+c
+k
+p
+o
+i
+n
+t
+—
+i
+t
+a
+l
+r
+e
+a
+d
+y
+s
+t
+o
+p
+p
+e
+d
+t
+h
+e
+a
+r
+m
+o
+n
+09
+−
+16
+a
+t
+−
+2/daygrossatera−Dvolumeandthe+1.5cplanningnumber).Thesignrulethatgovernsitstopsagenuinelyprofitablearm 1/3ofthetimepercheckpoint—italreadystoppedthearmon09−16at−0.82 on noise. A false stop costs the entire program's earnings; the promote bars, needing +11c or months of clusters, guarantee the stream never scales. Nothing else in this report touches as many expected dollars.
+F-01 (band math). The next three weeks of verdicts (10-02 floor starvation, 10-04 coin auto-narrow, 10-21 ETH/HYPE) all read through scripts whose bands are 2–3× too narrow at exactly these cluster counts. A false "confirmed" promotes a zero-edge rule to live size; a false negative kills a real one. The fix is a one-line rerun with the ladder's own helpers.
+F-09 (re-entry tax). ~
+30
+o
+f
+t
+h
+e
+−
+30ofthe−54 lifetime loss is the measured, recurring cost of re-arming zero-edge arms — 2.5× the entire lead-lag gross. Unlike the other findings it is not a risk; it is a meter running, and it recurs by design until the screen's admit cost is priced.
+F-07 (lab zero-anchor). Every future PolyUS/IBKR arm is gated through labs that structurally cannot qualify edges under ~4–7c/trade. Combined with F-03, this means the seats where thin edges are actually monetizable (maker rebate, coupons, LIP) are the ones the labs are least able to promote. Opportunity cost compounds monthly.
+F-10 (mention live-tracking). The one untried edge whose mechanism the record itself documents as mechanically decisive ("settles YES the instant the phrase is said"). Zero data cost, one week of passive capture to falsify, and a known-good free caption feed already in the toolchain. Ranked below the four above only because its edge is unproven — that is precisely what the falsification week resolves.
+(F-06 — the unverified up-token assumption — is the largest single-market tail risk in the code: a flipped token silently bleeds real money with no error. It ranks below measured flows only because its probability is unquantifiable from the repo. The one-line assertion costs nothing; do it regardless.)
+
+Strongest disagreement
+**"It needs a week" (TRADE-HISTORY:206) — and the implicit claim that the post-§127 machinery can adjudicate lead-lag. It cannot, and I'd commit to this: at the record's own planning number, one more week of era-D data yields a day-clustered SE of roughly 1.5–2.3c on a +1.5c mean — the band still straddles zero by a wide margin. Confirming +1.5c vs 0 takes ~1–2 months of uninterrupted clusters; isolating which of the four simultaneous changes separated era A from era D is not identifiable from 283 contracts over two days under any cohort re-cut. The record withdrew the +8.94c target (item 2) but kept the machinery built around it: bars calibrated to a +9c regime now face a +1.5c arm, and they will respond with either silence (deadlines then decide by calendar) or noise (sign rules). My position: declare the arm size-frozen by statement — not by bar — let the −$5 hard stop be the only mover, treat the 10-02/10-04 deadlines as "starved, undecidable" rather than letting them auto-narrow the coin list, and spend the freed attention on the two levers that actually change the arithmetic: maker-side capture (mmsim, 10-17) and the band-math fix (F-01). If the operator believes the seat deserves its attention, the question reduces to one number: what is the minimum per-contract edge that justifies it? If ≥ +1.5c, every bar in the program must be re-derived from that number and most will turn out unreachable. If ≥ +8.94c, the arm is already dead and the bars are moot.
+
+Could not check
+Runtime state (%APPDATA%\oracle-trader
+): balances, fill archives, leadlag-dislocations.jsonl
+, main.log
+, ladder.json
+. Every live-behavior number I relied on (57ms latency, +1.86c realized fills, era volumes, the 2,857-fill fee audit) is the record's own measurement, not mine.
+Kalshi settlement-row semantics for pre-settlement sells (F-13) — needs one sold position's execution archive reconciled against its settlement row.
+15m series fee_multiplier (F-05) — one public GET per series; I made no live API calls.
+Gamma clobTokenIds ordering guarantee (F-06) — needs a live Gamma response or venue documentation; the code offers no defense either way.
+Current published Kalshi fee schedule — the 0.07/4dp-ceil model is taken from the record's 2026-09-18 empirical verification; I did not re-fetch docs.kalshi.com
+.
+Polymarket US fee/LIP published pages — 0.0695/0.0125 and the LIP description are the record's citations; needed to size F-12.
+Current OpenRouter run-rate — the record says it was reduced after §128 but gives no current daily figure, so I cannot state whether the program's net is positive at the margin.
+The Odds API in-play odds availability on the existing paid tier — would matter only for a sports-anchor extension I chose not to recommend.
+Concurrent maintenance sessions changed the tree during this review (autoTrader.ts +244 lines). All citations were re-verified against my final read; anything changed after that is invisible to me.

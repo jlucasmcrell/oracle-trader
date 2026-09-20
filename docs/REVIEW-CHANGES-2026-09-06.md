@@ -4734,3 +4734,46 @@ holds the read date and the bar a rule must clear.
 
 Tests: the kill-switch scenarios (fresh/stale quotes, other-day marks, gains not offsetting, netting, the day-start
 reference). 20/20 suites. Restart: build 23:44:13Z, electron start 23:44:54Z under `agent.lock`.
+
+## §138 - 2026-09-20 00:05Z: external review GLM 5.3 - triage, two code defects, the band math, and what the ladder can detect
+
+`docs/reports/LLM Reviews/Review GLM 5.3.txt`, 13 findings. Each was checked against the code or the venue before
+anything changed.
+
+| # | Claim | Verdict | Action |
+|---|---|---|---|
+| F-01 | research scripts draw day-clustered bands without the G/(G-1) correction and with 1.28 at any cluster count | CONFIRMED in four scripts | `scripts/backtests/bands.py` (the app's convention: corrected cluster SE, t on G-1 df); all four scripts use it. Re-run of the lead-lag counterfactual: era D (2 days, n=354) read +6.54c [+5.64, +7.44] under the old convention and reads [+3.47, +9.61] now; era B (2 days) [+6.06, +10.54] -> [+0.67, +15.93]; a single day prints no band at all |
+| F-02 | the decision bars cannot adjudicate a +1.5c edge; the 100-row sign rule fires on noise | CONFIRMED, and understated | see the table below; lead-lag is exempt from the sign stop (`signStopExempt`), band stop and hard stop unchanged; handbook doctrine 19 |
+| F-03 | the taker fee at mid (1.75c) exceeds the planned edge; never stated as a constraint | CONFIRMED (doc) | handbook doctrine 18 |
+| F-04 | `computeLivePnl` capped `details` at the newest 1,000 rows and the ladder's lead-lag/quoter evidence joins against it | CONFIRMED (1,420 lifetime settlements) | the engine keeps every row; the renderer's copy is trimmed at the IPC boundary; test |
+| F-05 | lead-lag hardcodes the 1x fee multiplier | REFUTED for today | public GET per series: all eight `KX<COIN>15M` are `quadratic`, `fee_multiplier` 1 |
+| F-06 | `resolveSlug` takes `tokenIds[0]` as the Up token with no check against `outcomes` | CONFIRMED (latent: Gamma lists ["Up","Down"] today) | the Up token is found by outcome name; a market naming none is skipped and logged once; test with a reversed payload |
+| F-07 | the labs charge ~2c phantom friction and anchor at zero | structure CONFIRMED, impact NIL today | re-read of both labs with fills at the book price: no label flips, every arm is 3-9c negative. The friction model is not changed inside the pre-registered window; benchmark-relative column at the 09-24 read (BACKLOG 181) |
+| F-08 | the markout veto band is unclustered | CONFIRMED; holds no arm today | per-day markout sums accumulate from this build; BACKLOG 183 |
+| F-09 | trade-small re-entry is a recurring dollar tax | CONFIRMED in kind; priced below | a zero-edge admission costs ~$1, a -2c one ~$3.30 (simulation); BACKLOG 178 |
+| F-10 | mention markets: the live-tracking half was never built | ACCEPTED as a candidate | BACKLOG 179, falsification first |
+| F-11 | same-timestamp twins on slower horizons unmeasured | ACCEPTED | BACKLOG 180 |
+| F-12 | Polymarket US liquidity incentives excluded from the labs | ACCEPTED | BACKLOG 181 |
+| F-13 | settlement rows vs contracts sold before settlement unverified | ACCEPTED, nil impact today | BACKLOG 182 |
+
+**What the live-stage rule does to an arm of known edge** (`scripts/ladder-power-sim.ts`: the production
+`decideStage`/`clusteredMean`, 60 settled rows a day, 600 thirty-day paths per edge, judged every 20 rows):
+
+| true edge | stopped within 7 d | within 30 d | by hard stop / 100-row sign / band | ever scaled up | mean $ over 30 d |
+|---|---|---|---|---|---|
+| -2.0c | 94% | 100% | 42 / 58 / 0 | 5% | -3.31 |
+| 0 | 82% | 96% | 30 / 66 / 0 | 14% | +0.51 |
+| +1.5c | 76% | 94% | 27 / 67 / 0 | 26% | +5.87 |
+| +3.0c | 63% | 84% | 22 / 62 / 0 | 47% | +32.69 |
+| +9.0c | 14% | 20% | 5 / 15 / 0 | 93% | +440.39 |
+
+Without the sign stop the +1.5c arm is stopped in 78% (all by the -$5 hard stop), its 30-day mean rises from $5.87
+to $17.40, and a -2c arm costs $5.47 instead of $3.31. So the sign stop is a cheap filter on a fleet that is mostly
+zero-edge, and it is the wrong judge for the one arm with an independent low-variance read of a positive edge:
+lead-lag alone is exempted. The pre-registered defaults for 10-02 and 10-04 are not amended - narrowing to the
+proven coins on an undecided read is the conservative default and costs volume, not money. The reviewer's broader
+position (freeze lead-lag's size by statement) is already the effect: a scale-up needs the 95% band over four
+day-clusters, which the table says a +1.5c arm reaches in about a quarter of runs.
+
+Tests: F-04, F-06, the exemption (an exempt arm still stops on a negative band and on the hard stop). 20/20
+suites. Restart: build 00:00:15Z, electron start 00:01:02Z under `agent.lock`.

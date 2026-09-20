@@ -911,6 +911,17 @@ These rules came from specific incidents. Breaking one has cost money or produce
 17. **A winning era is a regime, not a target.** Lead-lag's +8.94c/contract (09-07..12) was measured against the
     stale quote that generated the trade, on a partition drawn after the fact. The forward planning number is
     +1.5c/contract until a five-cluster read at the current configuration says otherwise.
+18. **Every arm states its entry style against its fee floor.** The Kalshi taker fee is 1.75c per contract at a
+    50c price (0.07 x p(1-p)), more than the +1.5c planning edge. A signal worth under ~2c gross at mid prices
+    cannot be monetised as a taker: it must enter as a maker (no fee on plain quadratic series), trade at the
+    extremes (the fee falls to zero toward 0 and 1), or run on a venue that pays makers. No new live test starts
+    without that line (external review GLM 5.3, F-03).
+19. **Know what a verdict can detect.** `scripts/ladder-power-sim.ts` runs the production stage rule on an arm whose
+    true edge is known. At lead-lag's volume (60 rows a day, ~45c dispersion per row) the rule stops a TRUE +1.5c arm
+    within 30 days in 94 runs of 100, a +3c arm in 84, a +9c arm in 20; a zero-edge arm costs about $1 per
+    admission and a -2c arm about $3.30. The ladder is a loss limiter. It does not adjudicate single-cent edges;
+    those are judged on the low-variance meters (graded signal, markout, CLV), and its stop of such an arm is
+    noise more often than not (§138).
 
 ---
 

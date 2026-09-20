@@ -610,6 +610,8 @@ export interface StrategyPerf {
    * markoutN / (markoutN + markoutMissingN).
    */
   markoutMissingN?: number
+  /** Markouts by UTC day (from 2026-09-20): what a day-clustered veto band needs (BACKLOG 183). */
+  markoutByDay?: Record<string, { n: number; sum: number }>
 }
 
 export interface AutoStatus {
