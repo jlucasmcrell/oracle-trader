@@ -4896,10 +4896,14 @@ no exit spread at all. Every arm starts about five cents under water on the ask+
 confidently negative, and five of them are one family - momentum, log-momentum, breakout, microprice,
 book-imbalance, 151 trades between them, each losing roughly the entry cost. One arm survives its band: fade
 +4.20c/contract [+2.89, +5.51] on 10 trades over 3 days, the same favourite-longshot rule the Kalshi arm runs. No
-arm is live-eligible; fade reaches the 30-trade/10-event gate around 09-26. The benchmark control has 4 trades on
-one day, so the benchmark-relative column GLM F-07 asked for (BACKLOG 181) is not computable yet. Six arms have
-never traded at all, convergence structurally so - it wants the last 2-6 minutes before expiry on a universe whose
-contracts are months out. BACKLOG 190-192.
+arm is live-eligible; fade reaches the 30-trade/10-event gate around 09-26. The benchmark control has 4 closed
+trades on one day, and the cause is now known: it is a hold-to-settlement arm holding twelve contracts that expire
+12-80 days out (median 24), so the benchmark-relative column GLM F-07 asked for (BACKLOG 181) is not computable and
+will not become computable by waiting. Corrected the same day from the lab's own signal counter: only THREE arms
+have never fired - dutch, implication and convergence (the last structurally, it wants the final 2-6 minutes before
+expiry on a universe whose median contract is 47 days out). news, market-conditioned and political-favorite have
+each fired and are holding long-dated paper; `spot-first` fires but its status carries "Crypto source stale or
+invalid" (its Coinbase input fails closed on a last-trade timestamp over 30 s old). BACKLOG 190-192.
 
 The six recommendations are in the report's section 3. Items 1-3 alter a pre-registered lab and item 4 retires
 arms, so they are the operator's; 5 and 6 are bookkeeping.

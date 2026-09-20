@@ -96,15 +96,30 @@ day-cluster lower bound. Every arm fails at least one leg; fade fails only on vo
 events around **Sep 26**. book-imbalance and microprice have the volume and fail on the lower bound, which is the
 gate working as intended.
 
-**The control cannot anchor anything.** The benchmark has 4 trades on 1 day. The external review (GLM 5.3, F-07)
-asked for arms to be judged against the control rather than against zero; at n=4 with no band, the control is not
-yet usable for that. It needs its own throughput before the comparison means anything.
+**The control cannot anchor anything, and now we know why.** The benchmark has 4 closed trades on 1 day. It is in
+`IBKR_HOLD_TO_SETTLEMENT`, and the twelve contracts it is holding expire **12 to 80 days out (median 24)**. It is
+not slow because it rarely fires; it is slow because it bought long-dated paper and is waiting. The same applies to
+fade, favorite, ladder-value and calibration, whose open positions run out to 47-58 days. The universe is
+bimodal: of 281 contracts, 82 expire within two days and the median is 47 days. The external review (GLM 5.3,
+F-07) asked for arms to be judged against the control rather than against zero; at n=4 with no band that is not
+computable, and no amount of waiting fixes it while the control keeps choosing 47-day paper.
 
-**Six arms have never traded:** dutch and implication (their arbitrage rarely exists), convergence (it wants the
-final 2-6 minutes before expiry, and ForecastEx contracts are months out — structurally unreachable on this
-universe), news and market-conditioned (model-backed), political-favorite. These are not results; they are arms
-that are not running, and they should either get a reachable trigger or be marked unavailable like the existing
-`IBKR_UNAVAILABLE` set.
+**Three arms have never fired; three more have fired and are still holding.** Corrected 2026-09-20 10:00Z after
+reading the lab's own signal counter and open positions, which the first pass did not check:
+
+| arm | signals seen | open | closed | what it means |
+|---|---|---|---|---|
+| dutch | 0 | 0 | 0 | never fired: the YES+NO-under-$1 arbitrage has not appeared |
+| implication | 0 | 0 | 0 | never fired: same, for the two-strike basket |
+| convergence | 0 | 0 | 0 | never fired, and cannot here: it wants the last 2-6 minutes before expiry, and the universe's median contract expires in 47 days |
+| news | 1 | 1 | 0 | fired; capped by its own "daily eight-call forecast budget" |
+| market-conditioned | 1 | 1 | 0 | fired; holding a contract 12 days out |
+| political-favorite | 2 | 1 | 0 | fired; holding a contract 58 days out |
+
+Only the first three are silent. The other three are working and simply hold long-dated contracts that have not
+settled, which is the same reason the control has almost no closed trades. `spot-first` also deserves a note: 10
+signals, 4 closed, and its status carries "Crypto source stale or invalid" — its Coinbase spot input requires a
+last-trade timestamp under 30 seconds old and fails closed when it is not.
 
 ---
 
@@ -120,7 +135,9 @@ that are not running, and they should either get a reachable trigger or be marke
 4. **Retire the IBKR quote-following family or re-seat it.** 151 trades say a taker entry on these books does not
    pay. If the hypothesis is worth keeping, it belongs on a passive entry, not a crossed one.
 5. **Let fade run to its gate** (about Sep 26) and give the IBKR benchmark enough throughput to be a real control.
-6. **Mark convergence unavailable on ForecastEx** until a short-dated product exists.
+6. **Mark convergence unavailable on ForecastEx** until a short-dated product exists; say in the panel that dutch
+   and implication are rare-by-nature rather than beaten, and that news, market-conditioned and political-favorite
+   are holding rather than silent.
 
 None of this was changed. Items 1-3 alter a pre-registered lab and item 4 retires arms, so they are the operator's
 call; items 5 and 6 are bookkeeping I can do on a word.

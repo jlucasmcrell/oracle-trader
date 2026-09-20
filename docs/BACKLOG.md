@@ -2179,8 +2179,17 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   **2026-09-26**. The benchmark control has 4 trades on 1 day, so GLM F-07's benchmark-relative column (BACKLOG
   181) is not yet computable. Trigger: read fade at its gate on **2026-09-26**; report against zero AND against
   the control, and say which the control's own n can support.
-- **192. IBKR: six arms have never traded (2026-09-20, §142).** dutch and implication (the arbitrage rarely
-  exists), news and market-conditioned (model-backed), political-favorite, and convergence - which wants the final
-  2-6 minutes before expiry on a universe whose contracts are months out, so it is structurally unreachable there.
-  Mark convergence unavailable on ForecastEx (`IBKR_UNAVAILABLE`) and give the others a reachable trigger or the
-  same treatment; an arm that cannot fire is not a negative result. Trigger: **2026-09-24**.
+- **192. IBKR: three arms have never fired; three more are holding, not silent (2026-09-20, §142, corrected same
+  day).** Never fired: dutch and implication (the arbitrage has not appeared) and convergence, which wants the
+  final 2-6 minutes before expiry on a universe whose median contract expires in 47 days - structurally
+  unreachable there, so it belongs in `IBKR_UNAVAILABLE`. news (capped by its own eight-call daily forecast
+  budget), market-conditioned and political-favorite have each fired and hold long-dated paper. `spot-first` fires
+  but reports "Crypto source stale or invalid": its Coinbase input fails closed when the last-trade timestamp is
+  over 30 s old. The panel must distinguish "cannot run", "rare by nature", "holding" and "data source failing";
+  an arm that cannot fire is not a negative result. Trigger: **2026-09-24**.
+- **193. IBKR: the control and the long-hold arms are waiting on 47-day paper (2026-09-20, §142).** The benchmark
+  is in `IBKR_HOLD_TO_SETTLEMENT` and holds twelve contracts expiring 12-80 days out (median 24), which is why it
+  has 4 closed trades; fade, favorite, ladder-value and calibration run out to 47-58 days. The universe is
+  bimodal - 82 of 281 contracts expire within two days, the median is 47. Any fix that gives the control a usable
+  band has to bias it to the short-dated half without changing what it measures. Trigger: with 191 on
+  **2026-09-26**.
