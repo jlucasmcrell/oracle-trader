@@ -5016,3 +5016,40 @@ tsc clean, `electron-vite build` clean, **20/20 suites** (six new cases across `
 `remaining-defects`). Backup `MAINT-2026-09-20`. Restart 11:15:43Z; main.log resumed 11:15:44Z and the scan loop
 is clean - lead-lag, convergence, dutch, cross-venue, consensus, quoter-shadow and the IBKR lab all logging
 normally, no error or warn line since the restart, no `SAVE FAILED`.
+
+## §144 - 2026-09-20 12:00Z: both sides of one market, and the loss tail the promotion statistic never saw
+
+Three things the §143 completeness critic found and I filed rather than fixed. All three are IBKR paper-ledger
+only; nothing here changes what is sent to a venue.
+
+**A directional arm could hold both sides of one market.** Admission dedupes on strategy + market + OUTCOME and the
+`seen` key carries the UTC day, so an arm that flipped side on a later day bought the other leg; the $1 pairing
+loop then booked the pair as a single trade. Seven such rows exist in the cohort and ONE of them contributes -80c
+of favorite's -68c over 11 trades. The opposite leg is now refused at admission unless the signal is a deliberate
+basket (which carries `basket` and whose whole hypothesis is both legs).
+
+**The paired rows carry a two-contract cost in a per-contract field.** `entry` on a pair is the cost of BOTH legs
+and reaches 1.78 in the ledger, while every other row holds a single-leg price. That is exactly the field a
+calibration check reads, and BACKLOG 141 prescribes a calibration check for the 2026-09-26 gate read. The rows are
+now flagged `paired` so a per-contract statistic skips them instead of returning nonsense.
+
+**Near-total losses never closed, so the promotion statistic only ever saw winners.** `closePositions` refused an
+exit whenever the opposing ask left our side worth under a cent - which is precisely a near-total loss - while
+every winner closed normally. Those positions stayed open and never entered `realized`, the only number the gate
+reads. The guard existed to avoid a negative exit price; the exit is now clamped at zero, which says the same thing
+truthfully. Scope, stated honestly: this un-censors 98c < ask <= 99c only. Above that `freshAsk` refuses the quote
+outright, which is a wider censor on the same tail, is shared with the ENTRY path, and therefore needs its own
+decision - BACKLOG 200.
+
+**The daily loss cap truncates day clusters conditional on losses.** The cap is a risk control and stays, but the
+UTC day is the cluster unit both standard errors are built on, and a capped day is a short day that is always a
+losing one. `cappedDays` now counts them per arm so a read can say so instead of quietly inheriting the bias.
+
+**Deliberately NOT resetting the IBKR cohort**, against the standing rule that an admission or exit change moves
+`IBKR_RULES_SINCE`. The reasoning, stated so it can be argued with: no arm's hypothesis relied on holding both
+sides or on hiding a sub-cent loss, so neither change alters what any arm is testing; the seven affected rows are
+flagged rather than deleted; and a reset would zero every arm three days into a cohort, including fade six days
+from its gate, which would destroy far more evidence than the contamination it removes. The contamination is
+one-directional and now measurable - more losses will be booked going forward than were booked before.
+
+20/20 suites. Restart: build 11:56:49Z, electron start 11:57:01Z under `agent.lock`.
