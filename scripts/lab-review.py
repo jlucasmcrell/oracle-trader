@@ -62,7 +62,7 @@ def show(title, arms, bench_id, events_of=None):
 
 # ---------------- Polymarket US paper lab ----------------
 P = json.load(open(os.path.join(A, 'poly-paper.json'), encoding='utf-8'))
-RULES = 1789898400000  # POLY_PAPER_RULES_SINCE 2026-09-20T10:00:00Z (keep in step with src/shared/polyPaper.ts)
+RULES = 1789896840000  # POLY_PAPER_RULES_SINCE 2026-09-20T09:34:00Z (keep in step with src/shared/polyPaper.ts)
 arms = collections.defaultdict(list)
 legacy = collections.Counter()
 for t in P['trades']:

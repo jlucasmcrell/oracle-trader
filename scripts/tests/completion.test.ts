@@ -244,6 +244,10 @@ async function main() {
     const ibkr = Number(/RULES_I\s*=\s*(\d+)/.exec(py)?.[1])
     assert.equal(poly, POLY_PAPER_RULES_SINCE, 'lab-review.py mirrors POLY_PAPER_RULES_SINCE')
     assert.equal(ibkr, IBKR_RULES_SINCE, 'lab-review.py mirrors IBKR_RULES_SINCE')
+    // A cohort start in the FUTURE silently freezes its lab: polyPaper drops orders admitted before it, so every
+    // order it creates is discarded on the next scan. Cost one deploy on 2026-09-20 (section 143).
+    assert.ok(POLY_PAPER_RULES_SINCE <= Date.now(), 'the Polymarket cohort cannot start in the future')
+    assert.ok(IBKR_RULES_SINCE <= Date.now(), 'nor can the IBKR one')
   })
   console.log(`completion: ${passed} scenarios passed`)
 }

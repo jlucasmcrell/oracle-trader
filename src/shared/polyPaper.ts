@@ -37,7 +37,7 @@ export interface PolyPaperState {
  * 2026-09-17T07:31:43Z). They stay in the ledger and are reported as a separate cohort; scorecards and live
  * qualification use only trades opened under the current rules. Move this forward whenever those rules change.
  */
-export const POLY_PAPER_RULES_SINCE=Date.parse('2026-09-20T10:00:00Z') // section 143: the +3c target and -5c stop deleted (they never fired), a resting bid at the touch can fill 'probable' when its level vanishes, and the control is sampled 1 market in 24 by id instead of entering every tracked market
+export const POLY_PAPER_RULES_SINCE=Date.parse('2026-09-20T09:34:00Z') // section 143: the +3c target and -5c stop deleted (they never fired), a resting bid at the touch can fill 'probable' when its level vanishes, and the control is sampled 1 market in 24 by id instead of entering every tracked market
 export interface PolyPaperStatus {
   enabled:boolean;running:boolean;started:number;startingCash:number;scans:number;lastScan?:number;lastError?:string;discovered:number;tracked:number;fresh:number
   strategies:{id:string;name:string;rule:string;cash:number;open:number;pending:number;closed:number;net:number;unrealized:number;unpriced:number;days:number;markets:number;lower?:number;upper?:number;assessment:string;legacyClosed:number;legacyNet:number;
