@@ -14,7 +14,10 @@ crypto series), and asks the PUBLIC Kalshi markets endpoint how each resolved. U
 Direction note: rows written before 2026-09-20 carry the B-23 mapping, where book_side 'ask' was labelled
 'sell'. Under the corrected reading every one of these is a BUY of the NO side, which is what fade does.
 """
-import json, os, time, urllib.request, collections
+import json, os, sys, time, urllib.request, collections
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backtests'))
+from degraded import banner, label  # noqa: E402  (docs/DEGRADED-WINDOWS.md)
 
 A = os.path.join(os.environ['APPDATA'], 'oracle-trader')
 COINS = ('BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'ZEC', 'LTC', 'ADA', 'AVAX', 'LINK')
@@ -78,9 +81,16 @@ for t in ids:
     trades.append({'mid': t, 'coin': p['coin'], 'at': p['first'], 'shares': p['shares'], 'entry': entry, 'pnl': pnl, 'won': won,
                    'exp': t.upper().split('-')[1] if len(t.split('-')) > 1 else ''})
 trades.sort(key=lambda x: x['at'])
+for t in trades:
+    t['era'] = label(t['at'])
 tot = sum(t['pnl'] for t in trades)
-print('\nsettled fade-shaped crypto: %d positions, %d losses, net $%+.2f' % (len(trades), sum(1 for t in trades if not t['won']), tot))
+print('\n' + banner())
+print('settled fade-shaped crypto: %d positions, %d losses, net $%+.2f' % (len(trades), sum(1 for t in trades if not t['won']), tot))
 print('mean %+.2fc/contract over %.1f contracts' % (100 * tot / sum(t['shares'] for t in trades), sum(t['shares'] for t in trades)))
+for era in sorted({t['era'] for t in trades}):
+    v = [t for t in trades if t['era'] == era]
+    ct = sum(t['shares'] for t in v)
+    print('  %-12s n=%3d  %6.1f ct  $%+6.2f  %+5.2fc/ct' % (era, len(v), ct, sum(t['pnl'] for t in v), 100 * sum(t['pnl'] for t in v) / ct))
 
 print('\nlosses:')
 for t in [x for x in trades if not x['won']]:

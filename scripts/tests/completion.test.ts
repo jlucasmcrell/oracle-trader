@@ -10,6 +10,7 @@ import { HistoryStore } from '../../src/main/store/history'
 import { FillReconciler } from '../../src/main/store/fillReconciler'
 import { TradingEngine } from '../../src/main/engine/engine'
 import { miniExitPnl } from '../../src/main/strategies/miniAuto'
+import { DEGRADED_WINDOWS } from '../../src/main/intelligence/nightlyReview'
 import { AutoTrader } from '../../src/main/strategies/autoTrader'
 import { FlowMonitor } from '../../src/main/strategies/flowMonitor'
 import { writeFileAtomic } from '../../src/main/store/json'
@@ -216,6 +217,23 @@ async function main() {
     a.engine = { getAdapter: () => ({ getPrices: async () => [] }), getExecutionMode: () => 'live' }
     a.trySettle = async () => { probes++ }
     await a.manageExits({}); await a.manageExits({}); assert.equal(probes, 1)
+  })
+  await test('the degraded-window record is the same in all three places', () => {
+    const root = join(__dirname, '..', '..')
+    const py = readFileSync(join(root, 'scripts', 'backtests', 'degraded.py'), 'utf8')
+    const md = readFileSync(join(root, 'docs', 'DEGRADED-WINDOWS.md'), 'utf8')
+    assert.equal(DEGRADED_WINDOWS.length, (py.match(/'id':\s*\d+/g) ?? []).length, 'same number of windows in the python copy')
+    for (const w of DEGRADED_WINDOWS) {
+      assert.ok(py.includes(`'id': ${w.id}`), `python copy has window ${w.id}`)
+      assert.ok(py.includes(`'scope': '${w.scope}'`), `python copy has scope for ${w.id}`)
+      for (const edge of [w.from, w.to]) {
+        if (!edge) continue
+        assert.ok(py.includes(`'${edge}'`), `python copy has ${edge}`)
+        assert.ok(md.includes(edge.replace('T', ' ').replace('Z', '')), `the document states ${edge}`)
+      }
+    }
+    // An execution window with no end would silently void every later read.
+    for (const w of DEGRADED_WINDOWS) if (w.scope === 'execution') assert.ok(w.from && w.to, 'execution windows are closed')
   })
   console.log(`completion: ${passed} scenarios passed`)
 }

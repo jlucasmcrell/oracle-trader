@@ -2148,3 +2148,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   "Fade is live ... proposal is for operator review". The switch is the operator's and nothing was out of bounds.
   Trigger: put it to the operator at the next config review (**2026-09-27**): keep auto-apply on live arms, or
   restrict it to non-live arms and file live proposals for a morning decision.
+
+- **186. Re-read every dated conclusion that spans the degraded window (2026-09-20, §141).** The window
+  (09-12 12:46Z to 09-17 08:07Z) sits inside the evidence for several standing reads: the lead-lag coin cohort
+  (161), the executable-bound regrade (157), the settlement-basis tail (158), the stop-loss/take-profit read (177)
+  and §140's crypto read. Each is now split rather than pooled. Trigger: at each item's own read date, state the
+  clean-half number first and the pooled number second; if the two disagree in sign, the read waits for more
+  clean days rather than deciding.

@@ -4,6 +4,9 @@ Exit prices are the archived best bid of OUR side at the first snapshot that cro
 the Kalshi taker fee. Nothing here touches the venue or the app state."""
 import json, os, glob, collections, statistics, sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backtests'))
+from degraded import banner, label  # noqa: E402  (docs/DEGRADED-WINDOWS.md)
+
 D = os.path.join(os.environ['APPDATA'], 'oracle-trader', 'episodes')
 files = sorted(f for f in glob.glob(os.path.join(D, 'kalshi-2026-*.jsonl')) if f.endswith('.jsonl'))
 HOLD = {'fade', 'consensus', 'momentum', 'mean-reversion', 'weather-morning', 'settlement'}
@@ -38,6 +41,10 @@ for (m, o, st), L in segs.items():
 by_market = collections.defaultdict(list)
 for t in trades: by_market[t['m']].append(t)
 print('trades paired:', len(trades), 'markets:', len(by_market), 'files:', len(files), file=sys.stderr)
+print(banner(), file=sys.stderr)
+_deg = [t for t in trades if label(t['t0']) != 'clean']
+if _deg:
+    print('of these, %d opened inside a degraded window (kept, and counted in the tables below)' % len(_deg), file=sys.stderr)
 
 # ---- pass 2: book paths inside each trade's window
 for f in files:

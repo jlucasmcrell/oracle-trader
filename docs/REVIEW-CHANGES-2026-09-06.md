@@ -4837,3 +4837,39 @@ was changed.** BACKLOG 184 holds the re-read date and the bar a cap would have t
 **Two things the read settled.** Crypto is the least-bad half of fade's book, not its problem; every band here
 straddles zero, so no part of fade is decidable on 17 days. And `reviewAutoApplyLive` is ON, which is why a live
 arm's parameter moved overnight on the model's own "for operator review" proposal (BACKLOG 185, operator's call).
+
+## §141 - 2026-09-20 08:35Z: the degraded window is written down, and every read now splits on it
+
+Operator: "We also need to remember we had a failing period due to bad configuration sometime between Sept 13-18th."
+He is right, and nothing in the repo said so in a form a read could use. Now it does.
+
+**The window, from the record.** 2026-09-12 12:46Z to 2026-09-17 08:07Z. Round 76 put two venue account reads in
+front of every order and sweep latency went 0.07 s to 0.44 s, with fills falling from +18.4c/contract to +0.2c
+(§108). Round 91 then ran lead-lag at a 10 s poll, seven coins, 8 contracts each: seven coins on one 15-minute
+window is one bet on crypto direction taken seven times, and on 09-13 it lost **-$31.28** in 90 minutes and tripped
+the daily kill switch at a venue day of -$34.95 (§88). Round 93 cut the unproven coins to micro size at 11:38Z and
+the arms were held; round 99 restored the winning settings at 09-16 07:35Z but the order path was still 6.6 s
+median; round 115 fixed it at 09-17 08:07Z (§109). A second, older window covers calibration readings only: the
+fee model double-divided until the v27 clear at 09-18 13:34Z (`CALIB_CLEARED_AT`), which never touched dollar P&L.
+
+**Written in three places that are tested to agree:** `docs/DEGRADED-WINDOWS.md` (prose and rationale),
+`scripts/backtests/degraded.py` (`label(ts)` for the read scripts), and `DEGRADED_WINDOWS` in `nightlyReview.ts`,
+which now travels in the evidence packet so the reviewer stops reading a strategy's edge out of it.
+`completion.test.ts` fails if the three drift apart. Doctrine 19 in the handbook: a read states its coverage.
+
+**What it does to §140, re-run with the split.** The conclusion holds and sharpens:
+
+| fade-shaped crypto | positions | contracts | net | c/contract |
+|---|---|---|---|---|
+| clean | 84 | 188.4 | +$2.16 | +1.15 |
+| inside the degraded window | 48 | 50.8 | -$1.48 | -2.91 |
+
+So nearly half the positions and most of the bad news came from the window, at a fifth of the size. The
+cap-simulation verdict is unchanged - no rule was worth it - and crypto's clean half looks better, not worse.
+
+**One thing the operator should decide.** The review's system prompt has been telling the model that live
+strategies are never auto-applied. `reviewAutoApplyLive` is ON, which is why the 09-20 fade change went in over
+the model's own "for operator review" note. The prompt now states the switch's real value instead of a promise the
+app does not keep; whether the switch itself stays on is BACKLOG 185.
+
+20/20 suites. No trading configuration was changed.

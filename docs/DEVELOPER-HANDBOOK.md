@@ -917,7 +917,14 @@ These rules came from specific incidents. Breaking one has cost money or produce
     cannot be monetised as a taker: it must enter as a maker (no fee on plain quadratic series), trade at the
     extremes (the fee falls to zero toward 0 and 1), or run on a venue that pays makers. No new live test starts
     without that line (external review GLM 5.3, F-03).
-19. **Know what a verdict can detect.** `scripts/ladder-power-sim.ts` runs the production stage rule on an arm whose
+19. **A read states its coverage against the degraded windows.** `docs/DEGRADED-WINDOWS.md` lists the periods
+    when the account traded under a configuration later judged broken (09-12 12:46Z to 09-17 08:07Z for execution;
+    everything before 09-18 13:34Z for calibration readings). Those settlements are real money and stay in the P&L,
+    but they are evidence about the configuration, not about the strategy. Every read that spans one says so and
+    reports the halves separately; `scripts/backtests/degraded.py` is the machine copy and the nightly review is
+    handed the same list. Adding a window means editing the document, the python copy and `DEGRADED_WINDOWS` in
+    `nightlyReview.ts` together - a test in `completion.test.ts` fails if they drift.
+20. **Know what a verdict can detect.** `scripts/ladder-power-sim.ts` runs the production stage rule on an arm whose
     true edge is known. At lead-lag's volume (60 rows a day, ~45c dispersion per row) the rule stops a TRUE +1.5c arm
     within 30 days in 94 runs of 100, a +3c arm in 84, a +9c arm in 20; a zero-edge arm costs about $1 per
     admission and a -2c arm about $3.30. The ladder is a loss limiter. It does not adjudicate single-cent edges;

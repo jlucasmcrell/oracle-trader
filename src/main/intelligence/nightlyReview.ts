@@ -198,7 +198,31 @@ export function reviewModelPlans(
   return plans
 }
 
-const SYSTEM = `You are the nightly strategy review analyst for Oracle Trader, a small prediction-market auto-trader (Kalshi real money, Polymarket US real money, IBKR ForecastEx paper). You reason over the evidence packet you are given and nothing else. You cannot place orders, change arms, sizes, loss limits, or keys; the app applies only numeric parameter proposals that fall inside its published bounds and only for strategies that are not live — everything else you propose is filed for the operator.
+/**
+ * Periods the record must not be read as evidence; the prose copy with the rationale is
+ * docs/DEGRADED-WINDOWS.md and the read scripts use scripts/backtests/degraded.py. Keep the three in step.
+ */
+export const DEGRADED_WINDOWS = [
+  {
+    id: 1,
+    scope: 'execution',
+    from: '2026-09-12T12:46Z',
+    to: '2026-09-17T08:07Z',
+    what: 'Kalshi order path slow (account reads before every order) and lead-lag sized for seven independent coins on one 15-minute window; -$31.28 in 90 minutes on 09-13, daily kill switch tripped',
+    ended: 'round 115: read/write rate lanes, cached position count, reserve-inside/submit-outside'
+  },
+  {
+    id: 2,
+    scope: 'calibration',
+    from: null,
+    to: '2026-09-18T13:34Z',
+    what: 'netCentsOf divided an already-per-contract fee by the contract count again, so calibration readings before the fix understated fees (dollar P&L unaffected)',
+    ended: 'v27 migration cleared the calibration accumulators (CALIB_CLEARED_AT)'
+  }
+] as const
+
+const SYSTEM = `You are the nightly strategy review analyst for Oracle Trader, a small prediction-market auto-trader (Kalshi real money, Polymarket US real money, IBKR ForecastEx paper). You reason over the evidence packet you are given and nothing else. You cannot place orders, change arms, sizes, loss limits, or keys; the app applies numeric parameter proposals that fall inside its published bounds; whether it also applies them to strategies that are currently LIVE is an operator switch whose state is in the packet ('autoApplyLive') — everything else you propose is filed for the operator.
+Some periods of the record are marked 'degradedWindows': real money, but the configuration under test was later judged broken. Never read a strategy's edge from settlements inside one; say the evidence is confined to a degraded window and, if it matters, ask for the read to be split.
 Principles: win rate is a base-rate trap on 90c contracts; net cents per contract after fees with clustered confidence intervals is the number; small samples deserve "insufficient evidence", not narratives; a strategy is dead when its fee-inclusive clustered interval excludes zero on the wrong side; venue-settled P&L outranks any app ledger. Be specific: cite the packet's numbers.
 Output ONLY a JSON object with exactly these fields:
 {"summary": string (<= 120 words), "healthFlags": string[], "findings": [{"topic": string, "evidence": string, "severity": "info"|"warn"|"high"}], "parameterProposals": [{"target": "kalshi"|"polymarket-us", "key": string, "value": number, "rationale": string}], "experimentProposals": [{"title": string, "hypothesis": string, "design": string, "metric": string, "stopRule": string}], "codeProposals": [{"title": string, "whereToLook": string, "rationale": string}], "confidence": number}`
@@ -318,6 +342,13 @@ export class NightlyReview {
     }
     return {
       generatedAt: new Date().toISOString(),
+      // Periods the record must not be read as evidence (docs/DEGRADED-WINDOWS.md). The 2026-09-20 review
+      // tightened a live arm off a two-day calibration window that was one correlated crypto settlement (§140).
+      degradedWindows: DEGRADED_WINDOWS,
+      // The prompt used to promise that live strategies are never auto-applied. That is an operator switch, and
+      // it is on: the same review's fade proposal, which the model itself marked "for operator review", was
+      // applied (§141, BACKLOG 185).
+      autoApplyLive: cfg.reviewAutoApplyLive ?? false,
       // `flat`, `byFamilyNet` and `unsettledMarketFees` exist so this block reconciles without guesswork:
       // wins + losses + flat === settlements, and byFamilyNet - unsettledMarketFees === realizedPnl. The
       // 2026-09-10 review spent a finding on both gaps because the packet withheld the closing terms.
