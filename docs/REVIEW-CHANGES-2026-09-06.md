@@ -4796,3 +4796,44 @@ carries a per-arm limit; `leadLagEvidence` sets `LEADLAG_STOP_DOLLARS = 10`; eve
 `LIVE_STOP_DOLLARS = 5`. The daily kill switch (20% of equity, about $16) is unchanged and sits above it. Tests:
 default $5, -$7 inside $10, -$10 hits it, scales with the notch. 20/20 suites. Restart: build 00:08:25Z,
 electron start 00:08:38Z under `agent.lock`.
+
+## §140 - 2026-09-20 08:10Z: the crypto correlation is real and not worth a rule
+
+Operator, on the 09-20 morning read: "Go ahead" on measuring what a crypto-wide exposure limit would have cost.
+
+**Why it was asked.** Fade's calibration read -5.21c/contract over 36 graded settlements and the nightly review
+tightened `fadeMinEdgeCents` 1.5 -> 2 on the strength of it. That number is four losses: KXBTCD/KXETHD/KXSOLD/
+KXDOGED, all at the 2026-09-18 17:00Z settlement, about -93c each. 32 of the 36 events were positive. `underlyingOf`
+groups crypto per COIN (`crypto:BTC`, `crypto:ETH`, ...), so four coins settling in one window are four underlyings
+and pass `maxPerUnderlying` (8) and the per-event cap alike.
+
+**Method.** `scripts/crypto-correlation-read.py`: every archived Kalshi fill, keep the fade-shaped ones (NO
+exposure at 85-99c, non-15m series), ask the PUBLIC markets endpoint how each resolved, contract-weighted with a
+day-clustered band. Unauthenticated GETs only. The episode archive was the wrong source and the first pass using it
+was wrong: fade enters as a maker and maker fills write no `entry` episode, so it had missed all four losses.
+
+| fade-shaped book, 17 days | positions | contracts | net | c/contract | 80% band |
+|---|---|---|---|---|---|
+| crypto | 132 | 239.2 | +$0.68 | +0.29 | -3.06 .. +3.63 |
+| other (non-weather) | 161 | 795.5 | -$8.29 | -1.04 | -4.91 .. +2.82 |
+| weather (the quoter's, for contrast) | 18 | 69.8 | +$3.65 | +5.23 | -3.78 .. +14.25 |
+
+**The clustering is real.** Two windows carried it: 26SEP1817 eleven positions over six coins for -$3.65, and
+26SEP1417 ten positions over six coins for -$2.70. On the other fifteen days the same clustering wins together.
+
+**A cap is not worth it.** Refusing an entry once N positions are already open into the same settlement window:
+
+| cap | refused | P&L forgone | vs no cap |
+|---|---|---|---|
+| 1 | 102 | -$0.85 | +$0.85 |
+| 2 | 86 | -$0.45 | +$0.45 |
+| 3 | 73 | -$0.46 | +$0.46 |
+| 4 | 60 | -$0.24 | +$0.24 |
+| 5 | 48 | -$1.22 | +$1.22 |
+
+$0.24-$1.22 over three weeks, and not monotonic in the cap level - the signature of noise, not of a rule. **Nothing
+was changed.** BACKLOG 184 holds the re-read date and the bar a cap would have to clear.
+
+**Two things the read settled.** Crypto is the least-bad half of fade's book, not its problem; every band here
+straddles zero, so no part of fade is decidable on 17 days. And `reviewAutoApplyLive` is ON, which is why a live
+arm's parameter moved overnight on the model's own "for operator review" proposal (BACKLOG 185, operator's call).

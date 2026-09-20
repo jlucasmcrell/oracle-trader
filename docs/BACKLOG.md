@@ -2135,3 +2135,16 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   plain band on same-day-correlated rows. No arm is held by it today. Per-day markout sums accumulate from the
   §138 build (`markoutByDay`). Trigger: **2026-10-03**, or the first ladder reason that cites the markout band:
   switch the veto to the day-clustered band once an arm has >= 30 bucketed markouts.
+
+- **184. Crypto exposure needs no cap of its own; re-read if it grows (2026-09-20, §140).** The correlation is
+  real - two settlement windows (09-14 17:00, 09-18 17:00) each took out four to six fade positions across six
+  coins together - but over 17 days the fade-shaped crypto book is +$0.68 on 239 contracts (+0.29c/ct, 80% band
+  -3.06..+3.63) and a window-wide cap would have been worth $0.24-$1.22, non-monotonic in the cap level, i.e.
+  noise. NOT implemented. Trigger: re-run `python scripts/crypto-correlation-read.py` on **2026-10-10**, or the
+  first time one settlement window costs more than $5; adopt a cap only if a level beats no-cap by more than its
+  own day-clustered SE and the ordering across levels is monotonic.
+- **185. Nightly review auto-applies to LIVE strategies (2026-09-20, seen in §140). OPERATOR.** `reviewAutoApplyLive`
+  is ON, so the 09-20 review applied `fadeMinEdgeCents` 1.5 -> 2 on a live arm even though the model itself wrote
+  "Fade is live ... proposal is for operator review". The switch is the operator's and nothing was out of bounds.
+  Trigger: put it to the operator at the next config review (**2026-09-27**): keep auto-apply on live arms, or
+  restrict it to non-live arms and file live proposals for a morning decision.
