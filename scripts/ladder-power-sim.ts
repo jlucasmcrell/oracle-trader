@@ -17,6 +17,10 @@ const rowsPerDay = nums[0] ?? 60
 const days = nums[1] ?? 30
 const paths = nums[2] ?? 600
 const NO_SIGN_STOP = process.argv.includes('nosign')
+const EXEMPT = process.argv.includes('exempt') // lead-lag's evidence: exempt from the sign stop, as production sets it
+const stopArg = process.argv.find((x) => x.startsWith('stop='))
+// decideStage's hard stop is max($5 x notch, 3 x stake): a stake of stop/3 reproduces a $stop-per-notch limit with no code change.
+const HARD_STOP = stopArg ? Number(stopArg.slice(5)) : 5
 
 let seed = 20260919
 const rnd = (): number => {
@@ -46,7 +50,7 @@ function onePath(edgeCents: number): Out {
         rows.push({ v, g: 'd' + d })
         if (rows.length % CHECKPOINT_TRADES !== 0) continue
         const ci = clusteredMean(rows)
-        const dec = decideStage({ n: rows.length, netDollars: rows.reduce((a, r) => a + r.v, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake: 0.5 * notch }, notch, lastCheckpoint)
+        const dec = decideStage({ n: rows.length, netDollars: rows.reduce((a, r) => a + r.v, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake: HARD_STOP > 5 ? (HARD_STOP * notch) / 3 : 0.5 * notch, signStopExempt: EXEMPT }, notch, lastCheckpoint)
         lastCheckpoint = dec.checkpoint
         // Variant `nosign`: what the rule would do WITHOUT the unclustered 100-trade sign stop (band and hard stop only).
         if (dec.kind === 'stop' && NO_SIGN_STOP && /trades and net not positive/.test(dec.reason)) continue
@@ -59,7 +63,7 @@ function onePath(edgeCents: number): Out {
 }
 
 const pct = (x: number): string => (100 * x).toFixed(0).padStart(3) + '%'
-console.log(`ladder power${NO_SIGN_STOP ? ' (variant: no 100-trade sign stop)' : ''}: ${rowsPerDay} settled rows/day, ${days} days, ${paths} paths per edge, judged every ${CHECKPOINT_TRADES} rows`)
+console.log(`ladder power${NO_SIGN_STOP ? ' (variant: no 100-trade sign stop)' : ''}${EXEMPT ? ' (sign-stop exempt)' : ''} hard stop $${HARD_STOP}/notch: ${rowsPerDay} settled rows/day, ${days} days, ${paths} paths per edge, judged every ${CHECKPOINT_TRADES} rows`)
 console.log('true edge   stopped<=7d  <=14d  <=' + days + 'd   by: hard/100-rule/band   ever scaled up   mean $ at end   mean $ | stopped')
 for (const edge of [-2, 0, 1.5, 3, 5, 9]) {
   const out = Array.from({ length: paths }, () => onePath(edge))
