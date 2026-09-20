@@ -4953,4 +4953,8 @@ two-contract cost into a per-contract field (BACKLOG 195); two loss-side censors
 about `pressure` - 3,392 firings, drift +0.08c/+0.32c/+1.08c at 15/60/120 minutes, every band excluding zero (198);
 and the matched settlement control nobody has built (199).
 
-20/20 suites. Restart: build 09:32:57Z, electron start 09:34:21Z under `agent.lock`.
+20/20 suites. Restart: build 09:47:46Z, electron start 09:47:58Z under `agent.lock` (the first deploy at 09:34:21Z
+dated the new cohort 10:00Z, an hour ahead of itself; polyPaper drops orders admitted before the cohort start, so
+the lab discarded every order it created for thirteen minutes. Corrected to the restart instant and a test now
+refuses a cohort dated in the future. Verified live: `pressure` is resting four orders, each carrying the queue
+size ahead of it.)
