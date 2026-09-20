@@ -2155,3 +2155,32 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   and §140's crypto read. Each is now split rather than pooled. Trigger: at each item's own read date, state the
   clean-half number first and the pooled number second; if the two disagree in sign, the read waits for more
   clean days rather than deciding.
+
+- **187. Polymarket lab: the 15-minute taker round trip costs more than any signal it tests (2026-09-20, §142).
+  OPERATOR.** 204 of 210 closes are the timer; gross move -3.24c, fees 2.32c, net -5.56c; momentum (-8.57c) and
+  reversion (-10.00c) sit entirely below the control's -5.46c. No arm can read positive unless its signal predicts
+  more than ~6c in fifteen minutes. Options: hold to settlement as the longshot/favorite controls do, or enter
+  passively. Either resets the cohort, which costs one day at today's sample. Trigger: operator's call at the
+  **2026-09-24** lab read.
+- **188. Polymarket passive arms never fill (2026-09-20, §142).** `join` has never filled; `improve` and
+  `pressure` have one trade each. The lab tracks 12 markets at a time resampled every 30 minutes, so a resting
+  order's market is usually gone before a trade-through reaches it. The maker rebate is the one seat on that venue
+  that pays without being right (BACKLOG 181), and it is the seat with no data. Fix: pin a market for the life of
+  a resting order, or track more. Trigger: with 187 on **2026-09-24**.
+- **189. Polymarket benchmark is 91% of the lab's sample (2026-09-20, §142).** The control took 204 trades a day
+  against 1-7 for each arm. It measures friction accurately and starves everything else of attention and cash.
+  Rate-limit it to the arms' opportunity rate. Trigger: with 187 on **2026-09-24**.
+- **190. IBKR quote-following family: 151 trades, all at the entry cost (2026-09-20, §142).** momentum, log-momentum,
+  breakout, microprice and book-imbalance are each confidently negative, and the gross result is the same whether
+  they cross out or settle, so the ~5c handicap is the entry (ask + 1c slippage). Either retire them or re-seat
+  them passively. Trigger: at the **2026-09-24** read, when each has >= 30 trades and >= 4 days.
+- **191. IBKR: fade is the only candidate; the control cannot anchor yet (2026-09-20, §142).** fade +4.20c/contract
+  over 10 trades, 3 days, 7 events, band [+2.89, +5.51]; it reaches the 30-trade/10-event gate around
+  **2026-09-26**. The benchmark control has 4 trades on 1 day, so GLM F-07's benchmark-relative column (BACKLOG
+  181) is not yet computable. Trigger: read fade at its gate on **2026-09-26**; report against zero AND against
+  the control, and say which the control's own n can support.
+- **192. IBKR: six arms have never traded (2026-09-20, §142).** dutch and implication (the arbitrage rarely
+  exists), news and market-conditioned (model-backed), political-favorite, and convergence - which wants the final
+  2-6 minutes before expiry on a universe whose contracts are months out, so it is structurally unreachable there.
+  Mark convergence unavailable on ForecastEx (`IBKR_UNAVAILABLE`) and give the others a reachable trigger or the
+  same treatment; an arm that cannot fire is not a negative result. Trigger: **2026-09-24**.

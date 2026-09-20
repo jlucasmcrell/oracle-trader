@@ -4873,3 +4873,33 @@ the model's own "for operator review" note. The prompt now states the switch's r
 app does not keep; whether the switch itself stays on is BACKLOG 185.
 
 20/20 suites. No trading configuration was changed.
+
+## §142 - 2026-09-20 09:05Z: both paper labs reviewed, arm by arm (read only)
+
+Operator: "Can you complete a review of the strategies Poly and IBKR are using as well?" Full report:
+`docs/reports/LAB-STRATEGY-REVIEW-2026-09-20.md`; the read is repeatable as `python scripts/lab-review.py`.
+Contract-weighted, day-clustered, current-rules cohorts only. Both cohorts start after the degraded execution
+window closed (§141), so neither is contaminated. **Nothing was changed in either lab.**
+
+**Polymarket US** (210 closed trades, 0.94 days). The lab is measuring its own friction: 204 of 210 closes are the
+15-minute timer, and per trade the gross move is -3.24c against 2.32c of fees for a net of -5.56c. The benchmark
+control is 191 of the 210 trades and reads -5.46c [-6.32, -4.60], which is the round-trip cost stated precisely.
+Two arms are decisively worse than the control - momentum -8.57c [-10.96, -6.18] and reversion -10.00c
+[-11.54, -8.46] - and that is the clearest result the lab has produced. The three passive arms, which are the ones
+that would measure the maker rebate, have one trade between them and `join` has never filled: the lab tracks 12
+markets at a time and resamples every 30 minutes, so a resting order's market is usually gone before a
+trade-through arrives. BACKLOG 187-189.
+
+**IBKR ForecastEx** (274 closed trades, 3.1 days, 90 positions open). Splitting by how each position closed shows
+the handicap is at ENTRY: gross -5.15c when the position crosses the spread to exit, -5.18c when it settles with
+no exit spread at all. Every arm starts about five cents under water on the ask+1c fill model. Six arms are
+confidently negative, and five of them are one family - momentum, log-momentum, breakout, microprice,
+book-imbalance, 151 trades between them, each losing roughly the entry cost. One arm survives its band: fade
++4.20c/contract [+2.89, +5.51] on 10 trades over 3 days, the same favourite-longshot rule the Kalshi arm runs. No
+arm is live-eligible; fade reaches the 30-trade/10-event gate around 09-26. The benchmark control has 4 trades on
+one day, so the benchmark-relative column GLM F-07 asked for (BACKLOG 181) is not computable yet. Six arms have
+never traded at all, convergence structurally so - it wants the last 2-6 minutes before expiry on a universe whose
+contracts are months out. BACKLOG 190-192.
+
+The six recommendations are in the report's section 3. Items 1-3 alter a pre-registered lab and item 4 retires
+arms, so they are the operator's; 5 and 6 are bookkeeping.
