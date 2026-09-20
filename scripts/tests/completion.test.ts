@@ -11,6 +11,8 @@ import { FillReconciler } from '../../src/main/store/fillReconciler'
 import { TradingEngine } from '../../src/main/engine/engine'
 import { miniExitPnl } from '../../src/main/strategies/miniAuto'
 import { DEGRADED_WINDOWS } from '../../src/main/intelligence/nightlyReview'
+import { POLY_PAPER_RULES_SINCE } from '../../src/shared/polyPaper'
+import { IBKR_RULES_SINCE } from '../../src/shared/ibkrLab'
 import { AutoTrader } from '../../src/main/strategies/autoTrader'
 import { FlowMonitor } from '../../src/main/strategies/flowMonitor'
 import { writeFileAtomic } from '../../src/main/store/json'
@@ -234,6 +236,14 @@ async function main() {
     }
     // An execution window with no end would silently void every later read.
     for (const w of DEGRADED_WINDOWS) if (w.scope === 'execution') assert.ok(w.from && w.to, 'execution windows are closed')
+  })
+  await test('the lab cohort constants match the read script that reports them', () => {
+    const root = join(__dirname, '..', '..')
+    const py = readFileSync(join(root, 'scripts', 'lab-review.py'), 'utf8')
+    const poly = Number(/RULES\s*=\s*(\d+)/.exec(py)?.[1])
+    const ibkr = Number(/RULES_I\s*=\s*(\d+)/.exec(py)?.[1])
+    assert.equal(poly, POLY_PAPER_RULES_SINCE, 'lab-review.py mirrors POLY_PAPER_RULES_SINCE')
+    assert.equal(ibkr, IBKR_RULES_SINCE, 'lab-review.py mirrors IBKR_RULES_SINCE')
   })
   console.log(`completion: ${passed} scenarios passed`)
 }

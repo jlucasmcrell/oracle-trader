@@ -13,8 +13,6 @@ export const IBKR_STRATEGIES = [
   {id:'microprice',name:'Depth-weighted pressure',description:'Follow a 0.5c depth-weighted shift from paired midpoint; tests future quote pressure, not a guaranteed arbitrage.'},
   {id:'maker',name:'Two-sided market making',description:'Rest both outcomes inside their asks; simulated fills require a later trade-through.'},
   {id:'fade-maker',name:'Passive longshot fade',description:'Same favorite-longshot rule with passive limit entry.'},
-  {id:'dutch',name:'YES/NO parity',description:'Buy both outcomes only when their total executable cost including fees is below $1.'},
-  {id:'implication',name:'Strike implication basket',description:'Buy a logically exhaustive two-strike basket below $1 including fees.'},
   {id:'ladder-value',name:'Neighbor-strike relative value',description:'Compare a strike with interpolation of adjacent same-event strikes.'},
   {id:'spot-first',name:'Crypto spot fair value',description:'Coinbase spot and measured five-minute return volatility versus CF crypto strikes; reference-basis risk applies.'},
   {id:'convergence',name:'Crypto near-expiry convergence',description:'Spot fair value during the final 2–6 minutes; no inference from quote alone.'},
@@ -34,6 +32,8 @@ export const IBKR_UNAVAILABLE = [
   {id:'weather-locked',name:'Weather certain-outcome lock',reason:'ForecastEx resolves from Weather Underground daily history. NWS observations cannot certify that separate settlement source; forecast strategies test the basis risk instead.'},
   {id:'mention',name:'Transcript mention model',reason:'No matching mention-count instruments in the verified ForecastEx catalog.'},
   {id:'rewards',name:'Venue rewards / incentive farming',reason:'Kalshi and Polymarket incentive programs do not apply to ForecastEx.'},
+  {id:'dutch',name:'YES/NO parity',reason:'ForecastEx quotes the pair above par by construction. Measured over 48,006 paired observations on 2026-09-18..20 with both legs quoted at size >= 1, the cheapest YES+NO pair was $1.0100 and the spread histogram floors at +1c: zero crossings, before the 4c of fees and slippage an entry would also have to clear (section 143).'},
+  {id:'implication',name:'Strike implication basket',reason:'Same measurement on the same logs for the exhaustive two-strike pair: no pair of adjacent same-event strikes was ever quoted below par, so the basket has never existed here (section 143).'},
   {id:'cme',name:'CME event-contract feed',reason:'Gateway returned no ECES contract definition; the ES underlying option-chain probe also returned no EC event class. These instruments are outside the verified ForecastEx test universe.'},
 ] as const
 /**
@@ -41,8 +41,18 @@ export const IBKR_UNAVAILABLE = [
  * 2026-09-16/17 fade went 0/25 and favorite 0/31, and one position in 163 ever reached settlement. The rest
  * (momentum, reversion, breakout, book pressure, maker) are quote-dynamics hypotheses and keep timed exits.
  */
+/**
+ * Arms STOPPED on their own evidence: they ran, they were measured, and their day-clustered band cleared the
+ * lab's own promotion bar with the sign reversed. Unlike IBKR_UNAVAILABLE these keep their id, their ledger and
+ * their cash - the evidence that justified the stop stays on the panel. Only new admission is refused.
+ */
+export const IBKR_RETIRED:ReadonlyMap<string,string>=new Map([
+  ['microprice','Stopped 2026-09-20 (section 143): 47 closed, 18 events, 4 day-clusters, -6.23c/contract, band [-8.57,-3.90]. The lab\'s own promotion bar, met with the sign reversed. The handicap is the taker entry, not the signal: gross was -5.15c crossing out and -5.18c settling.'],
+  ['book-imbalance','Stopped 2026-09-20 (section 143): 51 closed, 15 events, 4 day-clusters, -6.18c/contract, band [-9.73,-2.62]. Same bar, same sign, same cause. A passive re-seat is a different hypothesis and needs its own pre-registration.']
+])
 export const IBKR_HOLD_TO_SETTLEMENT:ReadonlySet<string>=new Set(['fade','favorite','calibration','political-favorite','fade-maker','ladder-value','spot-first','convergence','news','market-conditioned','weather-forecast','weather-morning','weather-maker','benchmark'])
-/** A held position must be able to settle inside the test; the election contracts expire about 47 days out. */
+/** A held position must be able to settle inside the test; the election contracts expire about 47 days out. Also
+ *  bounds which contracts the daily model-forecast budget may be spent on (ibkrLab.runForecast). */
 export const IBKR_HOLD_MAX_DAYS=60
 export interface LabFrame {market:IbkrLabMarket;yes:IbkrQuote;no:IbkrQuote;history:{at:number;p:number}[];forecast?:{at:number;p:number};spot?:{price:number;annualVol:number;at:number};weather?:{p:number;morning:boolean;at:number}}
 export interface LabSignal {strategy:string;marketId:string;outcome:'YES'|'NO';limit:number;maker:boolean;reason:string;basket?:string}
@@ -109,7 +119,6 @@ export function ibkrSignals(frames:LabFrame[],now:number):LabSignal[] {
       if(Math.abs(micro-p)>=.005)add(f,'microprice',micro>p?'YES':'NO','Depth-weighted quote pressure hypothesis')
     }
     if(spread>=.04&&spread<=.15&&p>.1&&p<.9){add(f,'maker','YES','Two-sided passive quote',true);add(f,'maker','NO','Two-sided passive quote',true)}
-    if(f.yes.ask!+f.no.ask!+.04<1){const basket=`parity:${f.market.id}`;add(f,'dutch','YES','Executable parity after two fees and slippage',false,basket);add(f,'dutch','NO','Executable parity after two fees and slippage',false,basket)}
     if(f.spot&&now-f.spot.at<=30000&&f.market.direction&&/^CF(BTC|ETH|SOL|XRP)$/.test(f.market.product)){
       let fair=cryptoFair(f.spot.price,f.market.strike,f.spot.annualVol,(f.market.closeTime-now)/(365.25*86400000))
       if(f.market.direction==='below')fair=1-fair
@@ -132,9 +141,6 @@ export function ibkrSignals(frames:LabFrame[],now:number):LabSignal[] {
     if(i>0&&i<peers.length-1){const left=peers[i-1],right=peers[i+1],fraction=(f.market.strike-left.market.strike)/(right.market.strike-left.market.strike),fair=frameMid(left)+(frameMid(right)-frameMid(left))*fraction
       if(fair-f.yes.ask!>.05)add(f,'ladder-value','YES','Neighbor-strike interpolation')
       if(1-fair-f.no.ask!>.05)add(f,'ladder-value','NO','Neighbor-strike interpolation')
-    }
-    if(i+1<peers.length){const g=peers[i+1],low=f.market.direction==='above'?f:g,high=f.market.direction==='above'?g:f
-      if(low.yes.ask!+high.no.ask!+.04<1){const basket=`implication:${low.market.id}:${high.market.id}`;add(low,'implication','YES','Exhaustive same-event strike pair',false,basket);add(high,'implication','NO','Exhaustive same-event strike pair',false,basket)}
     }
   }
   return out

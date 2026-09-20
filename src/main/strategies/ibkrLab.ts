@@ -6,12 +6,16 @@ import type {TradingEngine} from '../engine/engine'
 import type {IbkrReader} from '../venues/ibkr'
 import type {IbkrAdapter} from '../venues/ibkrAdapter'
 import {discoverForecastMarkets,loadFinalSettlements} from '../venues/forecastexData'
-import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,IBKR_UNAVAILABLE,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
+import {IBKR_HOLD_MAX_DAYS,IBKR_HOLD_TO_SETTLEMENT,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
 import {ibkrWeather} from './ibkrWeather'
 import {IBKR_RULES_SINCE,type IbkrLabConfig,type IbkrLabMarket,type IbkrLabPosition,type IbkrLabState,type IbkrLabStatus,type IbkrLabStrategyRow} from '../../shared/ibkrLab'
 
 export const IBKR_LAB_DEFAULTS:IbkrLabConfig={enabled:true,mode:'paper',liveStrategies:[],contracts:1,maxOpenPerStrategy:4,maxDailyLoss:10,maxLiveCost:1.5}
 const fee=.01,slippage=.01,startingCash=1000
+/** Losses a hold-to-settlement arm must have SAMPLED before its band can promote it (BACKLOG 141's standard). */
+export const IBKR_MIN_LOSSES=15
+/** ...or this many closed trades, whichever comes first - the same "250 trades or 15 losses" the Kalshi arm uses. */
+export const IBKR_LOSS_WAIVER_TRADES=250
 const round=(n:number)=>Math.round(n*1e8)/1e8
 const day=(ts:number)=>new Date(ts).toISOString().slice(0,10)
 const sameDay=(a:number,b:number)=>day(a)===day(b)
@@ -62,6 +66,7 @@ export class IbkrLab {
       // Estimand: net per CONTRACT (contract-weighted), standard error clustered by day. The equal-day mean used
       // until 2026-09-19 could pass liveEligible on a strategy that lost money per contract (external review
       // §127, F-04). G = day clusters; se = sqrt(G/(G-1) x sum_d (S_d - n_d x mean)^2) / N.
+      const stop=IBKR_RETIRED.get(def.id)
       const days=new Map<string,{n:number;sum:number}>();for(const t of trades){const key=day(t.closedAt),v=days.get(key)??{n:0,sum:0};v.n+=t.quantity;v.sum+=t.net;days.set(key,v)}
       const groups=[...days.values()],N=groups.reduce((a,g)=>a+g.n,0),mean=N?groups.reduce((a,g)=>a+g.sum,0)/N:0
       const se=groups.length>1&&N>0?Math.sqrt(groups.length/(groups.length-1)*groups.reduce((a,g)=>a+(g.sum-g.n*mean)**2,0))/N:Infinity
@@ -70,10 +75,37 @@ export class IbkrLab {
       let unrealized=0,unpriced=0
       for(const p of positions){const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)];if(q&&freshAsk(q,now))unrealized+=(1-q.ask!-slippage-fee-p.entry)*p.quantity-p.entryFee;else unpriced++}
       const events=new Set(trades.map(t=>t.marketId.split('_').slice(0,-1).join('_'))).size
-      return {id:def.id,name:def.name,status:s.config.enabled?'Testing':'Entries paused',reason:s.notes[def.id]??def.description,fills:trades.length+positions.length,closed:trades.length,wins:trades.filter(t=>t.net>0).length,losses:trades.filter(t=>t.net<0).length,realized:round(trades.reduce((a,t)=>a+t.net,0)),unrealized:round(unrealized),unpriced,cash:s.cash[def.id]??startingCash,open:positions.length,pending:s.orders.filter(o=>o.strategy===def.id).length,days:days.size,events,confidenceLow,legacyClosed:legacy.length,legacyRealized:round(legacy.reduce((a,t)=>a+t.net,0)),liveEligible:def.id!=='benchmark'&&trades.length>=30&&events>=10&&days.size>=3&&(confidenceLow??-1)>0}
+      const pending=s.orders.filter(o=>o.strategy===def.id).length
+      // Section 142 read three arms as "0 trades, 0 edge" when they had fired and were holding contracts 12-58
+      // days out, and a fourth as silent while it had orders resting. A row with no closed trade has to say WHICH
+      // of the four it is, or the panel invites the same mistake: never signalled / resting / holding / closed.
+      const blank=trades.length?'':positions.length?`No closed trade yet: holding ${positions.length}, the earliest settles ${new Date(Math.min(...positions.map(p=>p.market.expiresAt))).toISOString().slice(0,10)}. `
+        :pending?`No fill yet: ${pending} order(s) resting. `:'No qualifying signal yet. '
+      const wins=trades.filter(t=>t.net>0).length,losses=trades.filter(t=>t.net<0).length
+      // The loss branch has to have been SAMPLED. A settlement arm that buys 89-97c favourites wins ~95% of the
+      // time, so before its first loss the sample is near-deterministic: se collapses, the band tightens around a
+      // mean that has never seen the payout it is exposed to, and the gate opens on what is the MODAL record of a
+      // zero-edge arm (fade on 2026-09-20: 10 wins, 0 losses, observed sd 2.44c against ~35c on every sibling that
+      // has taken one - a 14x understatement, and P(10 straight wins at fair prices) = 0.59). BACKLOG 141 answered
+      // this for the Kalshi arm on 138 trades - "the arm wins exactly as often as its prices say it should, which
+      // is the signature of NO edge" - and set the retest at 250 trades or 15 losses. Hold-to-settlement arms here
+      // are the same instrument, so they carry the same bar. A zero-width band is never evidence either.
+      const held=IBKR_HOLD_TO_SETTLEMENT.has(def.id)
+      const sampled=!held||losses>=IBKR_MIN_LOSSES||trades.length>=IBKR_LOSS_WAIVER_TRADES
+      const gateBlockers:string[]=[]
+      if(stop)gateBlockers.push(stop)
+      if(def.id==='benchmark')gateBlockers.push('control arm: never promoted')
+      if(trades.length<30)gateBlockers.push(`${trades.length}/30 closed`)
+      if(events<10)gateBlockers.push(`${events}/10 events`)
+      if(days.size<3)gateBlockers.push(`${days.size}/3 day-clusters`)
+      if(!sampled)gateBlockers.push(`${losses}/${IBKR_MIN_LOSSES} losses sampled (or ${trades.length}/${IBKR_LOSS_WAIVER_TRADES} trades)`)
+      if(!(se>0)||!Number.isFinite(se))gateBlockers.push('no usable dispersion')
+      if(!((confidenceLow??-1)>0))gateBlockers.push(`lower bound ${confidenceLow===undefined?'unavailable':confidenceLow.toFixed(2)+'c'}`)
+      return {id:def.id,name:def.name,status:s.config.enabled?'Testing':'Entries paused',reason:blank+(s.notes[def.id]??def.description),fills:trades.length+positions.length,closed:trades.length,wins,losses,realized:round(trades.reduce((a,t)=>a+t.net,0)),unrealized:round(unrealized),unpriced,cash:s.cash[def.id]??startingCash,open:positions.length,pending,days:days.size,events,confidenceLow,legacyClosed:legacy.length,legacyRealized:round(legacy.reduce((a,t)=>a+t.net,0)),gateBlockers,liveEligible:gateBlockers.length===0}
     })
-    for(const def of IBKR_UNAVAILABLE)strategies.push({id:def.id as any,name:def.name,status:'Not applicable',reason:def.reason,fills:0,closed:0,wins:0,losses:0,realized:0,unrealized:0,unpriced:0,cash:0,open:0,pending:0,days:0,events:0,confidenceLow:undefined,legacyClosed:0,legacyRealized:0,liveEligible:false})
-    for(const row of strategies){if(row.status==='Not applicable'||!s.config.enabled)continue;row.status=this.failure?'Stopped':!s.scans?'Discovering':row.open?'Managing positions':row.pending?'Orders pending':'Watching for signals'}
+    for(const def of IBKR_UNAVAILABLE)strategies.push({id:def.id as any,name:def.name,status:'Not applicable',reason:def.reason,fills:0,closed:0,wins:0,losses:0,realized:0,unrealized:0,unpriced:0,cash:0,open:0,pending:0,days:0,events:0,confidenceLow:undefined,legacyClosed:0,legacyRealized:0,gateBlockers:['not available on this venue'],liveEligible:false})
+    for(const row of strategies){if(row.status==='Not applicable'||IBKR_RETIRED.has(row.id))continue;if(!s.config.enabled)continue;row.status=this.failure?'Stopped':!s.scans?'Discovering':row.open?'Managing positions':row.pending?'Orders pending':'Watching for signals'}
+    for(const row of strategies){const stop=IBKR_RETIRED.get(row.id);if(stop){row.status='Stopped (evidence)';row.reason=stop}}
     return {config:structuredClone(s.config),startedAt:s.startedAt,scans:s.scans,lastScanAt:s.lastScanAt,lastError:this.failure??s.lastError,running:this.busy,markets:s.markets.length,freshQuotes:Object.values(s.quotes).filter(q=>freshAsk(q,now)).length,strategies,trades:s.trades.slice(-100).reverse(),positions:structuredClone(s.positions),orders:structuredClone(s.orders),live:structuredClone(s.live),modelCalls:s.modelCalls,notes:Object.entries(s.notes).filter(([k])=>k.startsWith('_')).map(([,v])=>v)}
   }
   async configure(patch:Partial<IbkrLabConfig>){
@@ -84,7 +116,11 @@ export class IbkrLab {
     if(config.mode==='live'){
       if(!config.liveStrategies.length)throw new Error('Select at least one evidence-qualified strategy')
       const rows=this.status().strategies
-      if(config.liveStrategies.some(id=>!rows.find(r=>r.id===id)?.liveEligible))throw new Error('Live entry requires 30 closed paper trades, 10 events, 3 days and a positive day-cluster lower bound')
+      if(config.liveStrategies.some(id=>IBKR_RETIRED.has(id)))throw new Error('A strategy stopped on its own evidence cannot be enabled for live entry')
+      if(config.liveStrategies.some(id=>!rows.find(r=>r.id===id)?.liveEligible)){
+        const why=config.liveStrategies.map(id=>`${id}: ${(rows.find(r=>r.id===id)?.gateBlockers??['unknown']).join(', ')}`).join('; ')
+        throw new Error(`Live entry requires 30 closed paper trades, 10 events, 3 day-clusters, a sampled loss branch and a positive day-cluster lower bound - ${why}`)
+      }
       if(this.engine.getExecutionMode()!=='live')throw new Error('Oracle must be in Live mode; IBKR paper testing does not change Kalshi mode')
       if((await this.venue.getAccount()).balance<config.maxLiveCost)throw new Error('Fund IBKR before enabling live strategy orders')
     }
@@ -148,6 +184,7 @@ export class IbkrLab {
       }
       if(s.config.enabled){
         for(const sig of ibkrSignals(frames,now)){
+          if(IBKR_RETIRED.has(sig.strategy))continue   // stopped on its own evidence; the ledger stays, admission does not
           const key=`${sig.strategy}:${sig.marketId}:${sig.outcome}:${day(now)}`
           if(s.seen[key]||s.orders.some(o=>o.strategy===sig.strategy&&o.marketId===sig.marketId&&o.outcome===sig.outcome)||s.positions.some(p=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome===sig.outcome))continue
           const exposure=s.positions.filter(p=>p.strategy===sig.strategy).length+s.orders.filter(o=>o.strategy===sig.strategy).length
@@ -173,7 +210,7 @@ export class IbkrLab {
     const s=this.state,keep:typeof s.orders=[],used=new Map<string,number>()
     for(const o of s.orders){
       const m=markets.get(o.marketId),q=m&&s.quotes[String((o.outcome==='YES'?m.yes:m.no).conId)]
-      if(o.expiresAt<=now||!m||m.closeTime<=now||this.dailyLoss(o.strategy,now))continue
+      if(o.expiresAt<=now||!m||m.closeTime<=now||this.dailyLoss(o.strategy,now)||IBKR_RETIRED.has(o.strategy))continue
       if(!s.config.enabled)continue
       const key=`${o.strategy}:${m.id}:${o.outcome}`,available=(q?.askSize??0)-(used.get(key)??0)
       if(!q||!freshAsk(q,now)||(q.askAt??0)<=o.createdAt+1000||available<1){keep.push(o);continue}
@@ -233,7 +270,10 @@ export class IbkrLab {
     if(s.modelDay!==day(now)){s.modelDay=day(now);s.modelCalls=0}
     if(s.modelCalls>=8){s.notes.news='Daily eight-call forecast budget reached';return}
     const attempts=s.forecastAttempts??={}
-    const candidates=frames.filter(f=>f.market.closeTime-now>3600000&&now-(attempts[f.market.id]??0)>6*3600000&&(!s.forecast[f.market.id]||now-s.forecast[f.market.id].at>6*3600000))
+    // news and market-conditioned are hold-to-settlement, so ibkrSignals refuses anything expiring past
+    // IBKR_HOLD_MAX_DAYS. Asking the model about those contracts spends the day's budget on entries that can never
+    // be taken: 13 of 28 calls on 2026-09-18..20 went to paper outside the horizon (section 143).
+    const candidates=frames.filter(f=>f.market.closeTime-now>3600000&&f.market.expiresAt-now<=IBKR_HOLD_MAX_DAYS*86400000&&now-(attempts[f.market.id]??0)>6*3600000&&(!s.forecast[f.market.id]||now-s.forecast[f.market.id].at>6*3600000))
     const f=candidates.find(f=>!/^(CF|U[HL])/.test(f.market.product))??candidates[0]
     if(!f)return
     this.modelBusy=true;s.modelCalls++;attempts[f.market.id]=now;s.notes.news=`Requesting forecast from ${s.modelProvider??'configured model'}`;this.save()

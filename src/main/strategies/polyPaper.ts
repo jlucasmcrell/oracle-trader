@@ -43,6 +43,19 @@ export function polyPaperQuote(book:OrderBook,at:number):PolyPaperQuote|undefine
   if(!bids.length||!asks.length||bids[0].price>=asks[0].price)return
   return {at,bid:bids[0].price,ask:asks[0].price,bidSize:bids[0].size,askSize:asks[0].size,pressure:bids.slice(0,3).reduce((n,x)=>n+x.size,0)/asks.slice(0,3).reduce((n,x)=>n+x.size,0)}
 }
+/**
+ * The control used to enter EVERY tracked market and took 191 of the cohort's 210 trades, about 204 a day against
+ * 1-7 for each signal arm: it measured the round-trip cost precisely and spent the lab's whole sample doing it
+ * (section 142). It is now sampled one market in BENCH_SAMPLE by market id, which is ~24 entries a day against the
+ * 12 markets the lab tracks at a time. Thinning costs the anchor almost nothing - the control is nearly pure
+ * friction, per-trade sd 1.69c, so its variance sits between days and the day-clustered half-width stays about
+ * 0.8c at 24/day against 0.78c at full rate - and it still separates momentum (-8.57c) and reversion (-10.00c)
+ * from -5.46c by several times that. The id hash, not the clock, decides: the tracked set is redrawn every 30
+ * minutes and the scan phase is set by app launch, so a window-keyed rule would make the rate depend on when the
+ * app started. The side comes from the same hash for the same reason.
+ */
+export const BENCH_SAMPLE=24
+export const benchHash=(id:string):number=>{let h=0;for(const c of id)h=(h*31+c.charCodeAt(0))>>>0;return h}
 const sideQuote=(q:PolyPaperQuote,side:'YES'|'NO')=>side==='YES'?{bid:q.bid,ask:q.ask,bidSize:q.bidSize,askSize:q.askSize}:{bid:1-q.ask,ask:1-q.bid,bidSize:q.askSize,askSize:q.bidSize}
 export function polyPaperSignals(m:VenueMarket,q:PolyPaperQuote,h:{at:number;mid:number}[],at:number):Pick<PolyPaperOrder,'strategy'|'side'|'limit'|'maker'>[]{
   if(m.status!=='open'||!m.closeTime||m.closeTime-at<30*MINUTE||m.closeTime-at>72*60*MINUTE||(m.minTradeQty??1)>1||q.ask-q.bid>.06)return []
@@ -58,7 +71,8 @@ export function polyPaperSignals(m:VenueMarket,q:PolyPaperQuote,h:{at:number;mid
   if(past&&mid>=.15&&mid<=.85){const move=mid-past.mid;if(Math.abs(move)>=.03)add('momentum',move>0?'YES':'NO',false);if(Math.abs(move)>=.04)add('reversion',move>0?'NO':'YES',false)}
   if(mid>=.15&&mid<=.85&&(q.pressure>=3||q.pressure<=1/3))add('pressure',q.pressure>=3?'YES':'NO')
   for(const side of ['YES','NO'] as const){const s=sideQuote(q,side);if(s.ask>=.03&&s.ask<=.1)add('longshot',side,false);if(s.ask>=.9&&s.ask<=.97)add('favorite',side,false)}
-  add('benchmark',Math.floor(at/(30*MINUTE))%2?'YES':'NO',false)
+  const bench=benchHash(m.id)
+  if(bench%BENCH_SAMPLE===0)add('benchmark',bench>>>5&1?'YES':'NO',false)
   return out
 }
 
@@ -88,7 +102,8 @@ export class PolyPaperLab {
         let unrealized=0,unpriced=0
         for(const p of positions){const q=s.quotes[p.market.id];if(!q||now-q.at>2*MINUTE){unpriced++;continue}const exit=Math.max(0,sideQuote(q,p.side).bid-.01);unrealized+=exit-p.entry-p.fee-polyPaperOrderFee(PAPER_SHARES,exit,now,false,p.market.feeRate)}
         const markets=new Set(trades.map(t=>underlyingOf(t.market.id,t.market.question)??t.market.id)).size,ready=days>=7&&trades.length>=100&&markets>=10
-        return {...def,cash:s.cash[def.id],open:positions.length,pending:s.orders.filter(o=>o.strategy===def.id).length,closed:trades.length,net:trades.reduce((n,t)=>n+t.net,0),unrealized,unpriced,days,markets,lower,upper,legacyClosed:legacy.length,legacyNet:legacy.reduce((n,t)=>n+t.net,0),assessment:def.id==='benchmark'?'Control only':!ready?'Collecting evidence':lower!>0?'Promising; paper only':upper!<0?'Negative; reassess':'Inconclusive'}
+        const probableClosed=trades.filter(t=>t.fill==='probable').length
+        return {...def,probableClosed,cash:s.cash[def.id],open:positions.length,pending:s.orders.filter(o=>o.strategy===def.id).length,closed:trades.length,net:trades.reduce((n,t)=>n+t.net,0),unrealized,unpriced,days,markets,lower,upper,legacyClosed:legacy.length,legacyNet:legacy.reduce((n,t)=>n+t.net,0),assessment:def.id==='benchmark'?'Control only':!ready?'Collecting evidence':lower!>0?'Promising; paper only':upper!<0?'Negative; reassess':'Inconclusive'}
       }),positions:s.positions,orders:s.orders,trades:s.trades.slice(-60).reverse()}
   }
   private close(p:PolyPaperPosition,price:number,reason:string,now:number,settlement=false){
@@ -104,25 +119,43 @@ export class PolyPaperLab {
   private process(m:VenueMarket,q:PolyPaperQuote,now:number){
     const s=this.state
     for(const p of [...s.positions].filter(p=>p.market.id===m.id)){
-      const side=sideQuote(q,p.side),exit=Math.max(0,side.bid-.01),net=exit-p.entry-p.fee-polyPaperOrderFee(PAPER_SHARES,exit,now,false,m.feeRate)
-      // The profit target is ABSOLUTE net (+3c after both fees): until 2026-09-19 it was measured from the entry mark,
-      // which starts negative by the spread and both fees, so a "profit target" could close at a net loss (external
-      // review, Gemini Pro F-04). The loss stop stays relative to the mark - 5c of adverse movement - because a
-      // taker entry is already 3-5c under water at the fill and an absolute -5c stop fired on an unchanged quote.
-      const hold=p.strategy==='longshot'||p.strategy==='favorite',move=p.mark===undefined?net:net-p.mark
-      if(!hold&&side.bidSize>=1&&(now-p.opened>=15*MINUTE||net>=.03||move<=-.05))this.close(p,exit,net>=.03?'profit target':move<=-.05?'loss stop':'15-minute exit',now)
+      const side=sideQuote(q,p.side),exit=Math.max(0,side.bid-.01)
+      // The 15-minute markout is the WHOLE trading exit. The +3c net target and the -5c mark-relative stop fired 0
+      // times in 210 closes, and the lab's own quote log says that is structural rather than luck: across the
+      // admission-eligible 15-minute pairs in the cohort, P(|mid move| >= 8.6c - what a +3c NET target needs after
+      // ~2.3c of fees and ~3.3c of crossing) is 0.04%, and P(|mid move| >= 6c) is 0.25%. Both thresholds sat
+      // outside the process, so they measured nothing while standing ready to bias every arm the moment anything
+      // else moved: +3c truncates exactly the right tail a drift arm has to show, -5c truncates the left. A fixed
+      // horizon markout is the right instrument for a drift hypothesis (section 143). Settlement still closes the
+      // rest, fee-free, in scan(). Note this does NOT reduce the measured 5.56c round trip: that is 2.00c of
+      // modelled slippage pads, ~1.30c of spread and 2.32c of fees, and no exit RULE can touch a crossing cost.
+      const hold=p.strategy==='longshot'||p.strategy==='favorite'
+      if(!hold&&side.bidSize>=1&&now-p.opened>=15*MINUTE)this.close(p,exit,'15-minute exit',now)
     }
-    s.orders=s.orders.filter(o=>o.expires>now)
+    // An order admitted under the previous rules would otherwise fill into the new cohort: positions are stamped
+    // `opened` at FILL time, not at admission (section 143).
+    s.orders=s.orders.filter(o=>o.expires>now&&o.at>=POLY_PAPER_RULES_SINCE)
     for(const o of [...s.orders].filter(o=>o.market.id===m.id)){
       if(now<=o.at||!s.enabled||!m.closeTime||now>=m.closeTime||m.status!=='open')continue
       const daily=s.trades.filter(t=>t.strategy===o.strategy&&new Date(t.closed).toISOString().slice(0,10)===new Date(now).toISOString().slice(0,10)).reduce((n,t)=>n+t.net,0)
       if(daily<=-5){s.orders=s.orders.filter(x=>x.strategy!==o.strategy);continue}
       const side=sideQuote(q,o.side),price=o.maker?o.limit:side.ask+.01
-      if(side.askSize<1||(o.maker?side.ask>=o.limit-1e-9:price>o.limit+1e-9)||price>=1)continue
+      // A resting bid used to fill ONLY when the ask traded through it. On a book whose admission gate requires a
+      // >=2c spread that needs the price to move a whole spread against us inside the order's life, so `join` - an
+      // arm that rests at the touch on every eligible quote - filled zero times in the entire cohort, and the one
+      // or two fills the other passive arms got were adversely selected by construction (section 143). A level
+      // that DISAPPEARS is what a resting bid being consumed looks like on snapshot data; it is also what a
+      // cancellation looks like, and the venue publishes no trade prints to tell them apart. So both are booked,
+      // tagged, and reported as a bracket: 'certain' when the ask traded through, 'probable' when our own price
+      // level is gone. Only orders resting AT the touch (they carry `queue`) get the probable channel - an
+      // improver created its level, so its disappearance says nothing about us.
+      const through=o.maker&&side.ask<o.limit-1e-9
+      const vanished=o.maker&&o.queue!==undefined&&side.bid<o.limit-1e-9
+      if(side.askSize<1||(o.maker?!(through||vanished):price>o.limit+1e-9)||price>=1)continue
       const fee=polyPaperOrderFee(PAPER_SHARES,price,now,o.maker,m.feeRate)
       if(s.cash[o.strategy]<price+fee)continue
       const exitNow=Math.max(0,side.bid-.01),mark=exitNow-price-fee-polyPaperOrderFee(PAPER_SHARES,exitNow,now,false,m.feeRate)
-      s.cash[o.strategy]-=price+fee;s.positions.push({...o,entry:price,fee,opened:now,mark});s.orders=s.orders.filter(x=>x.id!==o.id)
+      s.cash[o.strategy]-=price+fee;s.positions.push({...o,entry:price,fee,opened:now,mark,...(o.maker?{fill:through?'certain' as const:'probable' as const}:{})});s.orders=s.orders.filter(x=>x.id!==o.id)
     }
     const history=s.history[m.id]??[]
     if(s.enabled)for(const signal of polyPaperSignals(m,q,history,now)){
@@ -131,7 +164,13 @@ export class PolyPaperLab {
       if(owned.filter(x=>(underlyingOf(x.market.id,x.market.question)??x.market.id)===group).length>=2)continue
       const daily=s.trades.filter(t=>t.strategy===signal.strategy&&new Date(t.closed).toISOString().slice(0,10)===new Date(now).toISOString().slice(0,10)).reduce((n,t)=>n+t.net,0)
       if(owned.length>=4||owned.some(x=>x.market.id===m.id&&x.side===signal.side)||(s.cooldowns[`${signal.strategy}:${m.id}`]??0)>now||daily<=-5||s.cash[signal.strategy]<1)continue
-      s.orders.push({...signal,id:randomUUID(),market:m,at:now,expires:now+(signal.maker?30:2)*MINUTE})
+      // `queue` is the size already resting at our own price when we joined, and its presence is what marks an
+      // order as AT the touch - the only kind whose vanished level means anything (section 143). `pressure` rests
+      // at the touch exactly like `join`, so it gets the probable channel too; `improve` creates its own level and
+      // never does.
+      const touch=sideQuote(q,signal.side)
+      const atTouch=signal.maker&&Math.abs(signal.limit-touch.bid)<1e-9
+      s.orders.push({...signal,id:randomUUID(),market:m,at:now,expires:now+(signal.maker?30:2)*MINUTE,...(atTouch?{queue:touch.bidSize}:{})})
     }
     s.history[m.id]=[...history.filter(p=>now-p.at<=12*MINUTE),{at:now,mid:(q.bid+q.ask)/2}].slice(-30)
   }

@@ -62,7 +62,7 @@ def show(title, arms, bench_id, events_of=None):
 
 # ---------------- Polymarket US paper lab ----------------
 P = json.load(open(os.path.join(A, 'poly-paper.json'), encoding='utf-8'))
-RULES = 1789767694000  # POLY_PAPER_RULES_SINCE 2026-09-18T21:41:34Z (keep in step with src/shared/polyPaper.ts)
+RULES = 1789898400000  # POLY_PAPER_RULES_SINCE 2026-09-20T10:00:00Z (keep in step with src/shared/polyPaper.ts)
 arms = collections.defaultdict(list)
 legacy = collections.Counter()
 for t in P['trades']:
@@ -76,6 +76,10 @@ res = {k: band(v) for k, v in arms.items() if band(v)}
 show('POLYMARKET US paper lab - trades opened under the current rules (since 2026-09-18 21:41Z)', res, 'benchmark')
 print('  legacy cohort (older rules, excluded):', dict(legacy) or 'none')
 print('  exit reasons:', collections.Counter(t.get('reason') for t in P['trades'] if t['opened'] >= RULES).most_common())
+# The maker seat is bracketed, never a point estimate: a 'probable' fill is a vanished price level, which is what
+# being consumed AND what being cancelled both look like on snapshot data (section 143).
+_mk = [t for t in P['trades'] if t['opened'] >= RULES and t.get('maker')]
+print('  maker fills: %d certain, %d probable' % (sum(1 for t in _mk if t.get('fill') == 'certain'), sum(1 for t in _mk if t.get('fill') == 'probable')))
 print('  open positions:', len(P.get('positions', [])), '| resting orders:', len(P.get('orders', [])), '| markets tracked:', len(P.get('markets', [])))
 
 # ---------------- IBKR ForecastEx paper lab ----------------

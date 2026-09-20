@@ -118,7 +118,24 @@ async function main(){
   assert.deepEqual([row.liveEligible,row.closed,row.legacyClosed,row.legacyRealized],[false,0,30,8.4],'old-rule trades never qualify a strategy')
   const since=IBKR_RULES_SINCE+3600000;live.s.trades=live.s.trades.map((t:any,i:number)=>({...t,openedAt:since+i,closedAt:since+Math.floor(i/10)*86400000}))
   row=live.lab.status().strategies.find(r=>r.id==='favorite')!
-  assert.deepEqual([row.liveEligible,row.closed,row.legacyClosed],[true,30,0])
+  // Thirty straight wins on a favourite arm is the MODAL record of a zero-edge arm, not evidence: before the first
+  // loss the sample is near-deterministic, the clustered SE collapses and the band tightens around a mean that has
+  // never seen the payout the arm is exposed to. BACKLOG 141 measured exactly that on the Kalshi arm at 138 trades
+  // and set the bar at 250 trades or 15 losses; a hold-to-settlement arm here carries the same one (section 143).
+  assert.deepEqual([row.liveEligible,row.closed,row.legacyClosed],[false,30,0],'an unsampled loss branch cannot qualify a settlement arm')
+  assert.ok(row.gateBlockers!.some(b=>/losses sampled/.test(b)),'and the row says which leg of the gate is missing')
+  await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/losses sampled/)
+  // The same arm with its loss branch sampled: 45 closes over three days, 15 of them real losses at the
+  // favourite's own payout, still net positive with a band clear of zero. That is what evidence looks like.
+  const shape=[11,10,9].flatMap((wins,d)=>Array.from({length:15},(_,k)=>({d,win:k<wins})))
+  live.s.trades=shape.map(({d,win},i)=>({id:'S'+i,strategy:'favorite',marketId:`EV${i}_date_strike`,question:'Fixture',
+    outcome:'YES',quantity:1,entry:.4,exit:win?.7:.3,fees:.02,net:win?.3:-.1,openedAt:since+i,closedAt:since+d*86400000,reason:'Fixture'}) as any)
+  row=live.lab.status().strategies.find(r=>r.id==='favorite')!
+  assert.equal(row.gateBlockers!.some(b=>/losses sampled/.test(b)),false,'the loss branch is sampled')
+  assert.deepEqual([row.liveEligible,row.closed,row.losses>=15],[true,45,true],'sampled losses, positive band, three day-clusters')
+  // A quote-dynamics arm never needed the loss bar: it is not held to settlement, so its payout is not one-sided.
+  const timedArm=setup();timedArm.s.trades=live.s.trades.map((r:any,i:number)=>({...r,strategy:'momentum',id:'M'+i,net:.3}))
+  assert.equal(timedArm.lab.status().strategies.find((r:any)=>r.id==='momentum')!.gateBlockers!.some((b:string)=>/losses sampled/.test(b)),false,'the loss bar is for settlement arms only')
   await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/Fund IBKR/)
   live.venue.getAccount=async()=>({balance:20});await live.lab.configure({mode:'live',liveStrategies:['favorite']})
   assert.equal(live.lab.status().config.mode,'live');await live.lab.configure({mode:'paper',liveStrategies:[]})

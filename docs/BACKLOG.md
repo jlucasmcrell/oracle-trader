@@ -2156,21 +2156,25 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   clean-half number first and the pooled number second; if the two disagree in sign, the read waits for more
   clean days rather than deciding.
 
-- **187. Polymarket lab: the 15-minute taker round trip costs more than any signal it tests (2026-09-20, §142).
+- **187 DONE 2026-09-20 (section 143).** The inert +3c target and -5c mark-relative stop are deleted; the 15-minute markout is the whole trading exit. The recommendation's premise was WRONG and the fix is not what it asked for: the lab's own quote log (21,030 quotes, 643 markets) puts the median admission-eligible spread at 1.00c, so the -3.24c gross is 1.30c of spread plus the 2.00c of modelled slippage pads, and no exit RULE can touch a crossing cost. Original item:
+  Original text: **187. Polymarket lab: the 15-minute taker round trip costs more than any signal it tests (2026-09-20, §142).
   OPERATOR.** 204 of 210 closes are the timer; gross move -3.24c, fees 2.32c, net -5.56c; momentum (-8.57c) and
   reversion (-10.00c) sit entirely below the control's -5.46c. No arm can read positive unless its signal predicts
   more than ~6c in fifteen minutes. Options: hold to settlement as the longshot/favorite controls do, or enter
   passively. Either resets the cohort, which costs one day at today's sample. Trigger: operator's call at the
   **2026-09-24** lab read.
-- **188. Polymarket passive arms never fill (2026-09-20, §142).** `join` has never filled; `improve` and
+- **188 DONE 2026-09-20 (section 143).** A resting bid AT the touch now books a PROBABLE fill when its own price level disappears, tagged `fill:'probable'` against the proven `'certain'` trade-through, with the size queued ahead recorded. The stated cause was wrong - markets with a resting order stay quoted for the order's whole life (polyPaper.ts:156) - the cause was the fill rule itself. Original item:
+  Original text: **188. Polymarket passive arms never fill (2026-09-20, §142).** `join` has never filled; `improve` and
   `pressure` have one trade each. The lab tracks 12 markets at a time resampled every 30 minutes, so a resting
   order's market is usually gone before a trade-through reaches it. The maker rebate is the one seat on that venue
   that pays without being right (BACKLOG 181), and it is the seat with no data. Fix: pin a market for the life of
   a resting order, or track more. Trigger: with 187 on **2026-09-24**.
-- **189. Polymarket benchmark is 91% of the lab's sample (2026-09-20, §142).** The control took 204 trades a day
+- **189 DONE 2026-09-20 (section 143).** The control is sampled one market in 24 by market id (`BENCH_SAMPLE`, `benchHash`), about 24 entries a day against 204. By id and not by clock: the tracked set is redrawn every 30 minutes and the scan phase is set by app launch, so a window-keyed rule would make the rate depend on when the app started. Measured on the cohort's own trades, the day-clustered half-width goes 0.78c -> ~0.80c, so the anchor is intact. Original item:
+  Original text: **189. Polymarket benchmark is 91% of the lab's sample (2026-09-20, §142).** The control took 204 trades a day
   against 1-7 for each arm. It measures friction accurately and starves everything else of attention and cash.
   Rate-limit it to the arms' opportunity rate. Trigger: with 187 on **2026-09-24**.
-- **190. IBKR quote-following family: 151 trades, all at the entry cost (2026-09-20, §142).** momentum, log-momentum,
+- **190 PARTLY DONE 2026-09-20 (section 143).** microprice (47 closed, 18 events, 4 clusters, -6.23c, band [-8.57,-3.90]) and book-imbalance (51/15/4, -6.18c, [-9.73,-2.62]) are STOPPED via a new `IBKR_RETIRED` state that keeps their ledger, cash and evidence on the panel and refuses only new admission. momentum, log-momentum and breakout are NOT stopped: on the estimator the code itself uses, momentum reads [-16.23,+0.90] and log-momentum [-17.64,+3.99], so retiring them would kill arms on less evidence than the lab requires to promote one. They run to the pre-registered read. Original item:
+  Original text: **190. IBKR quote-following family: 151 trades, all at the entry cost (2026-09-20, §142).** momentum, log-momentum,
   breakout, microprice and book-imbalance are each confidently negative, and the gross result is the same whether
   they cross out or settle, so the ~5c handicap is the entry (ask + 1c slippage). Either retire them or re-seat
   them passively. Trigger: at the **2026-09-24** read, when each has >= 30 trades and >= 4 days.
@@ -2179,7 +2183,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   **2026-09-26**. The benchmark control has 4 trades on 1 day, so GLM F-07's benchmark-relative column (BACKLOG
   181) is not yet computable. Trigger: read fade at its gate on **2026-09-26**; report against zero AND against
   the control, and say which the control's own n can support.
-- **192. IBKR: three arms have never fired; three more are holding, not silent (2026-09-20, §142, corrected same
+- **192 DONE 2026-09-20 (section 143).** dutch and implication are declared unreachable on ForecastEx and their detectors removed: over 48,006 paired observations with both legs quoted at size >= 1, the cheapest YES+NO pair was $1.0100 and the spread histogram floors at +1c - zero crossings, before the 4c of fees an entry would also have to clear. convergence is KEPT: its blocker is our own scan geometry (30 markets a scan, cursor +20 over ~294, a ~7.4-minute revisit against a 4-minute window, and a 2-minute taker order life), which is a fixable instrument defect and not a venue incapacity - see 197. status() now says which of four states a row with no closed trade is in. Original item:
+  Original text: **192. IBKR: three arms have never fired; three more are holding, not silent (2026-09-20, §142, corrected same
   day).** Never fired: dutch and implication (the arbitrage has not appeared) and convergence, which wants the
   final 2-6 minutes before expiry on a universe whose median contract expires in 47 days - structurally
   unreachable there, so it belongs in `IBKR_UNAVAILABLE`. news (capped by its own eight-call daily forecast
@@ -2193,3 +2198,49 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   bimodal - 82 of 281 contracts expire within two days, the median is 47. Any fix that gives the control a usable
   band has to bias it to the short-dated half without changing what it measures. Trigger: with 191 on
   **2026-09-26**.
+
+- **194. The IBKR promotion gate had no loss-branch requirement (2026-09-20, section 143). FIXED, and it was live.**
+  `liveEligible` required 30 closed, 10 events, 3 day-clusters and a positive band, and nothing else. A settlement
+  arm that buys 89-97c favourites wins ~95% of the time, so before its first loss the sample is near-deterministic:
+  the clustered SE collapses and the band tightens around a mean that has never seen the payout the arm is exposed
+  to. fade on 2026-09-20 read 10 wins / 0 losses, observed sd 2.44c against ~35c on every sibling that has taken a
+  loss - a 14x understatement - and P(10 straight wins at fair prices) is 0.59. The gate would have promoted a
+  zero-edge fade about one time in five at its 09-26 read, and the path from `liveEligible` to real money is one
+  checkbox. BACKLOG 141 answered the same question for the Kalshi arm at 138 trades ("the arm wins exactly as often
+  as its prices say it should, which is the signature of NO edge") and set the bar at 250 trades or 15 losses; a
+  hold-to-settlement arm here now carries the same bar, plus a rejection of zero-width bands, plus a `gateBlockers`
+  list so the panel and the error message say which leg is missing. Trigger: at the **2026-09-26** fade read,
+  report it as "N of 15 losses sampled, calibration z, not qualified" and never as a bare band.
+- **195. An IBKR arm can hold both sides of one market and the pairing loop realises it (2026-09-20, section 143).**
+  ibkrLab.ts dedupes admission on strategy+market+OUTCOME with the UTC day in the key, so a directional arm that
+  flips side on a later day ends up long YES and long NO; the $1 pairing then books it with no basket test. Seven
+  pair rows exist in the cohort, and ONE of them contributes -80c of favorite's -68c over 11 trades. Two defects
+  ride with it: the pair writes `entry+other.entry` into a per-contract price field (four cohort trades carry
+  entry > 1, max 1.78), so any per-contract calibration statistic returns nonsense on those arms. Trigger: fix
+  before the **2026-09-26** read, since favorite is one of the arms the gate could reach.
+- **196. Two loss-side censors bias the promotion statistic (2026-09-20, section 143).** `closePositions` refuses an
+  exit when the contract is worth under 1c, so near-total losses stay open and never enter `realized`, which is the
+  only thing the gate reads - 6 of 12 benchmark and 5 of 12 ladder-value positions sit there now. And both labs
+  clear an arm's orders for the rest of the UTC day at their daily loss cap, so the day clusters that both SE
+  estimators are built on are truncated conditional on losses. Trigger: with 194's re-read on **2026-09-26**.
+- **197. convergence is blocked by our scan geometry, not by the venue (2026-09-20, section 143).** It wants the
+  final 2-6 minutes before expiry; the lab quotes 30 markets a scan and advances the cursor by 20 over ~294
+  markets, a ~7.4-minute revisit, while a taker order lives 2 minutes and a fill needs a strictly newer quote. The
+  window is missed by construction. Fix is a priority pass: quote near-expiry contracts every scan. Trigger:
+  **2026-09-27**, after the 09-24 and 09-26 reads.
+- **198. The Polymarket maker seat is bracketed, not measured (2026-09-20, section 143).** A 'probable' fill is a
+  vanished price level, which is what being consumed AND what being cancelled both look like on book snapshots;
+  gateway.polymarket.us publishes `/book` and no trade prints (probed 2026-09-20: trades, prints, history, candles,
+  price-history, last-trade and ticker all 404). Every maker read quotes both counts. Note what the quote log
+  already says about the seat: `pressure` fired 3,392 times with drift +0.08c at 15 min, +0.32c at 60 min and
+  +1.08c at 120 min, every band excluding zero - far short of a taker round trip, but the shape of an arm that
+  would pay on a maker-in, settle-out seat costing about nothing. Trigger: the lab read on **2026-09-24**; if the
+  certain and probable brackets disagree in sign, say so and do not conclude.
+- **199. The IBKR control cannot anchor fade, and moving it would make that worse (2026-09-20, section 143, item 6
+  of the review NOT done).** Removing benchmark from the hold set drops its slots 12 -> 4 while 6 of its 12
+  positions are unexitable under the sub-1c guard, so `exposure >= slots` would block every new entry: the control
+  would go from 4 closes to zero. Even repaired it yields a timed control inside a 4c spread on ~13 of 162 pairs,
+  which cannot anchor a settlement arm that buys 89-97c favourites. The matched control nobody has built is the
+  one worth building: same admission, hold to settlement, side chosen without the signal. Trigger: design it with
+  194's re-read on **2026-09-26**; until then fade is reported against zero with the control's n=4, G=1 quoted
+  beside it.

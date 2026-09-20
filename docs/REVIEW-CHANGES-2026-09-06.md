@@ -4907,3 +4907,50 @@ invalid" (its Coinbase input fails closed on a last-trade timestamp over 30 s ol
 
 The six recommendations are in the report's section 3. Items 1-3 alter a pre-registered lab and item 4 retires
 arms, so they are the operator's; 5 and 6 are bookkeeping.
+
+## §143 - 2026-09-20 09:40Z: the labs, fixed - and the promotion gate that would have paid for a coin flip
+
+Operator: "I'll defer to you. Fix things based on your recommendations for each." Six recommendations from §142,
+designed and adversarially verified by a 13-agent workflow before anything was touched; three plans survived, three
+were refuted and rebuilt from the verifiers' corrections. The single most valuable finding was in none of the six.
+
+**The finding that outranked the review.** `liveEligible` (ibkrLab.ts) required 30 closed trades, 10 events, 3
+day-clusters and a positive day-clustered band - and never required the LOSS BRANCH TO HAVE BEEN SAMPLED. A
+settlement arm that buys 89-97c favourites wins about 95% of the time, so until its first loss the sample is
+near-deterministic: the clustered SE collapses and the band tightens around a mean that has never seen the payout
+the arm is exposed to. fade read 10 wins, 0 losses, observed per-trade sd 2.44c against ~35c on every sibling that
+has taken one - a 14x understatement of the SE in the gate - and at fair prices P(10 straight wins) = 0.59, which
+makes the record the MODAL outcome of a zero-edge arm, not evidence. With 0 losses in 30 the gate opens; the path
+from there to real money is one checkbox on the panel. The estimate was that it would promote a zero-edge fade
+about one time in five at its 2026-09-26 read. The project had already answered this exact question - BACKLOG 141,
+Kalshi fade, 138 trades, "the arm wins exactly as often as its prices say it should, which is the signature of NO
+edge", retest at 250 trades or 15 losses - and the lab was using a bar eight times smaller on the same instrument.
+Fixed: hold-to-settlement arms need 15 sampled losses or 250 closes, a zero-width band is refused, and every row
+carries a `gateBlockers` list so the panel and the rejection message name the missing leg. The existing test
+asserted the defect (30 straight wins qualify); it now asserts the correction, plus a sampled-loss fixture that
+does qualify. BACKLOG 194.
+
+**What shipped, by recommendation.**
+
+| # | Shipped | Note |
+|---|---|---|
+| 1 | The +3c target and -5c mark stop are deleted; the 15-minute markout is the whole trading exit | The recommendation was wrong about the cause. The lab's quote log puts the median admission-eligible spread at 1.00c, so the -3.24c gross is 1.30c of spread plus 2.00c of modelled pads; no exit rule touches a crossing cost. Hold-to-settlement was tested and rejected on the data: it trades a 0.7c-dispersion markout for a 45c-dispersion binary and the two arms that already hold produced 3 closes each against the timer arms' 191 |
+| 2 | A resting bid at the touch books a PROBABLE fill when its price level vanishes, tagged against the proven CERTAIN trade-through, with the queue size recorded | The stated cause (rotation) was wrong: markets with a resting order stay quoted. The real cause was the fill rule, under which every modelled maker fill was adversely selected by construction. The venue publishes no trade prints, so the seat is now reported as a bracket and never as a point |
+| 3 | The control samples one market in 24 by market id | The plan's window rotation was refuted: the tracked set is redrawn every 30 minutes and the phase is set by app launch, so it would have delivered ~46/day, not 24, and varied with restart time. Day-clustered half-width 0.78c -> ~0.80c, so the anchor survives |
+| 4 | microprice and book-imbalance STOPPED via a new `IBKR_RETIRED` state; momentum, log-momentum and breakout left running | Retiring all five was refuted: on the estimator the code itself uses, momentum reads [-16.23,+0.90] and log-momentum [-17.64,+3.99]. A lab that kills on less evidence than it promotes on is not a lab. `IBKR_UNAVAILABLE` was the wrong mechanism - it would have zeroed the 47 trades that justified the stop |
+| 5 | NOT DONE, deliberately | Removing benchmark from the hold set drops its slots 12 -> 4 while 6 of its 12 positions are unexitable, so `exposure >= slots` blocks every entry: the control would go from 4 closes to zero. BACKLOG 199 |
+| 6 | dutch and implication declared unreachable and their detectors removed; convergence KEPT | 48,006 paired observations, cheapest YES+NO pair $1.0100, zero crossings. convergence's blocker is our own scan geometry, not the venue (BACKLOG 197). status() now distinguishes never-signalled, resting, holding and closed - the four states §142 read as one |
+
+**One cohort reset, not three.** All three Polymarket changes are entry/exit/admission rules, and the assessment
+gate counts days and trades INSIDE the cohort, so shipping them separately would have put every arm past October.
+`POLY_PAPER_RULES_SINCE` moves once to the deploy instant, and orders admitted under the old rules are dropped so
+they cannot fill into the new cohort (positions are stamped `opened` at FILL time, not at admission). A test now
+fails if the constants and `scripts/lab-review.py` drift apart.
+
+**Filed, not fixed:** an arm can hold both sides of one market and the pairing loop realises it, writing a
+two-contract cost into a per-contract field (BACKLOG 195); two loss-side censors bias the promotion statistic
+(196); convergence's scan geometry (197); the maker bracket's standing caveat and what the quote log already says
+about `pressure` - 3,392 firings, drift +0.08c/+0.32c/+1.08c at 15/60/120 minutes, every band excluding zero (198);
+and the matched settlement control nobody has built (199).
+
+20/20 suites. Restart: build 09:32:57Z, electron start 09:34:21Z under `agent.lock`.

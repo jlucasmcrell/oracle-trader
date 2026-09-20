@@ -58,6 +58,8 @@ export interface IbkrLabStrategyRow {
   id:string; name:string; status:string; reason:string; fills:number; closed:number; wins:number; losses:number
   realized:number; unrealized:number; unpriced:number; cash:number; open:number; pending:number; days:number
   events:number; liveEligible:boolean; confidenceLow?:number
+  /** Why the arm is not promotable yet, when it is not. Empty once every leg of the gate is met. */
+  gateBlockers?:string[]
   /** Closed under earlier rules: kept for history, excluded from every number above. */
   legacyClosed:number; legacyRealized:number
 }
