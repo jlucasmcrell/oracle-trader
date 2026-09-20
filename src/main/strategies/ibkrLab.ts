@@ -75,6 +75,7 @@ export class IbkrLab {
       let unrealized=0,unpriced=0
       for(const p of positions){const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)];if(q&&freshAsk(q,now))unrealized+=(1-q.ask!-slippage-fee-p.entry)*p.quantity-p.entryFee;else unpriced++}
       const events=new Set(trades.map(t=>t.marketId.split('_').slice(0,-1).join('_'))).size
+      const cappedDays=(s.cappedDays?.[def.id]??[]).filter(d=>days.has(d)).length
       const pending=s.orders.filter(o=>o.strategy===def.id).length
       // Section 142 read three arms as "0 trades, 0 edge" when they had fired and were holding contracts 12-58
       // days out, and a fourth as silent while it had orders resting. A row with no closed trade has to say WHICH
@@ -101,9 +102,9 @@ export class IbkrLab {
       if(!sampled)gateBlockers.push(`${losses}/${IBKR_MIN_LOSSES} losses sampled (or ${trades.length}/${IBKR_LOSS_WAIVER_TRADES} trades)`)
       if(!(se>0)||!Number.isFinite(se))gateBlockers.push('no usable dispersion')
       if(!((confidenceLow??-1)>0))gateBlockers.push(`lower bound ${confidenceLow===undefined?'unavailable':confidenceLow.toFixed(2)+'c'}`)
-      return {id:def.id,name:def.name,status:s.config.enabled?'Testing':'Entries paused',reason:blank+(s.notes[def.id]??def.description),fills:trades.length+positions.length,closed:trades.length,wins,losses,realized:round(trades.reduce((a,t)=>a+t.net,0)),unrealized:round(unrealized),unpriced,cash:s.cash[def.id]??startingCash,open:positions.length,pending,days:days.size,events,confidenceLow,legacyClosed:legacy.length,legacyRealized:round(legacy.reduce((a,t)=>a+t.net,0)),gateBlockers,liveEligible:gateBlockers.length===0}
+      return {id:def.id,name:def.name,status:s.config.enabled?'Testing':'Entries paused',reason:blank+(s.notes[def.id]??def.description),fills:trades.length+positions.length,closed:trades.length,wins,losses,realized:round(trades.reduce((a,t)=>a+t.net,0)),unrealized:round(unrealized),unpriced,cash:s.cash[def.id]??startingCash,open:positions.length,pending,days:days.size,cappedDays,events,confidenceLow,legacyClosed:legacy.length,legacyRealized:round(legacy.reduce((a,t)=>a+t.net,0)),gateBlockers,liveEligible:gateBlockers.length===0}
     })
-    for(const def of IBKR_UNAVAILABLE)strategies.push({id:def.id as any,name:def.name,status:'Not applicable',reason:def.reason,fills:0,closed:0,wins:0,losses:0,realized:0,unrealized:0,unpriced:0,cash:0,open:0,pending:0,days:0,events:0,confidenceLow:undefined,legacyClosed:0,legacyRealized:0,gateBlockers:['not available on this venue'],liveEligible:false})
+    for(const def of IBKR_UNAVAILABLE)strategies.push({id:def.id as any,name:def.name,status:'Not applicable',reason:def.reason,fills:0,closed:0,wins:0,losses:0,realized:0,unrealized:0,unpriced:0,cash:0,open:0,pending:0,days:0,cappedDays:0,events:0,confidenceLow:undefined,legacyClosed:0,legacyRealized:0,gateBlockers:['not available on this venue'],liveEligible:false})
     for(const row of strategies){if(row.status==='Not applicable'||IBKR_RETIRED.has(row.id))continue;if(!s.config.enabled)continue;row.status=this.failure?'Stopped':!s.scans?'Discovering':row.open?'Managing positions':row.pending?'Orders pending':'Watching for signals'}
     for(const row of strategies){const stop=IBKR_RETIRED.get(row.id);if(stop){row.status='Stopped (evidence)';row.reason=stop}}
     return {config:structuredClone(s.config),startedAt:s.startedAt,scans:s.scans,lastScanAt:s.lastScanAt,lastError:this.failure??s.lastError,running:this.busy,markets:s.markets.length,freshQuotes:Object.values(s.quotes).filter(q=>freshAsk(q,now)).length,strategies,trades:s.trades.slice(-100).reverse(),positions:structuredClone(s.positions),orders:structuredClone(s.orders),live:structuredClone(s.live),modelCalls:s.modelCalls,notes:Object.entries(s.notes).filter(([k])=>k.startsWith('_')).map(([,v])=>v)}
@@ -187,6 +188,12 @@ export class IbkrLab {
           if(IBKR_RETIRED.has(sig.strategy))continue   // stopped on its own evidence; the ledger stays, admission does not
           const key=`${sig.strategy}:${sig.marketId}:${sig.outcome}:${day(now)}`
           if(s.seen[key]||s.orders.some(o=>o.strategy===sig.strategy&&o.marketId===sig.marketId&&o.outcome===sig.outcome)||s.positions.some(p=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome===sig.outcome))continue
+          // A DIRECTIONAL arm must never end up long both sides of one market. The dedupe above is keyed on the
+          // outcome and the `seen` key carries the UTC day, so an arm that flipped side on a later day bought the
+          // other leg and the $1 pairing below then booked the pair as one trade - seven such rows exist, and a
+          // single one contributes -80c of favorite's -68c over 11 trades (audit B-195, section 143). A basket
+          // signal is exempt: buying both legs is its whole hypothesis and it carries `basket`.
+          if(!sig.basket&&(s.positions.some(p=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome!==sig.outcome&&!p.basket)||s.orders.some(o=>o.strategy===sig.strategy&&o.marketId===sig.marketId&&o.outcome!==sig.outcome&&!o.basket)))continue
           const exposure=s.positions.filter(p=>p.strategy===sig.strategy).length+s.orders.filter(o=>o.strategy===sig.strategy).length
           // Held positions occupy slots for days; four slots would stop a settlement arm after its first four entries.
           const slots=IBKR_HOLD_TO_SETTLEMENT.has(sig.strategy)?Math.max(12,s.config.maxOpenPerStrategy):s.config.maxOpenPerStrategy
@@ -205,7 +212,17 @@ export class IbkrLab {
     }catch(e){this.state.lastError=String(e);try{this.save()}catch{};console.warn('[ibkr-lab]',String(e))}
     finally{this.busy=false}
   }
-  private dailyLoss(strategy:string,now:number){return this.state.trades.filter(t=>t.strategy===strategy&&sameDay(t.closedAt,now)).reduce((a,t)=>a+t.net,0)<=-this.state.config.maxDailyLoss}
+  /**
+   * True once an arm has lost its daily allowance, which stops its entries for the rest of the UTC day. That is a
+   * risk control and stays, but it truncates the day CONDITIONAL ON LOSSES, and the UTC day is the cluster unit
+   * both standard errors are built on: a capped day is a short day, and short days are the losing ones (audit
+   * B-196). `cappedDays` counts them so a read can say so instead of quietly inheriting the bias.
+   */
+  private dailyLoss(strategy:string,now:number){
+    const capped=this.state.trades.filter(t=>t.strategy===strategy&&sameDay(t.closedAt,now)).reduce((a,t)=>a+t.net,0)<=-this.state.config.maxDailyLoss
+    if(capped){const d=(this.state.cappedDays??={});(d[strategy]??=[]).includes(day(now))||d[strategy].push(day(now))}
+    return capped
+  }
   private fillOrders(now:number,markets:Map<string,IbkrLabMarket>){
     const s=this.state,keep:typeof s.orders=[],used=new Map<string,number>()
     for(const o of s.orders){
@@ -234,7 +251,10 @@ export class IbkrLab {
     for(const p of [...s.positions]){if(!s.positions.includes(p))continue;const other=s.positions.find(x=>x!==p&&x.strategy===p.strategy&&x.market.id===p.market.id&&x.outcome!==p.outcome)
       if(!other)continue
       const qty=Math.min(p.quantity,other.quantity),fees=(p.entryFee/p.quantity+other.entryFee/other.quantity)*qty
-      s.trades.push({id:randomUUID(),strategy:p.strategy,marketId:p.market.id,question:p.market.question+' (YES/NO pair)',outcome:p.outcome,quantity:qty,entry:p.entry+other.entry,exit:1,fees,net:round((1-p.entry-other.entry)*qty-fees),openedAt:Math.min(p.openedAt,other.openedAt),closedAt:now,reason:'Opposing contracts paired at $1'})
+      // `entry` here is the cost of ONE PAIR and therefore can exceed 1 (observed up to 1.78). Every other trade
+      // row carries a single-leg price, so anything computing a per-contract price statistic - the calibration
+      // check BACKLOG 141 prescribes for the 2026-09-26 read - has to skip these. `paired` is that flag.
+      s.trades.push({id:randomUUID(),paired:true,strategy:p.strategy,marketId:p.market.id,question:p.market.question+' (YES/NO pair)',outcome:p.outcome,quantity:qty,entry:p.entry+other.entry,exit:1,fees,net:round((1-p.entry-other.entry)*qty-fees),openedAt:Math.min(p.openedAt,other.openedAt),closedAt:now,reason:'Opposing contracts paired at $1'})
       s.cash[p.strategy]=round(s.cash[p.strategy]+qty)
       for(const position of [p,other]){position.entryFee*=1-qty/position.quantity;position.quantity-=qty;if(!position.quantity)s.positions=s.positions.filter(x=>x!==position)}
     }
@@ -245,8 +265,16 @@ export class IbkrLab {
       if(p.basket&&(s.positions.some(other=>other!==p&&other.basket===p.basket)||now-p.openedAt<120000))continue
       if(!p.basket&&IBKR_HOLD_TO_SETTLEMENT.has(p.strategy))continue // settled by the published final value
       const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
-      if(p.market.closeTime<=now||!q||!freshAsk(q,now)||(q.askAt??0)<=p.openedAt+1000||q.askSize!<p.quantity||q.ask!+slippage>.99)continue
-      const exit=1-q.ask!-slippage,net=(exit-p.entry)*p.quantity-p.entryFee-fee*p.quantity
+      if(p.market.closeTime<=now||!q||!freshAsk(q,now)||(q.askAt??0)<=p.openedAt+1000||q.askSize!<p.quantity)continue
+      // The old guard refused the exit whenever the opposing ask left our side worth under a cent, which is
+      // exactly a near-total LOSS. Those positions never closed, so they never entered `realized` - the only
+      // number the promotion gate reads - while every winner did: a one-sided censor on the statistic that
+      // promotes an arm to real money (audit B-196, section 143). The guard existed to avoid a negative exit
+      // price; clamping at zero says the same thing truthfully, because a contract whose other side is offered at
+      // 99c is worth nothing. This un-censors 98c < ask <= 99c only: above that `freshAsk` refuses the quote
+      // outright (ask <= .99), which is a WIDER censor on the same tail and is shared with the entry path, so it
+      // needs its own decision (BACKLOG 200). Paper ledger only - the live path never comes through here.
+      const exit=Math.max(0,1-q.ask!-slippage),net=(exit-p.entry)*p.quantity-p.entryFee-fee*p.quantity
       // One exit policy, paper and live: price exits measure movement from the first fresh valuation at or after the
       // fill. Without one there is nothing to measure from; take it now (movement zero) rather than switch to the
       // absolute-loss stop the round-114 rules replaced. Time and pre-close exits still apply.

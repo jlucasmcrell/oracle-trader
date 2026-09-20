@@ -21,6 +21,9 @@ export interface IbkrLabPosition {
   entryMarkAt?:number
 }
 export interface IbkrLabTrade {
+  /** Both legs of one market netted at $1: `entry` is the PAIR's cost and may exceed 1, so per-contract price
+   *  statistics must skip this row. Directional arms can no longer create one (audit B-195). */
+  paired?:boolean
   id:string; strategy:string; marketId:string; question:string; outcome:'YES'|'NO'; quantity:number
   entry:number; exit:number; fees:number; net:number; openedAt:number; closedAt:number; reason:string
 }
@@ -40,6 +43,9 @@ export interface IbkrLabLive {
   basket?:string
 }
 export interface IbkrLabState {
+  /** UTC days on which an arm hit its daily loss cap, per arm: those day-clusters are truncated conditional on
+   *  losses, so any band built from them is optimistic by an unknown amount (audit B-196). */
+  cappedDays?:Record<string,string[]>
   version:1; config:IbkrLabConfig; startedAt:number; scans:number; lastScanAt?:number; lastError?:string
   markets:IbkrLabMarket[]; quotes:Record<string,IbkrQuote>; histories:Record<string,{at:number;p:number}[]>
   orders:IbkrLabOrder[]; positions:IbkrLabPosition[]; trades:IbkrLabTrade[]; cash:Record<string,number>
@@ -58,6 +64,8 @@ export interface IbkrLabStrategyRow {
   id:string; name:string; status:string; reason:string; fills:number; closed:number; wins:number; losses:number
   realized:number; unrealized:number; unpriced:number; cash:number; open:number; pending:number; days:number
   events:number; liveEligible:boolean; confidenceLow?:number
+  /** Of `days`, how many were cut short by the daily loss cap - those clusters are truncated on losses. */
+  cappedDays:number
   /** Why the arm is not promotable yet, when it is not. Empty once every leg of the gate is met. */
   gateBlockers?:string[]
   /** Closed under earlier rules: kept for history, excluded from every number above. */

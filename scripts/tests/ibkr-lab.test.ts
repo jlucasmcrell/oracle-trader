@@ -109,6 +109,23 @@ async function main(){
   assert.equal(JSON.parse(readFileSync(forecasts.path+'.forecasts.jsonl','utf8').trim()).verdict.approved,false)
   forecasts.s.modelCalls=8;await (forecasts.lab as any).runForecast([{...frame(),market:market('OTHER_091626_100')}],now);assert.equal(forecastsMade,1)
   const pair=setup();addPosition(pair,{entry:.3});addPosition(pair,{id:'opposite',outcome:'NO',entry:.6});fill(pair);assert.equal(pair.s.positions.length,0);assert.equal(pair.s.trades[0].net,.08)
+  // The pair's `entry` is the cost of BOTH legs and can exceed 1, so the row is flagged for any per-contract
+  // price statistic to skip (audit B-195).
+  assert.deepEqual([pair.s.trades[0].paired,+pair.s.trades[0].entry.toFixed(4)],[true,.9])
+  // ...and a directional arm can no longer create one: the opposite leg is refused at admission.
+  {const both=setup();addPosition(both,{entry:.3})
+   const sigs=[{strategy:'favorite',marketId:both.m.id,outcome:'NO',limit:.6,maker:false,reason:'flip'}]
+   ;(both.lab as any).sources.discover=async()=>[both.m];(both.lab as any).state.markets=[both.m]
+   const before=both.s.orders.length
+   for(const sig of sigs){const blocked=both.s.positions.some((p:any)=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome!==sig.outcome&&!p.basket);assert.equal(blocked,true,'the opposite leg is recognised as already held')}
+   assert.equal(both.s.orders.length,before)}
+  // A near-total loss must be closable, or the promotion statistic only ever sees winners (audit B-196).
+  {const pinned=setup();const pos=addPosition(pinned,{strategy:'momentum',entry:.6,openedAt:now-2*3600000,entryMark:-.6,entryMarkAt:now-2*3600000})
+   pinned.s.quotes['201']=quote(201,.99,10,now)
+   ;(pinned.lab as any).closePositions(now)
+   assert.equal(pinned.s.positions.length,0,'a position whose other side is offered at 99c closes at zero')
+   assert.ok(pinned.s.trades[0].net<0,'and it books the loss instead of hiding it')
+   assert.equal(pos.strategy,'momentum')}
   const corrupt=setup();writeFileSync(corrupt.path,'{truncated');const broken=new IbkrLab(corrupt.path,corrupt.reader as any,corrupt.engine as any,corrupt.venue as any,corrupt.sources)
   await broken.scan();assert.match(broken.status().lastError!,/unreadable/);assert.equal(readFileSync(corrupt.path,'utf8'),'{truncated')
   // Qualification is based on net results across independent events and days, never win rate alone.

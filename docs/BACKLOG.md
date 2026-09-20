@@ -2286,3 +2286,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   one worth building: same admission, hold to settlement, side chosen without the signal. Trigger: design it with
   194's re-read on **2026-09-26**; until then fade is reported against zero with the control's n=4, G=1 quoted
   beside it.
+
+- **200. `freshAsk` censors the same loss tail, and it is shared with the entry path (2026-09-20, from 196).** A
+  position whose opposing side is offered above 99c has no usable quote at all - `freshAsk` requires
+  `ask <= .99` - so it can never be closed and never enters `realized`. Section 143 un-censored only the
+  98c-to-99c band, where the old sub-cent guard bit. Widening `freshAsk` would also change which markets an arm
+  may ENTER, so it is not a low-severity edit. Trigger: decide with the **2026-09-26** gate read; the honest
+  interim is that any arm holding such a position reports it in `unpriced` and the read says so.
