@@ -49,6 +49,13 @@ eq('stage: stop at -$10 x2', decideStage(S(3, -10, -3, 1), 2, 0).kind, 'stop')
 eq('stage: stop scales with the stake (3 x $5)', decideStage({ ...S(3, -12, -4, 1), stake: 5 }, 1, 0).kind, 'hold')
 eq('stage: stop at three stakes', decideStage({ ...S(3, -15, -5, 1), stake: 5 }, 1, 0).kind, 'stop')
 eq('stage: before the first checkpoint', decideStage(S(19, 1, 5, 1), 1, 0), { kind: 'hold', checkpoint: 0, reason: '19 settled since stage start, net $1.00; next checkpoint at 20' })
+// 2026-09-21: the checkpoint cadence paces judgement, but stopping is a money rule and is not rate-limited.
+// volume-spike's real shape that day - 34 settled, last checkpoint 1, next at 40, 80% band wholly below zero
+// on six day-clusters, net -$4.44 against a -$5 hard stop it never reached.
+eq('stage: a conclusively-losing band stops between checkpoints', decideStage(xC(S(34, -4.44, -3.43, 1)), 1, 1).kind, 'stop')
+eq('stage: an inconclusive band still waits for the checkpoint', decideStage(xC(S(34, -1, -1, 5)), 1, 1).kind, 'hold')
+eq('stage: a losing band on too few clusters still waits', decideStage(xC(S(34, -4.44, -3.43, 1), 2), 1, 1).kind, 'hold')
+eq('stage: a WINNING arm never scales up between checkpoints', decideStage(xC(S(34, 4, 5, 1)), 1, 1).kind, 'hold')
 // 2026-09-19 (§127): scaling up needs the same cluster floor as a stop and the 95% band, not the 80% one.
 eq('stage: checkpoint win on unverifiable clusters holds', decideStage(S(20, 1, 5, 2), 1, 0).kind, 'hold')
 eq('stage: checkpoint win scales up on enough clusters', decideStage(xC(S(20, 1, 5, 2)), 1, 0).kind, 'scale-up')

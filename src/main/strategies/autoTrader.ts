@@ -3491,10 +3491,20 @@ export class AutoTrader {
         // stopEntry is set) the bot would otherwise keep chasing the book on
         // every tick and filling new positions, which is the opposite of
         // "halt new entries". Resting orders are left to fill, decay out, or
-        // expire on their own — deliberately NOT cancelled here, because a
-        // cancel that races a fill orphans the position (see the gone-branch).
+        // expire on their own — deliberately NOT cancelled wholesale here,
+        // because a cancel that races a fill orphans the position (see the
+        // gone-branch).
+        //
+        // The STALENESS pull below is the exception, and it runs while halted.
+        // It is cancel-only and fires only on a rest the market has already
+        // walked away from, i.e. the one case where leaving the order to "fill
+        // on its own" means being picked off by a counterparty who knows the
+        // price moved. A halted account is the last one that should be taking
+        // those. Gating it behind `halted` meant the kill switch turned off the
+        // defence against adverse fills at the moment it declared the day a
+        // loss (found 2026-09-21, the day the switch tripped at -$13.43).
         const halted = this.state.dailyPnl.tripped || this.config.stopEntry
-        if (!finalSweep && !halted && adapter.getOrderBook) {
+        if (!finalSweep && adapter.getOrderBook) {
           const ob = await adapter.getOrderBook(p.marketId).catch(() => undefined)
           const bid = ob?.bids[0]?.price
           const ask = ob?.asks[0]?.price
@@ -3513,7 +3523,7 @@ export class AutoTrader {
               continue
             }
           }
-          if (adapter.amendOrder && p.strategy === 'fade' && bid !== undefined && ask !== undefined) {
+          if (!halted && adapter.amendOrder && p.strategy === 'fade' && bid !== undefined && ask !== undefined) {
             const desired =
               p.outcome === 'NO'
                 ? clamp01(Math.max(bid + 0.01, ask - 0.01))

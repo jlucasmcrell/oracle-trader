@@ -2360,3 +2360,23 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   section 150).** volume-spike filled 11 of 12 rests; a healthy maker sees most orders expire. The lab already
   measures markout; the live trader does not surface fill rate per arm. Add resting-order fill rate and median
   post-fill mid move to the arm rows so this is visible without an episode dig. Trigger: **2026-09-24**.
+
+- **213. Consensus has no valid positive evidence and is the worst arm on the book (2026-09-21, section 151).**
+  Its pre-registration was amended on 09-19 to void the Kalshi leg to date, so every promotion argument it has
+  rests on the pre-matcher cohort. Post-matcher it is -4.04c/contract over 32 weighted trades and -20.19c on
+  09-21. The slots are back to the pre-§125 values and the ladder can now stop it mid-cadence, but nobody has
+  asked whether an arm that copies wallet consensus into winner markets has an edge at all. Trigger: **2026-09-24**
+  or 40 post-matcher settlements, whichever is first - read the band, and if it has not closed positive, put the
+  arm's continuation to the operator rather than letting the ladder carry it on a straddling band.
+- **214. A capacity raise outlived the evidence that justified it by three days (2026-09-21, section 151).**
+  §125 doubled consensus's long-horizon slots on +0.12c/contract; §129 voided that number the next morning and
+  nothing walked the slots back. There is no mechanism that ties a size or capacity change to the evidence key it
+  was argued from, so re-basing evidence silently leaves the capacity in place. Add the perf key to the applied-
+  change record and have the ladder flag any live arm whose current notch or slot allocation was argued from a
+  cohort that has since been re-based. Trigger: **2026-09-27**, with the reviewAutoApplyLive decision (185).
+- **215. Contract-weighted baselines are computed on a biased subset (2026-09-21, section 151).**
+  `wN/wSum/wTrades` accumulate only when `gradeEntry` receives a contract count - 24 of fade's 50 grades, 32 of
+  consensus's - and the excluded grades are not random: fade's four largest crypto losses are all outside it, so
+  the weighted view read +$0.69 where the arm was -$2.16. Either backfill the contract count on every grading
+  path or refuse to report a weighted figure whose `wTrades` is under, say, 80% of `n`. Trigger: **2026-09-26**,
+  with the contract-weighted baseline read (172).

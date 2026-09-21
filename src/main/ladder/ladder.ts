@@ -466,14 +466,22 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
   // Hard stop: -$5 per size notch, or three per-trade stakes, whichever is larger.
   const stop = Math.max((ev.stopDollars ?? LIVE_STOP_DOLLARS) * Math.max(1, notch), 3 * (ev.stake ?? 0))
   if (ev.netDollars <= -stop) return { kind: 'stop', checkpoint: lastCheckpoint, reason: `net $${ev.netDollars.toFixed(2)} hit the -$${stop} stop at size x${notch}` }
-  const checkpoint = Math.floor(ev.n / CHECKPOINT_TRADES)
-  if (checkpoint <= lastCheckpoint) {
-    return { kind: 'hold', checkpoint: lastCheckpoint, reason: `${ev.n} settled since stage start, net $${ev.netDollars.toFixed(2)}; next checkpoint at ${(lastCheckpoint + 1) * CHECKPOINT_TRADES}` }
-  }
   // t on G-1 degrees of freedom when the SE is clustered; the normal quantile only when we do not know.
   const z = ev.clusters !== undefined && ev.clusters >= 2 ? clusterT(ev.clusters - 1) : CONFIDENCE_Z
   const lo = ev.mean - z * ev.se
   const hi = ev.mean + z * ev.se
+  const checkpoint = Math.floor(ev.n / CHECKPOINT_TRADES)
+  // The checkpoint cadence paces JUDGEMENT, and judgement used to include stopping. On 2026-09-21
+  // volume-spike stood at 34 settled with an 80% band of -5.85..-1.01 - wholly below zero on enough
+  // day-clusters to mean it - and the cadence held it unjudged until 40 while it kept taking entries a
+  // shard rebalance had just refunded. Stopping is a money rule, like the -$5 hard stop above it, and money
+  // rules are not rate-limited. A conclusively-negative band is therefore let through between checkpoints;
+  // it can only reach the `hi < 0` branch below, never a scale-up, because hi < 0 fails every positive
+  // branch. The cluster floor still applies there, so an unverifiable or single-day band is not a verdict.
+  const conclusivelyLosing = hi < 0 && ev.clusters !== undefined && ev.clusters >= MIN_STOP_CLUSTERS
+  if (checkpoint <= lastCheckpoint && !conclusivelyLosing) {
+    return { kind: 'hold', checkpoint: lastCheckpoint, reason: `${ev.n} settled since stage start, net $${ev.netDollars.toFixed(2)}; next checkpoint at ${(lastCheckpoint + 1) * CHECKPOINT_TRADES}` }
+  }
   // Scaling up needs the 95% band AND the same cluster floor a stop needs. Until 2026-09-19 the positive
   // branch had no cluster floor at all, so one correlated day could double an arm's size while the
   // handbook said "a one-cluster band is never a verdict, in any tool" (§127, F-01).

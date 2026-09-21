@@ -5208,3 +5208,104 @@ should improve on its own; changing both at once would make neither measurable. 
 and 212 adds fill rate and post-fill markout to the arm rows so this is visible without an episode dig.
 
 20/20 suites. Restart: build 09:15:27Z, electron start 09:15:39Z under `agent.lock`.
+
+## §151 - 2026-09-21 09:55Z: the week's two drawdowns, read against the change log
+
+The operator: "Yesterday afternoon we were moving in the positive. Last night we went flat to negative. This
+morning we are strictly negative. For the past week review all of the time ranges we were in the positive and what
+configuration changes were made that directly correlate to moving in the wrong direction. This does not seem like a
+bad luck situation, it seems like a we screwed up the code/config/settings situation."
+
+He is right, for both drawdowns. They are two different failures in two different arms, three days apart.
+
+**Venue-settled daily P&L** (`tmp/kalshi-2026-09-20.json`, `revenue/100 + min(yes,no) - yes_cost - no_cost - fee`,
+1,649 settlements): 09-07 +15.26, 09-08 -16.67, 09-09 +3.17, 09-10 +5.66, 09-11 +8.41, **09-12 +33.39 (peak)**,
+**09-13 -22.87**, 09-14 -3.69, **09-15 -25.98**, 09-16 -10.10, 09-17 -2.01, 09-18 -7.36, 09-19 +7.16, 09-20 -1.23
+(to 11:00Z). 09-19 peaked at +$9.99 running at 18Z. 09-20 peaked at +$0.72 at 14:00 local and closed negative.
+The operator's three-phase description matches the venue ledger exactly.
+
+### Window 1 - lead-lag, 09-13 to 09-16, -$69.47, of which lead-lag is 93.0%
+
+Not round 91, which is where I had put it. The decomposition that settles it is §108's, measured on 09-17 and
+re-derived here on `scripts/backtests/leadlag_counterfactual.py`'s own deploy-instant period splits:
+
+| period | contracts | net | per contract |
+|---|---|---|---|
+| A 09-07 -> 09-12 12:46Z (4ct, 60s, BTC/ETH) | 357 | +$65.50 | **+18.35c** |
+| B 09-12 12:46Z -> 09-13 10:05Z (round 76 cap reads, round 85 8ct) | 623 | +$1.36 | **+0.22c** |
+| C 09-13 10:05Z -> 09-16 07:35Z (round 91, 7 coins, 10s) | 2,570 | -$66.48 | -2.59c |
+| D restored -> 09-18 | | +$5.66 | +3.54c |
+| E post-round-115 | | +$6.89 | +1.94c |
+
+The per-contract edge collapses to zero on a **larger** contract base, at a deploy instant, before round 91. And
+the signal never moved: graded at quoted Kalshi prices plus fee, one observation per ticker/side/minute, it earned
++9.9c, +8.1c, +6.7c and +10.0c per contract across those same four periods while actual fills went +18.4c, +0.2c,
+-2.9c. Sweep latency over the same boundaries: 0.07s, then 0.44s from round 76 (09-12 12:46Z, the engine position
+cap putting two venue reads before every order), 0.68s once round 85 made 8 contracts real, 14s after round 91.
+A constant signal with collapsing realized fills is an execution story. Cause precedes effect by the arm's own
+lag: all 899 15-minute settlements land 4-8s after the window stamp, so settlement time is trade time here.
+
+Already fixed by round 115 (09-17 08:07Z) and the restore is holding: D and E are both positive.
+
+### Window 2 - consensus, 09-20 19:00Z to now, -$11.34, of which consensus is 82%
+
+| arm | n | net |
+|---|---|---|
+| consensus | 12 | **-$9.28** |
+| volume-spike | 23 | -$1.57 |
+| sports-anchor | 8 | -$1.45 |
+| fade | 7 | -$0.52 |
+| lead-lag | 21 | +$1.48 |
+
+Two wins in twelve, and ten of the losses are the entire stake. By entry day: 09-19 -$1.38 (3), 09-20 -$5.02 (5),
+09-21 -$2.88 (4) - 59% of it was entered before the morning the operator is describing, which is why it reads as
+an overnight turn.
+
+**The chain, and it is mine.** §125 (09-18 23:33:58Z) raised `maxLongHorizonPositions` 4 -> 8 and
+`consensusExtraLongSlots` 2 -> 4, to twelve reserved long-horizon slots, on the stated ground that "consensus is
+the only long-horizon arm with a positive judged edge (+0.12c/contract)". §129 the next morning (09-19 09:40Z)
+established from an external review that the edge was graded on markets the arm should never have held - 11 of 12
+open positions were BTTS, first-inning or spread markets, bought YES regardless of which side the tracked wallets
+were on - rewrote the matcher to winner events only and re-based the evidence to `consensus:pre-matcher-20260919`.
+**The capacity raise was never reverted.** It outlived its justification by three days, at doubled concurrency.
+Post-matcher the arm has graded -385c on 95.3 contracts (-4.04c/contract), and -$4.88 on 24.2 contracts today
+alone (-20.19c/contract).
+
+### Corrections to my own earlier reads, from the verify stages
+
+- **fade over the decline is -$2.16 (-4.08c/contract), not the +$0.69 I reported.** +$0.69 was `byDay.wsum`, and
+  `wsum` accumulates only when `gradeEntry` is handed a contract count - 24 of fade's 50 grades. The excluded
+  half contains the four ~-93c crypto losses of the 09-18 17:00Z settlement. The 09-18 row shows it on its face:
+  `n=21, sum=-286.01c` against `w=2.19, wsum=+15.32c`. The qualitative claim survives; the sign does not.
+- **§150's 92% maker fill rate is not supportable at that confidence.** It is drawn from the episode file, which
+  records 12 volume-spike rests on 09-21 where the venue fills archive has 46 fill rows across 40 order ids and 19
+  markets. The underlying defect (fade-only reprice gating) was real and is fixed; its measured size is not.
+- **§150 says "The kill switch never came close." It had already tripped.** `state.dailyPnl` reads
+  `tripped: true` for 2026-09-21 and the 09:14:46Z gate tally shows 278 fade vetoes on `kill-switch: daily loss
+  limit hit`. Local realized -$13.43 governed over the venue's -$9.06 because `dayRealizedForKill` takes the
+  worse of the two ledgers. The limit is 20% of **equity** and includes open-position mark-to-market, so the trip
+  instant is not -$13.43 either; that is where realized has since accrued to.
+- **The `fadeMinEdgeCents` raises really are no-ops, but the earlier reasoning was wrong.** Candidates sort by
+  `score`, and fade's score is edge per **day**, not edge: a 3.2c edge closing in 6h scores 77, a 7.2c edge
+  closing in 3 days scores 51 and fails `minScore`. Low-edge short-horizon candidates rank highest, which is the
+  class a raised bar cuts first. The no-op conclusion stands only on the independent 3.11c floor, and that floor
+  is conditional on the live maker path at a 1x series fee multiplier.
+
+### Changed
+
+- `src/main/ladder/ladder.ts`, `decideStage`: a conclusively-negative band (`hi < 0` on at least
+  `MIN_STOP_CLUSTERS` day-clusters) is no longer held by the 20-trade checkpoint cadence. volume-spike stood at 34
+  settled with an 80% band of -5.85..-1.01 and net -$4.44 against a -$5 hard stop it never reached, unjudgeable
+  until 40 - while this morning's shard levelling refunded it and it took 10 of the day's 23 post-rebalance
+  entries. Stopping is a money rule and is not rate-limited; scaling up keeps the cadence, and `hi < 0` cannot
+  reach a scale-up branch. Four tests, including that a winning arm still never scales up between checkpoints.
+- `src/main/strategies/autoTrader.ts`: the universal staleness pull (§150) now runs while halted. The kill switch
+  was switching off the defence against adverse fills at the moment it declared the day a loss. Cancel-only, so it
+  can never open a position; the fade reprice, which actively works an entry toward a fill, stays halted.
+- Config, app stopped, restarted 09:55:28Z: `maxLongHorizonPositions` 8 -> 4, `consensusExtraLongSlots` 4 -> 2.
+  This is a revert of §125 to its pre-raise values, not a new judgement.
+
+Not changed: consensus stays enabled. Its post-matcher cohort is 32 weighted trades and the ladder will now judge
+it the moment its band closes below zero rather than at the next multiple of twenty.
+
+Tests 20/20, `tsc --noEmit` clean, restart verified (build 09:54:49, electron start 09:55:28).
