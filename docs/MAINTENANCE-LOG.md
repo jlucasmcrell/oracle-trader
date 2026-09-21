@@ -4211,5 +4211,12 @@ Full section, with every number and its provenance, is `docs/reports/2026-09-21.
 10. **Nothing is needed from the operator.** Watch items only: OpenRouter at $11.76, and the fact that two Claude
     sessions were writing this repo at the same time today (hence the 152/153 renumber).
 
+11. **Suppressions checked, none renewed.** The `[reconciler] run failed` suppression expired 09-18 and is left
+    expired: its own note said to check the reconciler's state rather than the signature, and both reconcilers
+    read `completeness: ok` (Polymarket US 11:33:21Z, 432 fill IDs; Kalshi 11:33:10Z). The `[ibkr-lab] Gateway
+    API not available` suppression (to 09-24) demanded this run check `ibkr-lab.json` rather than the
+    signature's silence: the gateway came back at ~06:50Z and the lab reads `lastScanAt` 11:32:18Z, **9,696
+    scans, lastError empty**, 500 closed paper trades. No incident warranted.
+
 **Delivery note:** this is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. The report is
 written to `docs/reports/2026-09-21.md` for the 08:30 desktop task to deliver.
