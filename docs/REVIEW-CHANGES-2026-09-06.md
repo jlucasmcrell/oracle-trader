@@ -5309,3 +5309,35 @@ Not changed: consensus stays enabled. Its post-matcher cohort is 32 weighted tra
 it the moment its band closes below zero rather than at the next multiple of twenty.
 
 Tests 20/20, `tsc --noEmit` clean, restart verified (build 09:54:49, electron start 09:55:28).
+
+### Addendum, 10:05Z: the fix fired, and one claim above is too strong
+
+The ladder's first pass on the new build, 09:57:30Z, two minutes after the restart:
+
+```
+[ladder] kalshi-volume-spike: 1 open trade(s)/rest(s) from the previous stage detached from the new evidence
+[ladder] kalshi-volume-spike: tiny-live -> disabled - checkpoint 34 trades, net $-4.44,
+  mean -3.43c/contract (80% band -5.80..-1.05): losing money with 80% confidence over 4 day-clusters
+```
+
+That is the exact case the change was built for: 34 settled, checkpoint 1, next checkpoint at 40, a band wholly
+below zero on four day-clusters, and a net that never reached the -$5 hard stop. `volumeSpikeEnabled` is now
+false. sports-anchor was **not** stopped and should not have been: it has 8 settlements on two day-clusters, below
+`MIN_STOP_CLUSTERS`, and a band measured on two days is not a verdict. An upstream agent reported sports-anchor as
+3 wins in 14 lifetime settlements at -$5.93 and t = -3.02; that does not reproduce on the settlement-to-strategy
+join used here, which gives 8 settlements and -$1.45, so it is not acted on.
+
+**Too strong above: "the chain, and it is mine."** The capacity raise outliving its evidence is fact, and
+reverting it is right. Calling it the *cause* of the last 48 hours is not supported. Consensus's record is short
+and clustered: on the labelled join it is 24 settlements across only two days, 8 wins (33%), -$6.29, against a
+break-even win rate of 45.1% at its own payoffs (average win +$1.22, average loss -$1.00). The app's post-matcher
+cohort agrees in direction (-4.04c/contract over 32 weighted trades) and is equally short. The workflow's final
+verdict reaches the same place from the other side and states it plainly: the last 48 hours are **not** caused by
+a change made in the last 48 hours, but by a standing negative-shape arm whose settlements clustered while
+lead-lag, the arm that had been covering it, went nearly silent (DISLOCATION lines 2,764 on 09-16 falling to 20 on
+09-21). Neither sample is statistically decisive, and neither should be reported as if it were.
+
+So the accurate statement is narrower than the one above: the slot raise doubled the capital exposed to an arm
+whose edge has never been established, and it stayed doubled for three days after the number that justified it was
+withdrawn. That is a governance defect (backlog 214), not a proven cause of a specific $9.28.
+
