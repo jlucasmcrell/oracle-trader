@@ -2348,3 +2348,15 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `fill-reconciler-*.fills.jsonl` uses it; a price filter over raw fills is what produced a $26 position in a $63
   account. Trigger: at the **2026-10-10** crypto re-read, confirm the flat-market and implausible counts are both
   printed before any number is quoted.
+
+- **211. The stop turns an adversely selected fill into a realized loss (2026-09-21, section 150). OPERATOR.**
+  Separate from the staleness pull and NOT changed. volume-spike and sports-anchor are not hold-to-settlement, so
+  a fill that is instantly under water trips the 10% stop and pays a second crossing to realize it: 2026-09-21
+  shows entries exited 2, 6 and 66 seconds later for -$0.54, -$0.63 and -$0.37. With the stale rests pulled the
+  input should improve on its own, so the stop is deliberately left alone until there is a clean sample. Trigger:
+  on **2026-09-24**, compare those arms' mid move after fill against 09-21's median -1.5c; if it is still
+  negative, the choice is a wider stop, a markout-based hold, or moving them to settlement like fade.
+- **212. A maker arm with a 92% fill rate is being picked off, and nothing watches that number (2026-09-21,
+  section 150).** volume-spike filled 11 of 12 rests; a healthy maker sees most orders expire. The lab already
+  measures markout; the live trader does not surface fill rate per arm. Add resting-order fill rate and median
+  post-fill mid move to the arm rows so this is visible without an episode dig. Trigger: **2026-09-24**.

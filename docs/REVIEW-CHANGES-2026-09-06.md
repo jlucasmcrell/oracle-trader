@@ -5168,3 +5168,43 @@ answer is unchanged: no rule. BACKLOG 210 makes the exposure rebuild the only sa
 of the fill archive.
 
 20/20 suites. Restart: build 05:46:34Z, electron start 05:46:47Z under `agent.lock`.
+
+## §150 - 2026-09-21 09:20Z: the resting orders were a free option, and only fade was pulling them
+
+Operator: "We are taking some hits, what's happening?" This is the answer, and it is not variance.
+
+**What the day looked like.** Local ledger -$13.43, venue -$8.29 on 43 settlements, 47 entries. By arm, graded and
+contract-weighted: consensus -20.19c/contract on 6 (-$4.88), volume-spike -2.11c on 20 (-$3.34), sports-anchor
+-2.14c on 6 (-$1.52), fade -41c on 2 (-$0.90). The kill switch never came close.
+
+**The pattern.** Several losses were exited seconds after entry. The episode trail on four of them:
+
+    KXLOLGAME-...DKCVKSA    rest 06:25:38   fill 06:27:53 @ 0.05   exit 06:27:55   -$0.54
+    KXINTLFRIENDLY-FIJVAN   rest 08:22:03   fill 08:32:15 @ 0.72   exit 08:32:21   -$0.63
+    KXNPBGAME-...YOKHAN     rest 07:58:31   fill 07:59:42 @ 0.78   exit 08:00:48   -$0.37
+    KXLOLGAME-...CPDFNL                     fill 07:27:01 @ 0.15   exit 07:28:20   -$0.72
+
+The fills were AT the mid, so this is not a spread artifact: `entrySideMid` equals `entryPrice` on every one. The
+mid then moved 43.5c, 24c, 8.5c and 1.5c against us within seconds. Across today's exits the mid moved against us
+in 7 of 11 volume-spike trades, 4 of 6 sports-anchor and 2 of 3 consensus. fade was 0 of 3 - it moved 4.5c in our
+favour.
+
+**The cause.** Maker orders rest a median of 269 seconds before filling, p90 35 minutes, max 64. In that time the
+market walks away, and the only counterparty left is one who knows it has. The episode counts name the culprit
+exactly: volume-spike 12 rests, 11 fills, **0 amends, 0 pulls**; sports-anchor 5 rests, 6 entries, **0 amends, 0
+pulls**; fade 10 rests, 6 entries, **2 amends, 1 pull**. The reprice-and-pull block was gated on
+`p.strategy === 'fade'`, so every other maker arm placed an order and never looked at it again. A 92% fill rate on
+a maker is the symptom, not the goal.
+
+**The fix, cancel-only.** `restIsStale` pulls any resting order whose own-leg limit has risen more than 2c above
+its own-leg mid - the market has moved below our bid and we are no longer providing liquidity, we are writing a
+free option. It runs for every maker arm. It never places, amends or resizes anything, so its worst case is
+withdrawing an order we would have wanted. Fade's edge gate and reprice are untouched, and the row is left in
+place for the gone-branch to reconcile, because a cancel can race a fill.
+
+**Deliberately not changed:** the stop that realizes these fills. Those arms are not hold-to-settlement, so an
+instantly-underwater fill trips the 10% stop and pays a second crossing. With the stale rests pulled the input
+should improve on its own; changing both at once would make neither measurable. BACKLOG 211 has the read on 09-24,
+and 212 adds fill rate and post-fill markout to the arm rows so this is visible without an episode dig.
+
+20/20 suites. Restart: build 09:15:27Z, electron start 09:15:39Z under `agent.lock`.

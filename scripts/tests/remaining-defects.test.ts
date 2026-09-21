@@ -9,7 +9,7 @@ import { HistoryStore } from '../../src/main/store/history'
 import { FillReconciler } from '../../src/main/store/fillReconciler'
 import { HttpError, RateLimiter } from '../../src/main/util/http'
 import { PolymarketUsAdapter, usCashPnl } from '../../src/main/venues/polymarketUs'
-import { AutoTrader } from '../../src/main/strategies/autoTrader'
+import { AutoTrader, restIsStale } from '../../src/main/strategies/autoTrader'
 import { cfObservation } from '../../src/main/venues/cfReferenceShadow'
 import { loadJsonOrQuarantine } from '../../src/main/store/json'
 import { LeadLagEngine } from '../../src/main/strategies/leadLag'
@@ -412,6 +412,24 @@ async function main() {
     const applier = /reviewAutoApplyParams \?\? true, kalshiCfg\.reviewAutoApplyLive \?\? (true|false)/.exec(src)?.[1]
     assert.ok(packet && applier, 'both defaults are still expressed as ?? literals')
     assert.equal(packet, applier, 'the packet may not tell the model live arms are protected while the applier applies to them')
+  })
+  await test('a resting order the market has walked away from is stale; one the market still meets is not', () => {
+    // YES leg: we bid 0.60 and the mid is now 0.50 - we are the only bid anyone wants to hit.
+    assert.equal(restIsStale(0.60, 0.50), true)
+    // Ordinary one-tick jitter is not staleness.
+    assert.equal(restIsStale(0.60, 0.59), false)
+    assert.equal(restIsStale(0.60, 0.58), false, 'exactly at the tolerance is still healthy')
+    assert.equal(restIsStale(0.60, 0.575), true)
+    // A market that moved TOWARDS us is the good case and must never be pulled.
+    assert.equal(restIsStale(0.60, 0.72), false)
+    // Both prices are on our own leg, so a NO rest is compared in NO terms: limit 1-0.08 = 0.92 against a NO mid
+    // of 1-0.25 = 0.75 is stale; against a NO mid of 1-0.07 = 0.93 it is not.
+    assert.equal(restIsStale(1 - 0.08, 1 - 0.25), true)
+    assert.equal(restIsStale(1 - 0.08, 1 - 0.07), false)
+    // Missing or nonsense prices never trigger a cancel.
+    assert.equal(restIsStale(0.6, 0), false)
+    assert.equal(restIsStale(0, 0.5), false)
+    assert.equal(restIsStale(0.6, Number.NaN), false)
   })
   console.log(`remaining-defects: ${passed} scenarios passed`)
 }

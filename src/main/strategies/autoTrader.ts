@@ -671,6 +671,24 @@ export function shouldRepriceMaker(desiredYes: number, restingYes: number): bool
   return Math.abs(desiredYes - restingYes) >= 0.03 - 1e-9
 }
 
+/** A resting limit is stale by this much of the mid before it is pulled, in probability units. */
+export const STALE_REST_CENTS = 0.02
+
+/**
+ * True when a resting order is no longer providing liquidity but offering a free option: the mid of OUR leg has
+ * fallen below our own limit, so the only counterparty who wants us is one who knows the price has moved. Both
+ * prices are on our leg (a NO rest is compared against the NO mid), and the tolerance keeps ordinary one-tick
+ * jitter from cancelling a healthy order.
+ *
+ * Measured on 2026-09-21: volume-spike rested twelve orders and eleven filled - a 92% fill rate is the symptom,
+ * not the goal - with the mid moving a median 1.5c and up to 43.5c against us immediately after the fill. fade,
+ * the only arm that repriced and pulled, was the only arm up on the day.
+ */
+export function restIsStale(ourLegLimit: number, ourLegMid: number, tolerance = STALE_REST_CENTS): boolean {
+  if (!(ourLegMid > 0) || !(ourLegLimit > 0)) return false
+  return ourLegLimit - ourLegMid > tolerance + 1e-9
+}
+
 /** Scans between [gate] tally lines: ~11 min at the 13 s scan. */
 const GATE_TALLY_SCANS = 50
 
@@ -3476,11 +3494,26 @@ export class AutoTrader {
         // expire on their own — deliberately NOT cancelled here, because a
         // cancel that races a fill orphans the position (see the gone-branch).
         const halted = this.state.dailyPnl.tripped || this.config.stopEntry
-        if (!finalSweep && !halted && adapter.amendOrder && adapter.getOrderBook && p.strategy === 'fade') {
+        if (!finalSweep && !halted && adapter.getOrderBook) {
           const ob = await adapter.getOrderBook(p.marketId).catch(() => undefined)
           const bid = ob?.bids[0]?.price
           const ask = ob?.asks[0]?.price
+          // Universal staleness pull, every maker arm. Cancel-only: nothing is placed, amended or resized here,
+          // so the worst case is an order we would have wanted being withdrawn. The row is deliberately NOT
+          // dropped - the same reasoning as the edge pull below, a cancel can race a fill and the gone-branch
+          // reconciles it against the fills feed on the next tick.
           if (bid !== undefined && ask !== undefined) {
+            const mid = (bid + ask) / 2
+            const ourMid = p.outcome === 'NO' ? 1 - mid : mid
+            const ourLimit = p.outcome === 'NO' ? 1 - p.yesPrice : p.yesPrice
+            if (restIsStale(ourLimit, ourMid)) {
+              await adapter.cancelOrder(p.orderId, p.marketId).catch(() => undefined)
+              this.episodes?.record('kalshi', 'pull', { marketId: p.marketId, strategy: p.strategy, orderId: p.orderId, reason: 'stale-rest', ourLimit: round2(ourLimit), mid: round2(ourMid), filled: p.promoted, restedSec: Math.round((Date.now() - p.createdAt) / 1000) })
+              this.emit('autoexpired', { marketId: p.marketId, question: `market moved away from the rest (${(100 * (ourLimit - ourMid)).toFixed(1)}c) - pulled` })
+              continue
+            }
+          }
+          if (adapter.amendOrder && p.strategy === 'fade' && bid !== undefined && ask !== undefined) {
             const desired =
               p.outcome === 'NO'
                 ? clamp01(Math.max(bid + 0.01, ask - 0.01))
