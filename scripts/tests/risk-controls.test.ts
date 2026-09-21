@@ -310,6 +310,69 @@ async function main(): Promise<void> {
     assert.equal(filled, 1, 'only one order may fill against a cap of one')
     assert.deepEqual(results.map(r => r.status).sort(), ['fulfilled', 'rejected'])
   })
+  await test('shard levelling moves collateral to the starved shard, and only within its own limits', async () => {
+    const mk = (byShard: Record<string, number>, over: any = {}) => {
+      const moves: any[] = []
+      let bal = { ...byShard }
+      const adapter: any = {
+        getAccount: async () => ({ balance: Object.values(bal).reduce((a: number, b: any) => a + b, 0), balanceByShard: bal }),
+        transferBetweenShards: async (from: number, to: number, d: number) => {
+          moves.push([from, to, +d.toFixed(2)]); bal[String(from)] -= d; bal[String(to)] = (bal[String(to)] ?? 0) + d; return 'tid'
+        }
+      }
+      const L: any = Object.create(Ladder.prototype)
+      L.engine = { getExecutionMode: () => 'live', getAdapter: () => adapter }
+      L.autoTrader = { getConfig: () => ({ stopEntry: false, dryRun: false, ...over }) }
+      L.log = () => {}
+      L.shardMovedDay = { date: '', dollars: 0 }
+      L.shardLastMove = new Map()
+      return { L, moves, bal: () => bal }
+    }
+    // A starved shard is levelled from the richest one, and the donor is never taken below the floor.
+    {
+      const x = mk({ '0': 60, '2': 0.2, '3': 8 })
+      const r = await x.L.levelShards(Date.now())
+      assert.equal(x.moves.length, 1)
+      assert.deepEqual(x.moves[0].slice(0, 2), [0, 2], 'drawn from the shard with the most to spare')
+      assert.ok(x.bal()['2'] >= 5 - 1e-9, 'the starved shard reaches the floor')
+      assert.ok(x.bal()['0'] >= 5, 'and the donor stays above it')
+      assert.ok(r.moved > 0)
+    }
+    // Nothing to give: no transfer, and it says so rather than moving a donor below the floor.
+    {
+      const x = mk({ '0': 5.5, '2': 0.1 })
+      const r = await x.L.levelShards(Date.now())
+      assert.equal(x.moves.length, 0, 'a donor with under $1 spare is left alone')
+      assert.equal(r.moved, 0)
+    }
+    // The operator's halt stops money moving too.
+    {
+      const x = mk({ '0': 60, '2': 0 }, { stopEntry: true })
+      assert.equal((await x.L.levelShards(Date.now())).moved, 0, 'stop-entry halts levelling')
+      const y = mk({ '0': 60, '2': 0 }, { dryRun: true })
+      assert.equal((await y.L.levelShards(Date.now())).moved, 0, 'dry run halts levelling')
+    }
+    // Paper mode never touches real collateral.
+    {
+      const x = mk({ '0': 60, '2': 0 })
+      x.L.engine.getExecutionMode = () => 'paper'
+      assert.equal((await x.L.levelShards(Date.now())).moved, 0)
+    }
+    // One move per shard per 15 minutes, and the daily ceiling binds.
+    {
+      const x = mk({ '0': 200, '2': 0 })
+      const t0 = Date.now()
+      await x.L.levelShards(t0)
+      const first = x.moves.length
+      x.bal()['2'] = 0
+      await x.L.levelShards(t0 + 60_000)
+      assert.equal(x.moves.length, first, 'the same shard is not topped up again within fifteen minutes')
+      x.L.shardMovedDay = { date: new Date(t0).toISOString().slice(0, 10), dollars: 60 }
+      x.L.shardLastMove = new Map()
+      await x.L.levelShards(t0 + 20 * 60_000)
+      assert.equal(x.moves.length, first, 'and the daily ceiling stops it entirely')
+    }
+  })
   await test('a read that cannot see an in-flight or just-filled order keeps its reservation counted', async () => {
     let releaseA!: () => void, releaseRead!: () => void, blockRead = false
     const held: any[] = []

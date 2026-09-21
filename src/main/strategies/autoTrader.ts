@@ -328,6 +328,37 @@ export function phaseDurations(marks: [string, number][]): Record<string, number
 }
 
 /**
+ * How long a scan may hold the `busy` flag before the next tick takes the slot anyway.
+ *
+ * Twenty times the slowest scan on record (210 s, 2026-09-20T13:22Z). The point is not to catch a slow pass
+ * but a pass that will never end.
+ */
+export const SCAN_WEDGE_MS = 15 * 60_000
+
+/**
+ * Who owns the scan slot on this tick.
+ *
+ * `busy` is a plain boolean cleared in a `finally`, so a THROWN scan always releases it - but a scan that
+ * never settles never reaches the `finally` at all, and every later tick then returns "scan already in
+ * progress" forever, silently. That happened on 2026-09-20: the 21:12:17Z tick stalled during a host freeze
+ * (the whole process logged nothing for 3 min and a Kalshi read came back 401 header_timestamp_expired) and
+ * `state.lastScanAt` was still 21:11:17.627Z 2 h 42 min later. Exits, settlement and entries all live inside
+ * the tick, so a Kalshi position that settled at 21:07Z was still sitting open in the ledger at 23:50Z.
+ *
+ * 'wedged' hands the slot to the new tick. The stale one is NOT cancelled - a promise cannot be - so it is
+ * superseded instead: it may finish its awaits but must not trade or write the ledger (see `scanEpoch`).
+ */
+export function scanSlotVerdict(
+  busy: boolean,
+  busyAt: number,
+  now: number,
+  wedgeMs = SCAN_WEDGE_MS
+): 'free' | 'busy' | 'wedged' {
+  if (!busy) return 'free'
+  return now - busyAt >= wedgeMs ? 'wedged' : 'busy'
+}
+
+/**
  * The long-horizon slot cap that applies to one strategy's entry. Every arm shares
  * `maxLongHorizonPositions`; the consensus arm alone may also use
  * `consensusExtraLongSlots` on top (round 96): its signals are long-dated by
@@ -649,6 +680,10 @@ export class AutoTrader {
   private store: JsonStore<PersistedStore>
   private timer: NodeJS.Timeout | null = null
   private busy = false
+  /** When the tick holding `busy` started, so a never-settling one can be superseded (see scanSlotVerdict). */
+  private busyAt = 0
+  /** Bumped by every tick that takes the slot; a tick whose epoch is stale has been superseded. */
+  private scanEpoch = 0
   private onEvent?: (type: string, payload: unknown) => void
   private newsCache: { at: number; items: NewsItem[] } | null = null
   private liveErrorStreak = 0
@@ -725,6 +760,12 @@ export class AutoTrader {
   }
   private resetRequested = false
   private readonly orphanAlerted = new Set<string>()
+  /** Last time an entry was refused for an unfunded shard, and the last levelling we asked for (audit 2026-09-21). */
+  private shardStarvedAt = 0
+  private shardLevelledAt = 0
+  /** Set by index.ts once the ladder exists: levelling collateral is the ladder's job, triggering it is the trader's. */
+  private levelShards?: () => Promise<unknown>
+  setShardLeveller(fn: () => Promise<unknown>): void { this.levelShards = fn }
   /** Data-only Polymarket Gamma feed for the cross-venue signal. */
   private readonly gamma = new PolymarketAdapter()
   /** Where the cross-venue arm's rotating search window resumes (backlog 123). */
@@ -1206,12 +1247,18 @@ export class AutoTrader {
     if (!this.config.enabled) {
       return { scanned: 0, candidates: 0, approved: 0, executed: 0, errors: [] }
     }
-    if (this.busy) {
+    const slot = scanSlotVerdict(this.busy, this.busyAt, Date.now())
+    if (slot === 'busy') {
       return { scanned: 0, candidates: 0, approved: 0, executed: 0, errors: ['scan already in progress'] }
+    }
+    if (slot === 'wedged') {
+      console.warn(`[auto-trader] scan wedged for ${Math.round((Date.now() - this.busyAt) / 60_000)} min — taking the slot; the stale pass can no longer trade or write the ledger`)
     }
     this.busy = true
     const result: AutoScanResult = { scanned: 0, candidates: 0, approved: 0, executed: 0, errors: [] }
     const started = Date.now()
+    this.busyAt = started
+    const epoch = ++this.scanEpoch
     // Phase marks (round 92): where a scan's time goes, so the slow phases can be moved off the path on
     // evidence. Cumulative ms since start; phaseDurations() turns them into per-phase figures.
     const marks: [string, number][] = []
@@ -1455,6 +1502,12 @@ export class AutoTrader {
       }
 
       mark('review')
+      // A superseded pass stops HERE, before it can spend money or stamp its stale view over the ledger: a
+      // newer tick owns both. Its books are at least SCAN_WEDGE_MS old, which is not a price to trade on.
+      if (this.scanEpoch !== epoch) {
+        result.errors.push('scan superseded by a newer pass')
+        return result
+      }
       const finalList = approved.filter((s) => s.aiVerdict === 'approve')
       this.state.stats.approved += finalList.length
       this.state.stats.vetoed += approved.length - finalList.length
@@ -1493,10 +1546,14 @@ export class AutoTrader {
     } catch (err) {
       const msg = fmtErr(err)
       result.errors.push(msg)
-      this.state.lastError = msg
-      this.persist()
+      if (this.scanEpoch === epoch) {
+        this.state.lastError = msg
+        this.persist()
+      }
     } finally {
-      this.busy = false
+      // Only the tick that still owns the slot may release it; a superseded one would hand a live scan's
+      // slot away and let a third pass start alongside it.
+      if (this.scanEpoch === epoch) this.busy = false
     }
     return result
   }
@@ -2896,7 +2953,9 @@ export class AutoTrader {
       if (shard !== undefined) {
         const avail = data.balanceByShard[shard]
         if (avail !== undefined && stakeNow > avail) {
-          return `shard ${shard} unfunded ($${avail.toFixed(2)}) - allocate collateral to it on Kalshi`
+          // The ladder levels the shards; flag it so the next reconcile asks rather than waiting an hour.
+          this.shardStarvedAt = Date.now()
+          return `shard ${shard} unfunded ($${avail.toFixed(2)}) - levelling collateral`
         }
       }
     }
@@ -4961,6 +5020,13 @@ export class AutoTrader {
         this.reconcileTimer = setInterval(() => {
           void this.reconcileLedgerWithVenue()
           void this.refreshVenueDay()
+          // An arm refused for an unfunded shard waits at most one reconcile, not the ladder's hour: on
+          // 2026-09-21 every live arm was blocked for hours while the account held $63.55 (section 148).
+          const now = Date.now()
+          if (this.levelShards && now - this.shardStarvedAt < 10 * 60_000 && now - this.shardLevelledAt > 15 * 60_000) {
+            this.shardLevelledAt = now
+            void this.levelShards().catch((e) => console.warn('[auto-trader] shard levelling failed:', e instanceof Error ? e.message : e))
+          }
         }, 5 * 60_000)
         setTimeout(() => void this.refreshVenueDay(), 25_000)
         setTimeout(() => void this.logIncentivePrograms(), 60_000)

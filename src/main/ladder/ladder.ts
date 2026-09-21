@@ -268,6 +268,17 @@ export const LIVE_STOP_DOLLARS = 5
 export const LEADLAG_STOP_DOLLARS = 10
 /** Weather contracts settle on Kalshi shard 0; below this a micro test is a rejected-order loop. */
 export const SHARD0_MIN_DOLLARS = 5
+/**
+ * What every shard the venue reports should hold so an arm can take its stake there. Kalshi rejects an order
+ * whose shard is unfunded even when the aggregate covers it many times over (2026-09-21: $63.55 in the account,
+ * 3,105 fade candidates refused in fifty scans, every live arm blocked).
+ */
+export const SHARD_FLOOR_DOLLARS = 5
+/** Never move less than this - a stream of cent transfers is noise on a non-atomic API. */
+export const SHARD_MIN_MOVE = 1
+/** Ceiling on what one levelling pass may move, and on a whole UTC day. Bounds a misbehaving loop. */
+export const SHARD_MAX_MOVE_PER_RUN = 25
+export const SHARD_MAX_MOVE_PER_DAY = 60
 /** Working balance kept on every shard that has traded (sports, crypto), fed from shard 0's surplus above the weather cap. */
 export const SHARD_WORKING_DOLLARS = 15
 export const COOLDOWN_MS = 3 * 24 * 3600_000
@@ -1058,6 +1069,64 @@ export class Ladder {
    * could not reach `need`, or when the venue cannot transfer. Never touches
    * the global arm, sizes or loss limits.
    */
+  /** Per-UTC-day total moved by levelShards, and when each shard was last topped up. */
+  private shardMovedDay: { date: string; dollars: number } = { date: '', dollars: 0 }
+  private shardLastMove = new Map<number, number>()
+
+  /**
+   * Level EVERY shard the venue reports to SHARD_FLOOR_DOLLARS, drawing from the shard with the most to spare.
+   * Intra-account only: this calls the venue's shard-to-shard transfer and can never move money off the account.
+   * Returns what it moved so the caller can log it once.
+   *
+   * Refuses to act when: the venue cannot transfer; the operator has halted entries (a halt means stop moving
+   * money around too); no shard has spare above the floor; the move would be under SHARD_MIN_MOVE; or the run or
+   * day ceiling is reached. One move per target shard per 15 minutes, so a venue that reports stale balances
+   * cannot be drained by repetition.
+   */
+  async levelShards(now = Date.now()): Promise<{ moved: number; moves: string[] }> {
+    const moves: string[] = []
+    if (this.engine.getExecutionMode() !== 'live') return { moved: 0, moves }
+    const cfg = this.autoTrader.getConfig()
+    if (cfg.stopEntry === true || cfg.dryRun === true) return { moved: 0, moves }
+    const adapter = this.engine.getAdapter('kalshi') as (VenueAdapter & { transferBetweenShards?: (from: number, to: number, dollars: number) => Promise<string> }) | undefined
+    if (!adapter?.transferBetweenShards) return { moved: 0, moves }
+    const today = new Date(now).toISOString().slice(0, 10)
+    if (this.shardMovedDay.date !== today) this.shardMovedDay = { date: today, dollars: 0 }
+    let runMoved = 0
+    for (let pass = 0; pass < 4; pass++) {
+      const acct = await adapter.getAccount().catch(() => undefined)
+      const byShard = (acct?.balanceByShard ?? {}) as Record<string, number>
+      const rows = Object.entries(byShard).map(([k, v]) => ({ shard: Number(k), bal: Number(v) || 0 })).filter((x) => Number.isInteger(x.shard))
+      if (rows.length < 2) break
+      const short = rows.filter((x) => x.bal < SHARD_FLOOR_DOLLARS && (now - (this.shardLastMove.get(x.shard) ?? 0)) > 15 * 60_000).sort((a, b) => a.bal - b.bal)[0]
+      if (!short) break
+      const donor = rows.filter((x) => x.shard !== short.shard).map((x) => ({ shard: x.shard, free: x.bal - SHARD_FLOOR_DOLLARS })).sort((a, b) => b.free - a.free)[0]
+      if (!donor || donor.free < SHARD_MIN_MOVE) { moves.push(`shard ${short.shard} is at $${short.bal.toFixed(2)} but no other shard holds more than the $${SHARD_FLOOR_DOLLARS} floor`); break }
+      const room = Math.min(SHARD_MAX_MOVE_PER_RUN - runMoved, SHARD_MAX_MOVE_PER_DAY - this.shardMovedDay.dollars)
+      const amount = Math.floor(Math.min(SHARD_FLOOR_DOLLARS - short.bal, donor.free, room) * 100 + 1e-9) / 100
+      if (amount < SHARD_MIN_MOVE) { if (room < SHARD_MIN_MOVE) moves.push(`shard levelling has reached its ${room === SHARD_MAX_MOVE_PER_RUN - runMoved ? 'per-run' : 'daily'} ceiling`); break }
+      try {
+        const id = await adapter.transferBetweenShards(donor.shard, short.shard, amount)
+        this.shardLastMove.set(short.shard, now)
+        this.shardMovedDay.dollars += amount
+        runMoved += amount
+        const msg = `moved $${amount.toFixed(2)} from shard ${donor.shard} to shard ${short.shard} (was $${short.bal.toFixed(2)}, transfer ${id || 'n/a'})`
+        this.log(`[ladder] ${msg}`)
+        moves.push(msg)
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e)
+        this.log(`[ladder] shard transfer failed: ${m}`)
+        moves.push(`transfer to shard ${short.shard} failed: ${m.slice(0, 120)}`)
+        break
+      }
+    }
+    if (runMoved > 0) {
+      const url = this.autoTrader.getConfig().alertWebhookUrl
+      if (url) void sendAlert(url, 'Oracle Trader - collateral levelled across shards', moves.join('; '))
+    }
+    return { moved: runMoved, moves }
+  }
+
   private async fundShard0(need: number): Promise<{ shard0: number; moved: number; note: string }> {
     const adapter = this.engine.getAdapter('kalshi') as (VenueAdapter & { transferBetweenShards?: (from: number, to: number, dollars: number) => Promise<string> }) | undefined
     const read = async (): Promise<{ shard0: number; byShard: Record<string, number> }> => {

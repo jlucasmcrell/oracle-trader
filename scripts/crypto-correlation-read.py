@@ -14,7 +14,7 @@ crypto series), and asks the PUBLIC Kalshi markets endpoint how each resolved. U
 Direction note: rows written before 2026-09-20 carry the B-23 mapping, where book_side 'ask' was labelled
 'sell'. Under the corrected reading every one of these is a BUY of the NO side, which is what fade does.
 """
-import json, os, sys, time, urllib.request, collections
+import json, os, sys, time, urllib.request, collections  # noqa: F401
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backtests'))
 from degraded import banner, label  # noqa: E402  (docs/DEGRADED-WINDOWS.md)
@@ -37,21 +37,28 @@ def coin_of(mid):
     return None
 
 
+# Positions are rebuilt on NET EXPOSURE, never on a price filter. `outcome` has always been the exposure side and
+# has always been right; the pre-2026-09-20 `side` came from book_side and read 'sell' on every row (audit B-23),
+# so "NO at 85-99c" also catches the CLOSING leg of any cheap YES position. That is what produced a 27-contract
+# $26 position in a $63 account on 2026-09-21 and what contaminated this read's first pass (section 140 -> 149).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from positions_from_fills import rebuild  # noqa: E402
+
+held, diag = rebuild(os.path.join(A, 'fill-reconciler-kalshi.json.fills.jsonl'), lambda mid: coin_of(mid) is not None)
+if diag['implausible']:
+    print('REFUSING TO REPORT: %d position(s) cost more than this account can hold; the archive does not support '
+          'the reconstruction.' % len(diag['implausible']))
+    for t_, p_ in sorted(diag['implausible'].items(), key=lambda x: -x[1]['cost'])[:5]:
+        print('   %-44s %.2f contracts, $%.2f' % (t_[:44], p_['shares'], p_['cost']))
+    sys.exit(2)
+print('%d markets round-tripped and excluded: they never settled, so there is nothing to grade' % len(diag['flat']))
+# Fade's seat: a HELD NO position entered at 85-99c.
 pos = {}
-for line in open(os.path.join(A, 'fill-reconciler-kalshi.json.fills.jsonl'), encoding='utf-8', errors='replace'):
-    try:
-        r = json.loads(line)
-    except Exception:
+for mid, p in held.items():
+    entry = p['cost'] / p['shares'] if p['shares'] else 0
+    if p['side'] != 'NO' or not (0.85 <= entry <= 0.995):
         continue
-    c = coin_of(r['marketId'])
-    if not c or r['outcome'] != 'NO' or not (0.85 <= r['price'] <= 0.995):
-        continue
-    p = pos.setdefault(r['marketId'], {'coin': c, 'shares': 0.0, 'cost': 0.0, 'fee': 0.0, 'first': r['timestamp'], 'last': r['timestamp']})
-    p['shares'] += r['shares']
-    p['cost'] += r['shares'] * r['price']
-    p['fee'] += r.get('fee') or 0.0
-    p['first'] = min(p['first'], r['timestamp'])
-    p['last'] = max(p['last'], r['timestamp'])
+    pos[mid] = {'coin': coin_of(mid), 'shares': p['shares'], 'cost': p['cost'], 'fee': p['fee'], 'first': p['at'], 'last': p['at']}
 
 ids = sorted(pos)
 print('fade-shaped crypto positions: %d markets, %.1f contracts' % (len(ids), sum(p['shares'] for p in pos.values())))

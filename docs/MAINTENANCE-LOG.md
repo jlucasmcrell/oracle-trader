@@ -4109,3 +4109,42 @@ The 09-19 07:00 run exited 0 while waiting on a background cull-gate, and `maint
 guard then skipped the 11:30 catch-up as "already completed". Filed as backlog 205; the guard should key
 on the written report, not the exit code. No attempt was made to reconstruct that day here - the ten
 changes it produced are all recorded in REVIEW-CHANGES sections 133-139.
+
+---
+
+## Repair 2026-09-21T00:12Z
+
+Headless on-call session (Windows task, `scripts/repair.ps1`), one incident:
+`data/sentinel/incidents/2026-09-20T23-50-unbooked-settlement-KXLALIGAGAME-26SEP20.md`. **Outcome: FIXED.**
+
+The sentinel's finding — a consensus NO on `KXLALIGAGAME-26SEP20VCFRSO-RSO` that Kalshi settled at
+21:07:34Z still sitting in `openTrades` at 23:50Z — was real, but the settlement path was not what was
+broken. The whole autoTrader scan loop had been wedged for **2 h 42 min**: `state.lastScanAt` was still
+2026-09-20T21:11:17.627Z at 23:53Z with a 30 s poll interval, and all 21 open rows carried the same
+`lastSideMidAt` 21:12:19.086Z from the wedged pass's own quote batch. `tick()` guards itself with a plain
+`busy` boolean cleared in a `finally`, so a scan that throws releases it but a scan that never SETTLES
+never reaches the `finally` — every tick since returned `'scan already in progress'`, silently, because the
+`[auto-trader] scan` line only prints 1-in-20 and the stall watchdog only posts a webhook and never
+recovers. `trySettle` and `settlementProbeDue` live inside that tick, so nothing could book. The wedge
+started during a host freeze (the whole process logged nothing 21:12:17→21:15:32Z and again
+21:15:57→21:19:57Z; the first Kalshi read after the gap returned `401 header_timestamp_expired`, signed
+before the freeze and sent after). The wedged pass had finished `manageExits`, so it stalled in the
+`universe` phase; the exact hung await is not identifiable from the logs and the fix does not depend on it.
+
+The fix bounds the slot instead of the await: `SCAN_WEDGE_MS` (15 min, 20× the 210.5 s slowest scan on
+record) and a pure `scanSlotVerdict(busy, busyAt, now)` in `autoTrader.ts`; a tick past the deadline takes
+the slot with a `[auto-trader] scan wedged for N min` warn. The stale pass cannot be cancelled, so it is
+superseded by a `scanEpoch`: it returns at `mark('review')` before `executeSignal`, its `catch` no longer
+persists over the ledger, and its `finally` no longer releases the live pass's slot. Eight regression cases
+in `scripts/tests/review-fixes.test.ts`, the incident's own timestamps among them.
+
+Verified: typecheck clean, build clean, `review-fixes` 532/0, `ladder` 158/0, `adversarial` 89/0; backup
+`oracle-trader-REPAIR-2026-09-20-20260920-195729.zip`; app restarted 00:05:11Z. The position booked at
+00:05:54.376Z (`settledMarkets["KXLALIGAGAME-26SEP20VCFRSO-RSO"] = {shares: 3.23}`, consensus 34→35
+trades, 17 losses) and the scan loop is completing again (`lastScanAt` 00:05:45.386Z, 81.2 s, scans
+33671→33672). The 15-minute takeover itself has not fired in production and is covered by unit cases only.
+
+**Noted, not acted on** (different signature, out of this incident's scope): `state.lastError` still reads
+`3 positions unsettled >12h past close (oldest 54h: KXWTIW-26SEP1814-B99.50)`. Those three rows have been
+stuck since 09-18/09-19, i.e. from before this wedge, and two sit at a pinned 0.975/0.985 quote that
+`settlementProbeDue` should have been probing all along. Filed as backlog 210.

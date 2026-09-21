@@ -8,7 +8,7 @@ import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, obser
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
-import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
+import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter } from '../../src/main/venues/polymarketUs'
 import { isPinnedQuote, refreshedCloseTime, settlementProbeDue, statsBand, stuckSettlements } from '../../src/main/strategies/ledgerAudit'
@@ -846,6 +846,25 @@ eq('phases: cumulative marks become per-phase durations in order', phaseDuration
 eq('phases: an empty scan has no phases', phaseDurations([]), {})
 eq('phases: a clock that goes backwards never yields a negative phase', phaseDurations([['a', 100], ['b', 90]]), { a: 100, b: 0 })
 eq('phases: a repeated name sums its slices', phaseDurations([['a', 100], ['b', 150], ['a', 400]]), { a: 350, b: 50 })
+
+// ---- the wedged-scan slot (incident 2026-09-20T23-50) ----
+// The 21:12:17Z tick never settled, so `busy` stayed true and every tick for the next 2 h 42 min returned
+// "scan already in progress". Settlement lives inside the tick, so a market that resolved at 21:07Z was
+// still open in the ledger at 23:50Z. The slot is now handed on once a pass is past any plausible runtime.
+{
+  const t0 = Date.UTC(2026, 8, 20, 21, 12, 17)
+  eq('scan slot: an idle trader is free', scanSlotVerdict(false, 0, t0), 'free')
+  eq('scan slot: an idle trader is free however old the last start is', scanSlotVerdict(false, t0 - 9 * 3600_000, t0), 'free')
+  eq('scan slot: a scan that just started holds it', scanSlotVerdict(true, t0, t0 + 1_000), 'busy')
+  // 210.5 s was the slowest scan on record (2026-09-20T13:22Z); it must still finish on its own.
+  eq('scan slot: the slowest scan on record still holds it', scanSlotVerdict(true, t0, t0 + 211_000), 'busy')
+  eq('scan slot: one second under the deadline still holds it', scanSlotVerdict(true, t0, t0 + SCAN_WEDGE_MS - 1_000), 'busy')
+  eq('scan slot: the deadline itself hands the slot on', scanSlotVerdict(true, t0, t0 + SCAN_WEDGE_MS), 'wedged')
+  // The incident itself: 21:12:17Z still holding at 23:50:02Z.
+  eq('scan slot: the incident pass reads as wedged', scanSlotVerdict(true, t0, Date.UTC(2026, 8, 20, 23, 50, 2)), 'wedged')
+  // A clock that jumps backwards (host resume) must not hand a live scan's slot away.
+  eq('scan slot: a backwards clock never wedges a live scan', scanSlotVerdict(true, t0, t0 - 3600_000), 'busy')
+}
 
 killStateTests()
 dnsFallbackTests()

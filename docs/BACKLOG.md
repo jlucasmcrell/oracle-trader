@@ -91,6 +91,22 @@ open is folded in here with its reason. Done items are removed, not ticked.
 
 ## Recently done (so nobody re-does them)
 
+2026-09-21 (repair session, incident 2026-09-20T23-50): the autoTrader scan loop can no longer wedge forever.
+`tick()`'s `busy` flag is a plain boolean cleared in a `finally`, so a scan that THROWS releases it but a scan
+that never SETTLES does not - on 2026-09-20 the 21:12:17Z tick stalled during a host freeze (the whole process
+logged nothing for 3 min; the first Kalshi read after the gap came back 401 `header_timestamp_expired`) and
+`state.lastScanAt` was still 21:11:17.627Z **2 h 42 min later**, with every open row frozen at the same
+`lastSideMidAt`. Exits, entries and settlement all live inside the tick, so a consensus NO on
+KXLALIGAGAME-26SEP20VCFRSO-RSO that Kalshi resolved at 21:07:34Z simply could not be booked; the `[auto-trader]
+scan` line only prints 1-in-20 and the stall watchdog only posts a webhook, so it was silent. New
+`SCAN_WEDGE_MS` (15 min = 20x the 210.5 s slowest scan on record) and pure `scanSlotVerdict()` in
+`autoTrader.ts`: a tick past the deadline takes the slot and warns. The stale pass cannot be cancelled, so a
+`scanEpoch` supersedes it - it returns at `mark('review')` before `executeSignal`, its `catch` no longer
+persists over the ledger, and its `finally` no longer releases the live pass's slot. Eight cases in
+`review-fixes` (532/0), plus ladder 158/0 and adversarial 89/0; typecheck and build clean. Restarted 00:05:11Z
+and the position booked at 00:05:54Z. Follow-up: 210 (three rows unsettled since 09-18 at a 0.975/0.985 quote
+`isPinnedQuote` does not call pinned).
+
 2026-09-19 (§136): the duplicate recorders of 2026-09-15 are closed. Cause proven from the sentinel's own state
 (its 06:20:01Z tick and the Startup folder both launched crypto15, ladder15 and mmsim after the reboot). The
 09-15 repair had stopped the extra copies and added `recorder-lock.mjs`; this round made the lock survive pid
@@ -2316,3 +2332,19 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   `recordExit` grades with `clusterDayOf(Date.now())` while the single-trade settlement paths use
   `clusterDayOf(t.closeTime)`, so a basket settling after 00:00Z lands in the next day's cluster. Moves the
   day-clustered SE, never the mean. Trigger: with the ladder read on **2026-10-03**.
+
+- **210. Three Kalshi rows have sat unsettled since 09-18/09-19 with a PINNED quote (2026-09-21, repair session
+  incident 2026-09-20T23-50).** `state.lastError` reads `3 positions unsettled >12h past close (oldest 54h:
+  KXWTIW-26SEP1814-B99.50)`; the other two are `KXWTI-26SEP1814-T99.99` and `KXBTCPRICE-85000-26SEP18`. The
+  first two sit at `lastSideMid` 0.975 / 0.985, which `isPinnedQuote` does NOT call pinned (its band is
+  ≥0.99 / ≤0.01), so `settlementProbeDue` never fires on them and the stale cached `closeTime` never gets
+  corrected; the BTC row carries no `lastSideMid` at all, which SHOULD probe. Predates the 09-20 scan wedge,
+  so it is a separate path, not a symptom of it. Deliberately not touched by that repair session (one
+  behavioural change). Trigger: next maintenance run, or sooner if the count grows.
+
+- **210. The exposure rebuild is the only sanctioned way to read positions out of the fill archive (2026-09-21,
+  section 149).** `scripts/positions_from_fills.py` nets YES-equivalent exposure per market, drops round-tripped
+  markets, and refuses to report a position costing more than this account can hold. Any future read that touches
+  `fill-reconciler-*.fills.jsonl` uses it; a price filter over raw fills is what produced a $26 position in a $63
+  account. Trigger: at the **2026-10-10** crypto re-read, confirm the flat-market and implausible counts are both
+  printed before any number is quoted.

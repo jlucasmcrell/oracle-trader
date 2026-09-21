@@ -1,5 +1,9 @@
 # Paper-lab strategy review — Polymarket US and IBKR ForecastEx
 
+> Note added 2026-09-21: this report's lab figures come from the labs' own ledgers and are unaffected by the
+> fill-archive reconstruction error corrected in REVIEW-CHANGES §149. Only the Kalshi crypto read (§140) used
+> that path.
+
 Read-only, 2026-09-20 09:00Z, at the operator's request. Every number is recomputed from the labs' own ledgers,
 contract-weighted with a day-clustered 80% band (`scripts/backtests/degraded.py` conventions), counting only
 trades opened under each lab's current rules. Neither lab's configuration was changed.

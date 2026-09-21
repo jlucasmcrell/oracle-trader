@@ -492,6 +492,7 @@ app.whenReady().then(async () => {
   // tiny-live and disabled on its own. The operator's global arm is never
   // touched; without it no promotion can spend, and demotions always run.
   const ladder = new Ladder(engine, autoTrader, miniAutos, app.getAppPath(), app.getPath('userData'))
+  setTimeout(() => void ladder.levelShards(), 90_000)
   setTimeout(() => void ladder.run(), 2 * 60_000)
   setInterval(() => void ladder.run(), 60 * 60_000)
 
@@ -503,6 +504,7 @@ app.whenReady().then(async () => {
   setInterval(() => void review.runIfDue(), 60 * 60_000)
 
   autoTrader.setAuxStatus(() => ({ ladder: ladder.status(), lastReview: review.status() }))
+  autoTrader.setShardLeveller(() => ladder.levelShards())
 
   registerIpc()
   createWindow()

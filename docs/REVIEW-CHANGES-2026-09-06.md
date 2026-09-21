@@ -4799,6 +4799,11 @@ electron start 00:08:38Z under `agent.lock`.
 
 ## §140 - 2026-09-20 08:10Z: the crypto correlation is real and not worth a rule
 
+**SUPERSEDED IN PART by §149 (2026-09-21): the position reconstruction this section used was wrong.** It filtered
+fills by price instead of netting exposure, so the closing leg of a cheap YES position was booked as a fresh
+27-contract fade entry, and sixteen round-tripped markets were graded as settlements. Corrected figures are in
+§149. The CONCLUSION is unchanged and slightly stronger: no cap was worth adding.
+
 Operator, on the 09-20 morning read: "Go ahead" on measuring what a crypto-wide exposure limit would have cost.
 
 **Why it was asked.** Fade's calibration read -5.21c/contract over 36 graded settlements and the nightly review
@@ -5110,3 +5115,56 @@ Also filed from the same reads: the kill-switch day split can outrun the 5,000-r
 passes the kill epoch (208), and a dutch basket day-clusters on the settlement clock rather than the close (209).
 
 20/20 suites. Restart: build 12:16:14Z, electron start 12:16:27Z under `agent.lock`.
+
+## §149 - 2026-09-21 05:50Z: collateral levels itself across every shard, and the reconstruction that was wrong
+
+Operator: "Rebalance - which should be automatic across all shards. I guess watch the bitcoin position and if it
+goes positive + fees, sell? And fix your nonsense."
+
+**Collateral now levels itself.** Kalshi holds collateral per exchange shard and rejects an order whose shard is
+unfunded however large the aggregate. Only shard 0 was ever topped up, and only for the quoter, which is disabled -
+so on 2026-09-21 the account held $63.55 while fade refused 3,105 candidates in fifty scans and every live arm was
+blocked. `Ladder.levelShards()` now brings every shard the venue reports up to a $5 floor, drawing from the shard
+with the most to spare. Money safety: intra-account transfers only, never a withdrawal; the donor is never taken
+below the same floor; $25 a run and $60 a UTC day; one move per target shard per fifteen minutes; the operator's
+stop-entry and dry-run halt it exactly as they halt trading; paper mode never touches it; every move is logged and
+pushed to the alert webhook. It runs 90 seconds after start, on every hourly ladder pass, and - the responsive
+part - on the trader's five-minute reconcile whenever an entry was refused for an unfunded shard in the last ten
+minutes, so a starved arm waits minutes rather than an hour. Six regression cases cover the floor, the donor
+floor, the halts, paper mode, the fifteen-minute spacing and the daily ceiling.
+
+**The Bitcoin position cannot be sold, and that is not a policy choice.** KXBTCPRICE-85000-26SEP18 closed on
+09-19 at 03:59Z. Its order book is empty on both sides, liquidity is $0.00 and the venue has published no result
+(expiration reads 2026-10-19). There is nothing to sell into; the only exit is settlement. It is 1.05 contracts
+bought at 0.95, so it resolves to +$0.05 or -$1.00 and no sell rule could improve on that. The bot already
+surfaces it: the trader's status line reads "1 position unsettled >12h past close (oldest 50h)". No code change.
+
+**The nonsense, and how far it reached.** Yesterday's twelve-hour reconstruction produced a 100-contract $50
+position in a $63 account; I discarded it before reporting, but the same flaw was in a shipped script and in a
+shipped conclusion. `outcome` has always been the exposure side and has always been right, while the pre-09-20
+`side` came from `book_side` and read 'sell' on every row (audit B-23). So a filter of "NO exposure at 85-99c"
+also catches the CLOSING leg of any cheap YES position. The case that proved it:
+
+    KXSOLD-26SEP0817-T106.9999   09-08 02:36Z  buy YES   27.27 @ 0.11     the opening, $3.00
+                                 09-08 05:03Z  "sell NO" 27.27 @ 0.96     the same position being closed
+
+The old method read the second line as a fresh 27-contract fade entry costing $26.18. `positions_from_fills.py`
+now nets YES-equivalent exposure per market, drops markets that end flat (round-tripped, so there is no
+settlement to grade), and refuses to report at all when a position costs more than this account can hold.
+
+**§140 corrected.** Its conclusion stands; its numbers did not:
+
+| §140's crypto read | as published | corrected |
+|---|---|---|
+| settled positions | 132 | 130 |
+| losses | 11 | 9 |
+| net | +$0.68 | +$0.16 |
+| per contract | +0.29c | +0.09c |
+| clean half | +1.15c | +1.25c |
+| markets wrongly graded | 16 round-trips counted as settlements | excluded |
+
+A window cap is still worth $1.29 to $1.78 over three weeks and still not monotonic in the cap level, so the
+answer is unchanged: no rule. BACKLOG 210 makes the exposure rebuild the only sanctioned way to read positions out
+of the fill archive.
+
+20/20 suites. Restart: build 05:46:34Z, electron start 05:46:47Z under `agent.lock`.
