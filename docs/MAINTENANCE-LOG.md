@@ -4148,3 +4148,68 @@ trades, 17 losses) and the scan loop is completing again (`lastScanAt` 00:05:45.
 `3 positions unsettled >12h past close (oldest 54h: KXWTIW-26SEP1814-B99.50)`. Those three rows have been
 stuck since 09-18/09-19, i.e. from before this wedge, and two sit at a pinned 0.975/0.985 quote that
 `settlementProbeDue` should have been probing all along. Filed as backlog 210.
+
+---
+
+## 2026-09-21 (daily maintenance, headless 11:00-12:05Z)
+
+Full section, with every number and its provenance, is `docs/reports/2026-09-21.md` and REVIEW-CHANGES **153**
+(renumbered: a concurrent session committed its own 152 and backlog 216-220 at 11:16Z while this run was going).
+
+1. **Liveness: nothing was down.** App up (this session restarted it at 11:23:03Z for the build; the sentinel had
+   revived it at 00:05Z after the host lost the process), `main.log` current, ladder tick 4 min old, collector up,
+   today's nightly review present, every hourly shadow inside the hour, sentinel `at` 11:20:01Z with **zero open
+   incidents**. The one incident since the last session (`2026-09-20T23-50-unbooked-settlement-KXLALIGAGAME`) was
+   dispatched and FIXED by the on-call repair at 00:12Z.
+2. **THE DAY'S HEADLINE, and it is not a defect: the operator's daily loss cap tripped at about 09:10Z.** Local
+   ledger -$13.40 against the 20% floor on ~$67 of equity; venue-settled is -$7.44 on 46 settlements and the rest
+   is open-position mark-to-market (backlog 159, at his direction). Kalshi has refused every entry since -
+   4,740 fade, 96 consensus, 6 mean-reversion, 2 volume-spike in the 10:45Z gate note. Nothing changed; loss
+   limits are his.
+3. **Venue-true 24 h: Kalshi -$9.88** after $3.09 fees on 102 settlements (cash $52.81, 27 open at $27.83 cost,
+   6 resting); **Polymarket US $0.00**, no resolutions, balance $39.85.
+4. **All six due reads performed; five triggers retired, one build shipped.**
+   - **86** weekly lead-lag basis: 61 of 4,648 two-venue windows disagreed (**1.31%**), all within 3.6 bp of the
+     strike; our money there is 19 fills for **-$9.89** of a -$44.59 total, so 78% of the loss is in AGREEING
+     windows. The registered cell is -2.11c/contract, day-clustered CI95 **[-12.77, +8.55]** -> **no gate**.
+   - **157** executable-bound regrade: **+6.90c/contract at the adverse Polymarket bound after fees** (vs +8.08c
+     at the mid), **97.3%** of rows still clear the fee, and the narrow-spread bucket carries the same six cents
+     as the wide - so it is not book noise. Forward Kalshi markout +1.83c +/- 1.79 over 231 rows: signal fine,
+     execution still the question.
+   - **173** Kalshi fill direction: the deprecated fields are still emitted but perfectly degenerate with
+     exposure in all 3,404 archived fills; **nothing in the archive marks an exit**. Handbook 8.1 written; both
+     `side` consumers checked and safe.
+   - **175** mmsim: dark 14.2% of 09-18 and **33.5% of 09-19**, but 6.5% and 1.4% since, halts 4/7/3/0 - decaying
+     untouched. **Decision: change nothing** (parameters are pre-registered). Residue -> backlog 222.
+   - **107** lead-lag size ceiling: already implemented at `ladder.ts:138`. Retired.
+5. **A defect found inside a read and fixed.** Both lead-lag basis scripts globbed `tmp/k-*.json`, which does not
+   match `tmp/kalshi-<date>.json` - the name the session's own fresh dump has used since 09-19 - so the weekly
+   read was grading our fills against a dump from 09-18 and silently lost **172 fills, every one from 09-19 to
+   09-21**, the exact post-restore period it exists to judge. Both now take an explicit path, glob both names and
+   print the dump they chose; `leadlag_basis_cells.py` also now prints the day-clustered band the rule is stated
+   on rather than just the cell's total.
+6. **Build shipped (build queue 3): HRRR is the weather fair value's forecast, NWS the fallback.** 378 graded
+   station-days, **HRRR MAE 1.93 / bias -0.27 vs NBM 2.27 / -1.27**, closer on 201 to 166. `parseOpenMeteoHourly`
+   is exported and carries fifteen assertions because Open-Meteo's grammar differs from the NWS feed's in three
+   ways that each yield a wrong fair value rather than an error. tsc clean, build clean, **20/20 suites**, backup
+   `MAINT-2026-09-21`, app restarted 11:23:03Z. Verified live end to end (NYC/LAX/CHI all `source=hrrr`);
+   **the weather arms are on operator holds so this path does not appear in main.log today** and that is stated
+   rather than papered over.
+7. **Daily build-queue checks.** Critic skill: all three RAW conditions pass for the first time since 09-11, and
+   amendment 2 declines it - over the four enabled arms present in both cohorts VETO is **+0.69c against
+   ABSTAIN's +4.17c**, so VETO's own net is above zero and condition (i) fails. Nothing changed. WebSocket book:
+   the per-UTC-day counters backlog 56 asked for now exist; 09-19 **0.9948 PASS**, 09-20 **0.9895 FAIL**, 09-21
+   **0.9895 FAIL** - streak at 0, build stays parked.
+8. **Ladder unchanged and running.** lead-lag **+$2.17/51** is the only positive live arm of size; fade -$0.20/50,
+   consensus -$3.00/41, sports-anchor -$2.17/8. Three arms in cool-down, seven on operator holds. Consensus's
+   verdict reconciles to the cent against the trade-quality ledger.
+9. **Sharp anchor out of sample:** `ruleN` 503, `ruleNet` **+21.37**, `gradedN` 1,034, mean Brier 0.1254;
+   `anchor-grades.jsonl` gained **108 rows** in 24 h whose own `rulePnl` sums to **-$0.91**. Odds API **278 of
+   645** credits today (09-19 closed at 644, one under). Shadows: mention base rate LOSES to the market (Brier
+   0.2132 vs 0.1112, not promotable); Polymarket consensus **+4.62c/contract** at the Kalshi ask net of fee over
+   1,430 matched; Metaculus 129 pairs, still nothing graded.
+10. **Nothing is needed from the operator.** Watch items only: OpenRouter at $11.76, and the fact that two Claude
+    sessions were writing this repo at the same time today (hence the 152/153 renumber).
+
+**Delivery note:** this is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. The report is
+written to `docs/reports/2026-09-21.md` for the 08:30 desktop task to deliver.

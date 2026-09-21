@@ -249,8 +249,29 @@ the report section. One item per day unless trivial. Record the trigger check in
    written.** Note for the next reader: the raw and enabled-arms reads now disagree in DIRECTION,
    not just in size, so quoting the script's own "consider veto mode" verdict line without applying
    both amendments will give the wrong answer.
+   **2026-09-21 - trigger MET, action DECLINED, amendment 2 load-bearing again (section 153).** 2,125
+   decisions; settled 483 ABSTAIN / 304 VETO / 65 ERROR / 24 ALLOW_UNCHANGED. **All three RAW conditions
+   pass for the first time since 09-11**: ABSTAIN +$0.045/contract against VETO -$0.037 (an 8.2c gap, so i
+   and ii), and of the eight strategies present in both cohorts the critic is skilled in five -
+   book-imbalance (-11.7c), consensus (-9.6c), cross-venue (-6.7c), flow-follow (-6.8c), volume-spike
+   (-22.5c) - against anti-skilled in three - fade (+0.6c), mean-reversion (+17.9c), momentum (+6.8c) -
+   which is a strict majority of eight, so iii passes too. **Amendment 2 declines it.** The arms live on the
+   ladder today AND present in both cohorts are consensus, cross-venue, fade and mean-reversion; the other
+   four are stopped or in cool-down, so their settlements cannot be forgone by a mode switch. Restricted to
+   those four: **VETO +$1.37 over 200 contracts (+0.69c) against ABSTAIN +$11.68 over 280 (+4.17c)**.
+   Condition (ii) passes (VETO is 3.5c below the rest); **condition (i) FAILS - VETO's own net is above
+   zero** - and condition (iii) fails at 2 of 4 (consensus and cross-venue skilled, fade and mean-reversion
+   anti-skilled). The rule does not fire; nothing changed. Note for the next reader: the raw and
+   enabled-arms reads disagree in DIRECTION again, so the script's own "consider veto mode" verdict line is
+   the wrong answer today.
 
-2. **WebSocket book for execution.** *(2026-09-12: the daily check as written is NOT COMPUTABLE -
+2. **WebSocket book for execution.** *(2026-09-21: the per-UTC-day pair backlog 56 asked for EXISTS now - `wsStats.day` plus a `dayLog` - so
+   the ratio is computable for the first time since 09-12, and the honest daily numbers are:
+   **2026-09-19 48,446/48,699 = 0.9948 PASS; 2026-09-20 52,772/53,332 = 0.9895 FAIL; 2026-09-21 to 11:30Z
+   25,422/25,693 = 0.9895 FAIL.** Two consecutive days under the bar, so the seven-day streak is at 0 and
+   the build stays parked. Every "day's slice" recorded below before this note was differenced from
+   cumulative per-process counters and is not evidence.)*
+*(2026-09-12: the daily check as written is NOT COMPUTABLE -
    `compared`/`agreed` are per-process counters and the app boots ~18x/day, so differencing two
    cumulative readings is invalid arithmetic and every "day's slice" recorded below, including
    yesterday's "streak broken", was computed that way. See backlog 56; the trigger needs a persisted
@@ -263,13 +284,28 @@ the report section. One item per day unless trivial. Record the trigger check in
    Trigger: `wsStats.agreed / compared` ≥ 0.99 on seven consecutive daily
    checks (log the ratio daily). Daily checks: 2026-09-07 3762/3770 = 0.9979 PASS (1 of 7); 2026-09-08 2566/2570 = 0.9984 PASS (2 of 7); 2026-09-09 249/250 = 0.9960 PASS (3 of 7, counter reset at the overnight outage); 2026-09-10 10946/11021 = 0.9932 PASS (4 of 7). Build: serve `data.books` from the socket when its book is under 5 s old,
    REST otherwise; tests on the promotion rule; no ladder change.
-3. **HRRR forecast source.** Reading 2026-09-12: **135** graded station-days, HRRR MAE 1.95 /
+3. **HRRR forecast source - DONE 2026-09-21 (section 153); the shadow keeps running.** Reading 2026-09-12: **135** graded station-days, HRRR MAE 1.95 /
    bias -0.01 vs NBM MAE 2.29 / bias -1.64, closer on 72 vs 58 (5 ties). Count half MET; the
    2026-09-21 date still binds. Reading 2026-09-11: **108** graded station-days, HRRR MAE 1.97 / bias
    +0.07 vs NBM MAE 2.37 / bias -1.79, closer on 59 vs 45 (4 ties) - the 100-day half of the trigger
    is now MET and only the 2026-09-21 date still binds. Previous reading 2026-09-10: 81 graded station-days, HRRR MAE 1.96 / bias -0.06 vs NBM MAE 2.29 / bias -1.82, closer on 41 vs 36 (4 ties). HRRR leads but n < 100. Trigger: 2026-09-21 or 100+ graded station-days, whichever is later;
    `node scripts/hrrr-shadow.mjs report` shows HRRR MAE below NBM. Build: `fetchHourlyForecast` reads
    Open-Meteo `gfs_hrrr` for the quoter's fair value, NWS as fallback; keep the shadow running.
+   **2026-09-21 - TRIGGER MET, BUILT, SHIPPED (section 153).** Both halves are met by a distance: **378 graded
+   station-days, HRRR MAE 1.93 / bias -0.27 against NBM 2.27 / -1.27, HRRR closer on 201 station-days to NBM's
+   166 with 11 ties** (NBM is the blend NWS point forecasts are built from, so this is like-for-like).
+   `fetchHourlyForecast` in `weatherForecast.ts` now reads Open-Meteo `gfs_hrrr` first and falls back to
+   api.weather.gov on any failure; the 30-minute cache, its TTL and the keep-a-stale-forecast-on-failure path are
+   unchanged, and `HourlyForecast` gained an optional `source`. The parser is the risk, so `parseOpenMeteoHourly`
+   is exported and covered by fifteen assertions: unix SECONDS not ISO (the request pins
+   `timezone=GMT&timeformat=unixtime` so no local-zone parse can creep in), a REFUSAL on the suffixed
+   `temperature_2m_gfs_hrrr` name a multi-model reply would use, and a fallback to NWS when a truncated run covers
+   fewer than `HRRR_MIN_FORWARD_HOURS` (6) hours ahead. 20/20 suites, tsc and build clean, backup MAINT-2026-09-21,
+   app restarted 11:23:03Z. Verified live end to end before the restart (NYC/LAX/CHI all `source=hrrr`, 48 periods,
+   remaining highs 69.5/74.7/64.9 F, bracket probabilities computed); **the weather arms are on operator holds, so
+   this path does not appear in main.log today** and the first production reader will be the quoter or the morning
+   arm when either is released. The shadow keeps running. NEXT UNTRIGGERED BUILD IS 8(c), market-maker rest
+   patterns.
 4. **Kalshi private fill channel.** Trigger: quoter notch ≥ 2 or a positive quoter checkpoint. Build: the
    authenticated `fill` channel feeding pendingOrders and the quoter's inventory; reconciler stays as the audit.
 5. **Avellaneda-Stoikov skew for the quoter.** Trigger: same as 4. Build: reservation price from inventory, forecast
@@ -2412,3 +2448,63 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   -$5.14 stop and went on to 3 wins in 19 trades. The new lifetime floor (section 152) bounds the damage but does
   not fix the re-arm. Honour `ladderMaxDemotionsBeforeGate`, and require evidence rather than a clock. Trigger:
   **2026-09-24**.
+
+- **86 READ 2026-09-21 (section 153): no gate.** Weekly lead-lag basis reading. 4,648 windows settled on both
+  venues with a result over seven days; **61 disagreed (1.31%)**, every one within 3.6 bp of the strike. Our money
+  in disagreeing windows: 19 fills, **-$9.89**, against -$44.59 over all 1,013 matched-window fills - so 78% of the
+  loss is in windows the two venues AGREED on and the index basis is not the cost. The registered cell
+  (mtc < 3 min & |spot-strike| < 5 bp) is 110 fills, -2.11c/contract over 8 days, **day-clustered CI95
+  [-12.77, +8.55]**; the rule needs the upper band below zero, so it does not fire. The tighter cell (mtc < 2 min)
+  is **+4.44c/contract**. `leadlag_basis_cells.py` now prints that band (it printed only the cell's total before,
+  which cannot answer a rule stated on a band). **Defect found and fixed in the same read:** both basis scripts
+  globbed `tmp/k-*.json`, which does not match `tmp/kalshi-<date>.json` - the name this session's own fresh dump
+  has used since 09-19 - so the weekly read was grading our fills against `tmp/k-2026-09-18b.json` and silently
+  lost 172 fills, every one from 09-19 to 09-21. Both now take an explicit dump path and glob both names.
+  Trigger: every Monday, next **2026-09-28**.
+- **107 CLOSED 2026-09-21 (section 153): already implemented, nothing to do.** The lead-lag size ceiling is in
+  `ladder.ts:138` - `contractsPerNotch: 1` for `kalshi-leadlag`, so notch 1 is one contract and notch 4 is the
+  four that won - with the reasoning in the comment above it. The arm is at tiny-live notch 1 with 51 settled
+  against a checkpoint of 60, i.e. still before the first scale-up the trigger named. Trigger retired.
+- **157 READ 2026-09-21 (section 153): the edge survives the bound; it is not wide-spread noise.** New read-only
+  `scripts/backtests/leadlag_executable_bound.py` over the 1,360 `kalshiSource=='orderbook'` rows since 09-17.
+  After the row's own fee the signal edge is **+8.08c at the Polymarket mid and +6.90c at the adverse bound**, and
+  **97.3%** of rows still clear the fee at the bound. By Polymarket spread at the adverse bound: 1-2c **+6.44c**
+  (n=516), 2-4c **+6.16c** (n=499), 4-8c **+8.65c** (n=345) - the narrow bucket, where the mid is most
+  trustworthy, carries the same six cents, so the registration's "partly book noise" worry is not supported. The
+  same script's forward Kalshi markout is the counterweight: **+1.83c +/- 1.79 at +5 min over 231 rows**, buckets
+  disagreeing in sign. Signal fine, execution still the question - the same shape as section 151. Trigger retired.
+- **173 READ 2026-09-21 (section 153): the fields are present and useless; handbook note written.** 161 of the 284
+  fills since the §134 restart carry `side: 'sell'`, so the literal trigger ("no sell row exists") does not fire
+  and the deprecated fields are still emitted. But `action` is perfectly degenerate with exposure: across all
+  3,404 archived fills `action=='sell'` iff `side=='no'` iff `outcome_side=='no'` iff `book_side=='ask'`, with not
+  one row of the four-way disagreement a real direction field would produce, and round trips open in BOTH label
+  orders (`buy yes` then `sell no`; `sell no` then `buy yes`). **Nothing in the archive marks an exit.** The
+  registered action was taken: handbook 8.1 now says so, and the two `side` consumers were checked and are safe -
+  `history.ts` drops `ref === 'venue-fill'` rows before counting sells, and `autoTrader.ts`'s unknown-exit
+  reconcile reads the order journal. Trigger retired.
+- **175 READ 2026-09-21 (section 153): decision is change nothing.** Measured over mmsim's 104,241 rows, wall-clock
+  gaps above 3 minutes are 4.2% / 2.8% / 23.0% / 0.9% / 2.3% / 14.2% / **33.5%** / 6.5% / 1.4% of 09-13..09-21. The
+  premise held on 09-18 and 09-19 and is decaying untouched: halts 1,0,0,0,1,4,**7**,3,**0** and throttles
+  6,1,3,7,12,18,**28**,16,7-in-11h. The relaunch wait is 25-30 min (the sentinel's 15-minute tick), not 3 h; 14 of
+  16 halts recovered inside that. Every public-endpoint sharer was identified (mmsim, weather-books 30 min,
+  sports-books 60 s, inplay-books 15 s, spot-shadow, crypto15, ladder15, btc-collector and the live trader, all on
+  `api.elections.kalshi.com`), and the newest of them does NOT explain it - inplay-books started 09-19 10:00Z and
+  three of that day's seven halts preceded it. The 09-17 pacing change remains the step. Parameters are
+  pre-registered and changing one mints a new runId, and the run is 9 days into 35 with 2,093 fills against a 400
+  gate, so the power is not at risk. Trigger retired; residue in 222.
+
+- **221. The lead-lag markout instrument cannot see most of its own rows (2026-09-21, section 153).**
+  `leadlag_executable_bound.py`'s forward markout graded 231 of 1,360 orderbook rows, because the recorder writes a
+  row per DISLOCATION rather than per tick, so a ticker usually has no later observation inside the markout window.
+  The +1.83c +/- 1.79 result is therefore a weak instrument, not a weak signal, and the arm's central open
+  question - signal versus execution - stays unresolved on it. Fix by recording a periodic observation row per
+  tracked ticker (a cheap `event:'obs'` line at the existing scan cadence), or by marking out against the
+  `leadlag-recorder` series instead. Trigger: **2026-09-28**, with the next weekly basis read.
+- **222. `mmsim-grade`'s coverage gate is blind to the outage it is named for (2026-09-21, section 153).**
+  `coverage = cycles.filter(c => c.ok).length / cycles.length` (scripts/mmsim-grade.mjs:208) counts only cycles
+  that were WRITTEN, so a dark hour cannot lower it: on 09-19, with 33.5% of the day dark, it still read ~99.9%
+  against an 80% gate. It measures success given the process was alive, which is a different and much weaker claim
+  than the gate's name makes. The gate threshold is pre-registered and must NOT be changed (that mints a new
+  runId); add a SEPARATE reported line - wall-clock minutes covered per UTC day, from the row timestamps - and
+  judge the run against both at its verdict. Trigger: **before the run's 2026-10-17 verdict**, i.e. read on
+  **2026-10-10**.

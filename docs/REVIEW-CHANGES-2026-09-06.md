@@ -5466,3 +5466,166 @@ counts, and almost never to whether a change is warranted.
 
 Tests 20/20, `tsc --noEmit` clean, restart verified (build 11:13:38Z, electron start 11:13:53Z), config snapshot
 saved as `kalshi-auto.json.bak_bestday_20260921-100500` before the edit.
+
+**Renumbered:** the concurrent session committed its own section 152 at 11:16Z (commit be88042, backlog
+216-220) while this one was running; these entries become 153 and backlog 221-222.
+
+## 153 - 2026-09-21 11:45Z: six pre-registered reads, and the weekly one that was grading a stale dump
+
+Headless maintenance session. Six reads fell due today; all six were performed, and the one build whose trigger
+they met was finished end to end. The day's own headline is not a read: **the operator's daily loss cap tripped at
+about 09:10Z** (local ledger -$13.40 against a 20% floor on ~$67 of equity; venue-settled is -$7.44 on 46
+settlements, the balance is open-position mark-to-market that backlog 159 added to the kill in September). Every
+Kalshi arm has been refusing entries since - 4,740 fade candidates, 96 consensus, 6 mean-reversion and 2
+volume-spike vetoed with `kill-switch: daily loss limit hit` in the 10:45Z gate note. That is the operator's own
+switch doing exactly what it is for; nothing was changed and nothing needs to be.
+
+### The build: HRRR is now the quoter's forecast, NWS the fallback (build queue 3)
+
+The trigger was "2026-09-21 or 100+ graded station-days, whichever is later, and HRRR MAE below NBM". Both halves
+are met by a distance: **378 graded station-days, HRRR MAE 1.93 / bias -0.27 against NBM 2.27 / -1.27, HRRR closer
+on 201 station-days to NBM's 166 with 11 ties.** NBM is the blend NWS point forecasts are built from, so this is a
+like-for-like comparison of the model we price from against the model we would price from.
+
+`fetchHourlyForecast` in `weatherForecast.ts` now asks Open-Meteo for `gfs_hrrr` first and falls back to
+api.weather.gov on any failure. The cache, its 30-minute TTL and the keep-a-stale-forecast-on-failure behaviour are
+untouched; `HourlyForecast` gained an optional `source` so a later reader can tell a HRRR day from a fallback day.
+
+The whole risk of the change is the parser, because Open-Meteo's grammar differs from the NWS feed's in three ways
+that each produce a WRONG fair value rather than an error, so `parseOpenMeteoHourly` is exported and tested
+directly: times are unix SECONDS (not ISO strings, and `Date.parse` on Open-Meteo's tz-local form would have been
+read in the machine's zone - the request pins `timezone=GMT&timeformat=unixtime` for exactly this reason); the
+series is named `temperature_2m` only because we ask for ONE model, and a multi-model reply would name it
+`temperature_2m_gfs_hrrr`, so a suffixed reply is REFUSED rather than guessed at; and a short reply is a truncated
+model run rather than a failure, so a reply covering fewer than `HRRR_MIN_FORWARD_HOURS` (6) hours ahead falls back
+to NWS instead of pricing the rest of the day off nothing. Fifteen assertions cover those, the nulls-in-series
+case, the exact boundary at the six-hour floor, and a 48-hour reply read at its own end.
+
+Verified live end to end against the real endpoint before the restart: NYC / LAX / CHI all served `source=hrrr`,
+48 hourly periods each, remaining daily highs 69.5 / 74.7 / 64.9 F and a bracket probability computed from each.
+**The weather arms themselves are on operator holds, so this path does not appear in `main.log` today** - the live
+probe is the verification, and the first production reader will be the quoter or the morning arm when either is
+let off its hold.
+
+20/20 suites, tsc clean, build clean. Backup `MAINT-2026-09-21`. App restarted 11:23:03Z, log resumed.
+
+### The weekly basis read was grading our fills against a dump three days old (backlog 86)
+
+`leadlag_settlement_basis.py` and `leadlag_basis_cells.py` both find the venue dump with
+`glob('tmp/k-*.json')`. Since 09-19 the maintenance session has written its fresh dump as
+`tmp/kalshi-<date>.json`, which that pattern does not match - `k-` requires the hyphen in the second position. So
+the newest file it could see was `tmp/k-2026-09-18b.json` (2026-09-18T15:00Z) and the weekly read silently lost
+**172 of our 15-minute fills** - every one from 09-19, 09-20 and 09-21, which is precisely the post-restore period
+the reading exists to judge. The by-day table simply stopped at 09-18 and nothing said so. Both scripts now accept
+an explicit dump path and, absent one, glob both names; both print the dump they chose.
+
+This matters for the read's numbers, not just its tidiness: our fills on matched windows go from 832 to **1,013**,
+and the dollars in venue-disagreeing windows from -$7.40 to **-$9.89**.
+
+**The reading, corrected.** Over seven days, 4,648 windows settled on both venues with a result; **61 disagreed
+(1.31%)**, and every disagreement landed within 3.6 bp of the strike (most inside 0.5 bp) - the basis is a
+coin-flip zone, not a systematic tilt. Our own money in those windows is 19 fills for **-$9.89**, 22% of the
+-$44.59 we lost across all matched windows; the other -$34.70 is in windows the two venues agreed on. **The index
+basis is not what is costing us.**
+
+The registered rule is stated on a band - "build a gate ONLY if that cell's day-clustered upper band is below zero
+over >= 7 days" - and the script only printed the cell's total, which cannot answer it: a cell can be negative in
+dollars and still be one bad day. `day_band()` now prints it. The answer is **no gate**:
+
+| cell | days | fills | mean | day-clustered CI95 |
+|---|---|---|---|---|
+| mtc < 3 min & dist < 5 bp (the registered cell) | 8 | 110 | -2.11c/contract | [-12.77, +8.55] |
+| mtc < 2 min & dist < 5 bp | 7 | 79 | **+4.44c/contract** | [-4.71, +13.58] |
+| all matched fills | 8 | 1,013 | -2.98c/contract | [-9.78, +3.82] |
+
+The registered cell's upper band is +8.55c, nowhere near below zero, and its tighter sibling is positive. Nothing
+built. Next reading Monday 2026-09-28.
+
+### The executable-bound regrade: the dislocation survives the bound (backlog 157)
+
+New read-only script `scripts/backtests/leadlag_executable_bound.py`, over the 1,360 `kalshiSource=='orderbook'`
+rows (round 116 voided the list-priced ones) from 2026-09-17 to now. Both Polymarket bounds are reported, because
+the registration's phrase "the adverse side" is ambiguous in this direction convention and reporting both settles
+it without a judgement call.
+
+After the row's own fee, the signal edge is **+8.08c at the mid and +6.90c at the adverse bound** (median +4.50c
+and +3.00c). **97.3% of rows still clear the fee at the adverse bound.** The bound costs about 1.2c; it does not
+cost the edge. By Polymarket spread, at the adverse bound: 1-2c spread **+6.44c** (n=516), 2-4c **+6.16c** (n=499),
+4-8c **+8.65c** (n=345). The registration's worry - "if the edge lives only in wide spreads the trigger is partly
+book noise" - **is not supported**: the narrow-spread bucket, where the mid is most trustworthy, carries the same
+six cents as the wide one.
+
+The sobering half is in the same script. The quoted dislocation is a claim about where the KALSHI price is going,
+so each row is marked out against the same ticker's own later orderbook observation: **+1.83c +/- 1.79 at +5
+minutes over 231 rows**, with the buckets disagreeing in sign (+4.81, -1.93, +2.83). Indistinguishable from zero.
+That is the same shape as 151's finding - the signal graded well across every period while the fills collapsed -
+and it says the residual question for this arm is still execution, not signal quality. The markout sample is small
+because the recorder writes a row per dislocation rather than per tick, which is a limit of the instrument and is
+recorded as such (backlog 221).
+
+### Kalshi fills carry no buy/sell bit at all (backlog 173)
+
+The registration asked: count rows by `side` after the §134 restart; if exits happened and no `sell` row exists,
+the deprecated `action`/`side` fields are gone. **Sell rows exist - 161 of 284 - so the literal condition does not
+fire, and the fields are still emitted. The honest answer is worse than the one the trigger was written for.**
+
+`action` is perfectly degenerate with exposure. Across all 3,404 archived fills, and all 284 since the restart,
+`action == 'sell'` iff `side == 'no'` iff `outcome_side == 'no'` iff `book_side == 'ask'`. Not one row of the
+four-way disagreement a real direction field would produce. Round trips prove what the labels mean:
+
+    KXLOLGAME-...SKSLY-SLY        09:02:58  buy yes  2.78 @0.34   opening
+                                  09:03:20  sell no  2.78 @0.73   the exit
+    KXINTLFRIENDLYGAME-...-VAN    08:31:12  sell no  1.39 @0.72   the OPENING
+                                  08:32:20  buy yes  1.39 @0.72   the exit
+
+The same two labels, in the opposite order. `action` names the leg, not the intent. So the registered action -
+"switch the archive consumers to the exposure model" - is the right one even though the trigger's if-clause is
+false. In code it is already done: the only two places that filter on `side` are safe, `history.ts` drops
+`ref === 'venue-fill'` rows before it counts sells and `autoTrader.ts`'s unknown-exit reconcile reads the order
+journal where our own side is real. What was missing was the written warning, and it is now in the handbook (8.1).
+
+### mmsim's darkness, measured (backlog 175)
+
+The item said mmsim "is dark for a large part of each day" and waits for a 3-hourly relaunch. Measured over its
+104,241 rows: wall-clock gaps above three minutes are **4.2% of 09-13, 2.8% of 09-14, 23.0% of 09-15, 0.9% of
+09-16, 2.3% of 09-17, 14.2% of 09-18, 33.5% of 09-19, 6.5% of 09-20 and 1.4% of 09-21 so far.** The premise was
+true on 09-18 and 09-19 and is decaying fast without anyone touching it: halts 1, 0, 0, 0, 1, 4, **7**, 3, **0**
+and throttles 6, 1, 3, 7, 12, 18, **28**, 16, 7-in-11h across 09-13..09-21. The relaunch wait is not 3 hours
+either: the sentinel's own 15-minute tick finds it, and 14 of 16 halts were followed by a row within 25-30
+minutes; the two long ones (100 min on 09-19, 24 min on 09-20) are the outliers, not the rule.
+
+**Decision: change nothing.** Every mmsim parameter is pre-registered and changing one mints a new `runId` and
+restarts a 35-day clock; the run is 9 days in with 2,093 simulated fills against a 400 gate and 10 day-clusters
+against a 20 gate, so the darkness has not cost the experiment its power. Every public-endpoint sharer was
+identified - `mmsim`, `weather-books` (30 min), `sports-books` (60 s), `inplay-books` (15 s), `spot-shadow`,
+`crypto15-shadow`, `ladder15-shadow`, `btc-collector` and the live trader all use
+`api.elections.kalshi.com/trade-api/v2` - but the attribution does not land on the newest of them: `inplay-books`
+started 09-19 10:00Z and three of that day's seven halts preceded it. The 09-17 pacing change remains the step,
+as round 118 already recorded.
+
+**The residue is a measurement defect and it is registered, not fixed** (backlog 222): `mmsim-grade`'s
+`cycle coverage 99.9% (gate needs 80%)` is `okCycles / recordedCycles`. A dark hour writes no cycle rows, so the
+gate cannot see the outage it is named for - it measures success GIVEN the process was alive. Reading it as
+coverage on 09-19, when a third of the day was dark, would have been flatly wrong.
+
+### The two reads that were already answered
+
+- **Backlog 107 (lead-lag size ceiling, 4 contracts).** Already implemented: `ladder.ts:138` carries
+  `contractsPerNotch: 1` for `kalshi-leadlag` with the reasoning in the comment above it, so notch 1 is one
+  contract and notch 4 is the four that won. The arm is at tiny-live notch 1 with 51 settled against a checkpoint
+  of 60, i.e. still before the first scale-up the trigger named. Nothing to do; the trigger is retired.
+- **The HRRR half of build queue 3** is the build above.
+
+### Liveness, and what the sentinel did overnight
+
+App up (restarted 00:05Z by the sentinel after the host lost the process, and again at 11:23Z by this session for
+the build), `main.log` current, ladder tick 4 minutes old, collector up, today's nightly review present. Every
+hourly shadow ran within the hour. One incident since the last session -
+`2026-09-20T23-50-unbooked-settlement-KXLALIGAGAME-26SEP20` - was opened, dispatched and FIXED by the on-call
+repair at 00:12Z (the autoTrader scan loop had been wedged 2 h 42 min; `SCAN_WEDGE_MS` now bounds the slot).
+**Zero incidents are open.** Sentinel status `at` 11:20:01Z.
+
+Odds API 278 of 645 credits today (09-19 came within one credit of the cap at 644). Sharp anchor out-of-sample:
+`ruleN` 503, `ruleNet` +21.37, `gradedN` 1,034, `gradedBrier` 0.1254 mean; `anchor-grades.jsonl` gained 108 rows in
+24 h, whose own `rulePnl` sums to **-$0.91** - the anchor's out-of-sample rule gave back a little today, and its
+live arm is -$2.17 over 8.

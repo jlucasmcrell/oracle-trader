@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 HERE = os.path.dirname(os.path.abspath(__file__))
 sb = json.load(open('G:/PROJECTS/oracle-trader/data/leadlag-basis/settlement_basis.json'))
 win = {r['ticker']: r for r in sb['rows']}
-dump = json.load(open(max(glob.glob('G:/PROJECTS/oracle-trader/tmp/k-*.json'), key=os.path.getmtime), encoding='utf-8'))
+# See leadlag_settlement_basis.py: `tmp/k-*.json` alone misses `tmp/kalshi-<date>.json`, so this read was
+# joining our fills from a stale dump. An explicit path as argv[1] pins it.
+import sys
+_dumps = glob.glob('G:/PROJECTS/oracle-trader/tmp/k-*.json') + glob.glob('G:/PROJECTS/oracle-trader/tmp/kalshi-*.json')
+DUMP = sys.argv[1] if len(sys.argv) > 1 else max(_dumps, key=os.path.getmtime)
+print(f'venue dump: {DUMP}')
+dump = json.load(open(DUMP, encoding='utf-8'))
 fills = [f for f in dump['fills'] if f.get('market_ticker') in win]
 print(f'fills on matched windows: {len(fills)} (of {sum(1 for f in dump["fills"] if "15M-" in f.get("market_ticker", ""))} 15M fills in the dump)')
 
@@ -63,7 +69,8 @@ for f in fills:
     dist = abs(s - K) / K * 1e4 if (s and K) else None
     poly = (w['poly'] or {}).get('result')
     rows.append({'t': f['market_ticker'], 'coin': coin, 'mtc': mtc, 'side': side, 'price': price, 'n': n, 'won': won, 'pnl': pnl,
-                 'dist': dist, 'disagree': bool(w.get('DISAGREE')), 'poly_side': poly == side})
+                 'dist': dist, 'disagree': bool(w.get('DISAGREE')), 'poly_side': poly == side,
+                 'day': f['created_time'][:10]})
 
 print(f'rows with spot distance: {sum(1 for r in rows if r["dist"] is not None)} / {len(rows)}')
 tot = sum(r['pnl'] for r in rows)
@@ -110,6 +117,41 @@ print(f"  gated: {len(gated)} fills ${sum(r['pnl'] for r in gated):+.2f}; kept: 
 for thr_m, thr_d in [(2, 5), (3, 3), (3, 10), (5, 5), (5, 10)]:
     g = [r for r in rows if r['mtc'] < thr_m and r['dist'] is not None and r['dist'] < thr_d]
     print(f"  mtc<{thr_m} & dist<{thr_d}bp: gated {len(g):3d} fills ${sum(r['pnl'] for r in g):+7.2f}; kept ${tot - sum(r['pnl'] for r in g):+7.2f}")
+# Backlog 86's rule is stated on a BAND, not a total: "build a gate ONLY if that cell's day-clustered upper
+# band is below zero over >= 7 days". A cell can be negative in dollars and still be one bad day, so the
+# total alone cannot answer it. Days are the cluster because the fills inside a day share a regime.
+def day_band(sel, label):
+    byday = defaultdict(lambda: [0.0, 0.0])
+    for r in sel:
+        byday[r['day']][0] += r['pnl'] * 100.0
+        byday[r['day']][1] += r['n']
+    per = [c / n for c, n in byday.values() if n > 0]
+    d = len(per)
+    if d == 0:
+        print('  %s: no fills' % label)
+        return
+    mean = sum(per) / d
+    if d < 2:
+        print('  %s: %d day, mean %+.2fc/contract, no band' % (label, d, mean))
+        return
+    var = sum((x - mean) ** 2 for x in per) / (d - 1)
+    se = (var / d) ** 0.5
+    lo, hi = mean - 1.96 * se, mean + 1.96 * se
+    if hi < 0 and d >= 7:
+        verdict = 'GATE (upper band below zero over %d days)' % d
+    elif hi >= 0:
+        verdict = 'no gate: upper band >= 0'
+    else:
+        verdict = 'no gate: only %d days' % d
+    print('  %s: %d days, %d fills, mean %+.2fc/contract, day-clustered CI95 [%+.2f, %+.2f] -> %s'
+          % (label, d, len(sel), mean, lo, hi, verdict))
+
+
+print('\n== the registered cell, day-clustered (backlog 86) ==')
+day_band(gated, 'mtc<3 & dist<5bp')
+day_band([r for r in rows if r['mtc'] < 2 and r['dist'] is not None and r['dist'] < 5], 'mtc<2 & dist<5bp')
+day_band(rows, 'all matched fills')
+
 print('\n== by day ==')
 byday = defaultdict(float)
 for r in rows:

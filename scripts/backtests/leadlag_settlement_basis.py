@@ -16,7 +16,21 @@ G = 'https://gamma-api.polymarket.com'
 OUT = 'G:/PROJECTS/oracle-trader/data/leadlag-basis'
 os.makedirs(OUT, exist_ok=True)
 import glob
-DUMP = max(glob.glob('G:/PROJECTS/oracle-trader/tmp/k-*.json'), key=os.path.getmtime)  # newest venue dump
+# The newest read-only venue dump. The glob was `tmp/k-*.json` until 2026-09-21, which does not match
+# `tmp/kalshi-<date>.json` - the name the maintenance session's own fresh dump has been written under since
+# 09-19 - so the weekly read silently graded OUR fills against a dump three days stale and lost 172 of them.
+# Pass a path explicitly to pin it: `... leadlag_settlement_basis.py 7 tmp/kalshi-2026-09-21.json`.
+def newest_dump():
+    if len(sys.argv) > 2:
+        return sys.argv[2]
+    found = glob.glob('G:/PROJECTS/oracle-trader/tmp/k-*.json') + glob.glob('G:/PROJECTS/oracle-trader/tmp/kalshi-*.json')
+    if not found:
+        raise SystemExit('no venue dump in tmp/; run scripts/readonly-kalshi-dump.cjs first')
+    return max(found, key=os.path.getmtime)
+
+
+DUMP = newest_dump()
+print(f'venue dump: {DUMP}', file=sys.stderr)
 SINCE = datetime.now(timezone.utc) - timedelta(days=DAYS)
 
 

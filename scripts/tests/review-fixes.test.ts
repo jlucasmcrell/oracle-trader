@@ -3,7 +3,7 @@
  * functions only; no network, no Electron. Run: npm run test:review
  */
 import { bracketState, inBlackout, inBlackoutLocal, printFills, stationLocalHour, tempKindOfSeries } from '../../src/main/strategies/quoter'
-import { bracketFairValue, forecastSigma, normalCdf, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
+import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, parseOpenMeteoHourly, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
@@ -870,6 +870,7 @@ killStateTests()
 dnsFallbackTests()
 crossVenueBatchTests()
 cullCacheTests()
+openMeteoTests()
 
 await leadLagContainmentTests()
 await cancelOrderTests()
@@ -1344,4 +1345,50 @@ function cullCacheTests(): void {
   eq('cull-cache: a settled market with no result parks as a blank', settledCacheEntry({ status: 'settled', result: '' }, now), { blankAt: now })
   eq('cull-cache: a row with no status caches nothing', settledCacheEntry({}, now), undefined)
   eq('cull-cache: a missing row is not an error', settledCacheEntry(undefined, now), undefined)
+}
+
+/**
+ * HRRR as the quoter's forecast source (build queue 3, promoted 2026-09-21 on 378 graded
+ * station-days: HRRR MAE 1.93 vs NBM 2.29). The parser is the whole risk of the change -
+ * Open-Meteo's grammar differs from the NWS feed's in three ways that each silently produce
+ * a wrong fair value rather than an error: times are unix SECONDS, the series name carries a
+ * model suffix when more than one model is asked for (we ask for one, so it does not), and a
+ * short reply is a truncated model run rather than a failure. `sample` is a real reply
+ * recorded from the live endpoint on 2026-09-21 (NYC, the first four hours).
+ */
+function openMeteoTests(): void {
+  const t0 = 1789948800 // 2026-09-21T00:00:00Z
+  const hours = (n: number) => Array.from({ length: n }, (_, i) => t0 + i * 3600)
+  const sample = { hourly: { time: hours(48), temperature_2m: hours(48).map((_, i) => [69.6, 69.4, 68.8, 67.7][i % 4]) } }
+  const now = t0 * 1000
+
+  const f = parseOpenMeteoHourly(sample, now)
+  eq('open-meteo: a full reply parses', f?.periods.length, 48)
+  eq('open-meteo: unix seconds become milliseconds', f?.periods[0]?.start, t0 * 1000)
+  eq('open-meteo: the last hour is tomorrow 23:00Z', f?.periods[47]?.start, (t0 + 47 * 3600) * 1000)
+  eq('open-meteo: fahrenheit is passed through', f?.periods[1]?.temp, 69.4)
+  eq('open-meteo: the source is recorded', f?.source, 'hrrr')
+  // Open-Meteo publishes no model run time, so the fetch instant is the stamp the staleness
+  // gates in ibkrWeather and the quoter read.
+  eq('open-meteo: updatedAt is the fetch instant', f?.updatedAt, now)
+
+  // The day's high over the reply is what the bracket fair value is built from.
+  eq('open-meteo: remainingExtremes reads the parsed periods', remainingExtremes(f!, '2026-09-21', 'America/New_York', now)?.max, 69.6)
+
+  // Refusals. Each of these must fall back to NWS rather than price on a partial model run.
+  eq('open-meteo: a reply with no hourly block is refused', parseOpenMeteoHourly({}, now), null)
+  eq('open-meteo: an empty series is refused', parseOpenMeteoHourly({ hourly: { time: [], temperature_2m: [] } }, now), null)
+  eq('open-meteo: mismatched series lengths are refused', parseOpenMeteoHourly({ hourly: { time: hours(48), temperature_2m: [1, 2] } }, now), null)
+  eq('open-meteo: a null document is refused', parseOpenMeteoHourly(null, now), null)
+  // A multi-model reply names the series `temperature_2m_gfs_hrrr`; asking for one model is
+  // what makes the unsuffixed name correct, so a suffixed reply must refuse, not guess.
+  eq('open-meteo: a suffixed multi-model series is refused', parseOpenMeteoHourly({ hourly: { time: hours(48), temperature_2m_gfs_hrrr: hours(48).map(() => 70) } }, now), null)
+  eq('open-meteo: nulls in the series are dropped', parseOpenMeteoHourly({ hourly: { time: hours(8), temperature_2m: [70, null, 70, 70, 70, 70, 70, 70] } }, now)?.periods.length, 7)
+
+  // The forward-coverage floor: a run that ends in an hour cannot price the rest of the day.
+  eq('open-meteo: a short run is refused', parseOpenMeteoHourly({ hourly: { time: hours(3), temperature_2m: [70, 70, 70] } }, now), null)
+  eq('open-meteo: the floor is exactly HRRR_MIN_FORWARD_HOURS', parseOpenMeteoHourly({ hourly: { time: hours(HRRR_MIN_FORWARD_HOURS), temperature_2m: hours(HRRR_MIN_FORWARD_HOURS).map(() => 70) } }, now)?.periods.length, HRRR_MIN_FORWARD_HOURS)
+  // Elapsed hours do not count towards coverage: the same 48-hour reply read at the end of
+  // the second day has nothing left to forecast.
+  eq('open-meteo: an exhausted run is refused', parseOpenMeteoHourly(sample, (t0 + 47 * 3600) * 1000), null)
 }

@@ -7,8 +7,14 @@
  * around a midpoint that people with a forecast know is wrong over hours.
  * Quoting around a forecast-derived probability removes that mismatch.
  *
- * Source: the National Weather Service hourly forecast (api.weather.gov; free,
- * no key, a User-Agent is required) at the settlement station. The day's
+ * Source: Open-Meteo's HRRR hourly forecast (`gfs_hrrr`; free, no key) at the
+ * settlement station, with the National Weather Service hourly forecast
+ * (api.weather.gov; free, no key, a User-Agent is required) as the fallback.
+ * HRRR is primary from 2026-09-21 on the shadow's own evidence (build queue 3,
+ * `node scripts/hrrr-shadow.mjs report`): over 378 graded station-days HRRR's
+ * daily high has MAE 1.93 / bias -0.27 against NBM's 2.27 / -1.27 - NBM is the
+ * blend NWS point forecasts are built from - and HRRR was the closer of the two
+ * on 201 station-days against 166 (11 ties). The day's
  * extreme is modelled as Normal(mu, sigma): mu is the larger of the observed
  * running high and the forecast high of the remaining hours (smaller of the
  * two for lows); sigma starts near the day-ahead forecast error (~3°F) and
@@ -58,25 +64,76 @@ export const STATION_COORDS: Record<string, [number, number]> = {
 export interface HourlyForecast {
   updatedAt: number
   periods: { start: number; temp: number }[]
+  /** Which model served it, so a reader can tell a HRRR day from a fallback day. */
+  source?: 'hrrr' | 'nws'
 }
 
 const HEADERS = { 'User-Agent': 'oracle-trader (weather fair value; contact via repository)', Accept: 'application/geo+json' }
+const OPEN_METEO_HEADERS = { 'User-Agent': 'oracle-trader (weather fair value; contact via repository)', Accept: 'application/json' }
 const urlCache = new Map<string, string>()
 const forecastCache = new Map<string, { at: number; f: HourlyForecast }>()
 export const FORECAST_TTL_MS = 30 * 60_000
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10_000) })
+async function getJson<T>(url: string, headers: Record<string, string> = HEADERS): Promise<T> {
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) })
   if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`)
   return (await res.json()) as T
 }
 
-/** NWS hourly forecast for a station (cached 30 minutes). Null when the station is unknown or the service fails. */
+/** A HRRR reply that covers fewer than this many hours ahead cannot price the rest of the day; use NWS instead. */
+export const HRRR_MIN_FORWARD_HOURS = 6
+
+/**
+ * Parse an Open-Meteo `forecast` reply asked for ONE model with `timeformat=unixtime` and
+ * `timezone=GMT`: `hourly.time` is unix seconds UTC and the series carries no model suffix.
+ * Exported for the tests, which run it against a payload recorded from the live endpoint.
+ */
+export function parseOpenMeteoHourly(doc: unknown, nowMs: number): HourlyForecast | null {
+  const h = (doc as { hourly?: { time?: unknown; temperature_2m?: unknown } } | null)?.hourly
+  const times = Array.isArray(h?.time) ? (h.time as unknown[]) : []
+  const temps = Array.isArray(h?.temperature_2m) ? (h.temperature_2m as unknown[]) : []
+  if (times.length === 0 || times.length !== temps.length) return null
+  const periods: { start: number; temp: number }[] = []
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i]
+    const v = temps[i]
+    if (typeof t !== 'number' || typeof v !== 'number' || !Number.isFinite(t) || !Number.isFinite(v)) continue
+    periods.push({ start: t * 1000, temp: v })
+  }
+  const forward = periods.filter((p) => p.start >= nowMs - 3600_000).length
+  if (forward < HRRR_MIN_FORWARD_HOURS) return null
+  // Open-Meteo reports no model run time; the fetch instant is the honest stamp, and a
+  // forecast kept from the cache after a failure keeps the instant it was fetched, so the
+  // callers' staleness gates still bite.
+  return { updatedAt: nowMs, periods, source: 'hrrr' }
+}
+
+/** Open-Meteo HRRR hourly temperature for a station. Null on any failure; the caller falls back to NWS. */
+async function fetchHrrrForecast(coords: [number, number], nowMs: number): Promise<HourlyForecast | null> {
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${coords[0]}&longitude=${coords[1]}&hourly=temperature_2m` +
+      `&models=gfs_hrrr&temperature_unit=fahrenheit&timeformat=unixtime&timezone=GMT&forecast_days=2`
+    return parseOpenMeteoHourly(await getJson<unknown>(url, OPEN_METEO_HEADERS), nowMs)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Hourly forecast for a station (cached 30 minutes), HRRR first and NWS as the fallback.
+ * Null when the station is unknown or both services fail with no usable cached forecast.
+ */
 export async function fetchHourlyForecast(station: string, nowMs = Date.now()): Promise<HourlyForecast | null> {
   const coords = STATION_COORDS[station]
   if (!coords) return null
   const cached = forecastCache.get(station)
   if (cached && nowMs - cached.at < FORECAST_TTL_MS) return cached.f
+  const hrrr = await fetchHrrrForecast(coords, nowMs)
+  if (hrrr) {
+    forecastCache.set(station, { at: nowMs, f: hrrr })
+    return hrrr
+  }
   try {
     let url = urlCache.get(station)
     if (!url) {
@@ -90,7 +147,7 @@ export async function fetchHourlyForecast(station: string, nowMs = Date.now()): 
       .map((x) => ({ start: Date.parse(x.startTime), temp: x.temperatureUnit === 'C' ? (x.temperature * 9) / 5 + 32 : x.temperature }))
       .filter((x) => Number.isFinite(x.start) && Number.isFinite(x.temp))
     if (periods.length === 0) return null
-    const out = { updatedAt: f.properties?.updateTime ? Date.parse(f.properties.updateTime) : nowMs, periods }
+    const out: HourlyForecast = { updatedAt: f.properties?.updateTime ? Date.parse(f.properties.updateTime) : nowMs, periods, source: 'nws' }
     forecastCache.set(station, { at: nowMs, f: out })
     return out
   } catch {

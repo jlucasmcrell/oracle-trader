@@ -432,6 +432,17 @@ Panels (`src/renderer/src`): `App.tsx` (shell, paper/live toggle, manual orders,
 - **Shards**: Kalshi runs several matching-engine shards (`exchange_index`). Collateral is held **per shard**; an
   order on an unfunded shard is rejected even when the aggregate balance covers it. Weather markets settle on
   shard 0. Order groups (circuit breakers) are per shard. Cancel and amend must be routed to the order's shard.
+- **Fills carry no buy/sell bit — read them as EXPOSURE** (backlog 173, read 2026-09-21). `get-fills` still emits
+  the deprecated `action`/`side` pair, but it is degenerate with `outcome_side`/`book_side`: over all 3,404 archived
+  Kalshi fills, and over all 284 since the §134 restart, `action == 'sell'` iff `side == 'no'` iff
+  `outcome_side == 'no'` iff `book_side == 'ask'` — not one row of the four-way disagreement a real direction field
+  would produce. Round trips confirm it: `KXLOLGAME-…-SLY` reads `buy yes 2.78 @0.34` then `sell no 2.78 @0.73`
+  (an exit), while `KXINTLFRIENDLYGAME-…-VAN` reads `sell no 1.39 @0.72` then `buy yes 1.39 @0.72` — the same two
+  labels, opened in the opposite order. **`action` names the leg, not the intent; nothing in the archive marks an
+  exit.** So read positions by netting YES-equivalent exposure (`scripts/positions_from_fills.py`, backlog 210),
+  never by filtering on `side`. The two places that do filter on `side` are safe and must stay that way:
+  `history.ts` drops `ref === 'venue-fill'` rows before it counts sells, and `autoTrader.ts`'s unknown-exit
+  reconcile reads the ORDER JOURNAL, where our own side is real.
 - **Settlement netting**: a settlement record lists every contract ever bought on each side. Contracts netted
   before settlement (YES bought back via NO) were paid $1 per pair at netting time and do not appear in `revenue`.
   Use the formula in [§12](#12-evidence-doctrine).
@@ -497,7 +508,8 @@ so there is no order book. Multiple-choice bets need `answerId`; `limitProb` is 
 | Source | Used by | Tier |
 |---|---|---|
 | Coinbase Advanced Trade websocket + REST candles | `liveSpot.ts`, convergence, spot shadow, BTC collector | Free, no auth |
-| NWS `api.weather.gov` | weather forecast fair value, hunch rain markets | Free |
+| Open-Meteo `api.open-meteo.com` (`gfs_hrrr`) | weather forecast fair value, PRIMARY since 2026-09-21 | Free |
+| NWS `api.weather.gov` | weather forecast fallback and settlement observations, hunch rain markets | Free |
 | Open-Meteo (HRRR, NBM, ensemble) | `hrrr-shadow.mjs`, BTC collector | Free |
 | The Odds API | sports sharp-anchor | **Paid**, 20,000 credits/month |
 | SportsGameOdds | supplemental sports anchor (shadow) | Free, 2,400 objects/month |
@@ -1366,7 +1378,7 @@ Line counts on 2026-09-15.
 | `src/main/strategies/sportsGameOdds.ts` | 494 | SportsGameOdds anchor (shadow) |
 | `src/main/strategies/hunch.ts` | 493 | LLM hunch and challenger |
 | `src/main/strategies/vetting.ts` | 242 | LLM vet gate (off) |
-| `src/main/strategies/weatherForecast.ts` | 225 | NWS fair value |
+| `src/main/strategies/weatherForecast.ts` | 282 | HRRR fair value, NWS fallback |
 | `src/main/strategies/weatherDay.ts` | 113 | station-local day binding |
 | `src/main/strategies/classify.ts` | 176 | categories, underlyings, weather seats |
 | `src/main/strategies/ledgerAudit.ts` | 176 | settlement invariants, stats bands |
