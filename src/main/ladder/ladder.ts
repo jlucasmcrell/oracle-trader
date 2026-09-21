@@ -227,6 +227,11 @@ export interface StageEvidence {
    * at $10, for about $3 more lost per cycle if the arm is bad. Every other arm keeps the default.
    */
   stopDollars?: number
+  /**
+   * Realized dollars for this arm across its WHOLE life, including every re-based or renamed cohort. Unlike
+   * `netDollars` this is not a delta against the stage baseline, so recapturing the baseline cannot reset it.
+   */
+  lifetimeDollars?: number
   /** Settled trades since the current stage began. */
   n: number
   netDollars: number
@@ -459,6 +464,23 @@ export function dayClusteredSe(groups: { n: number; sum: number }[], n: number, 
  * what bounds the cost of waiting for a fourth cluster.
  */
 export const MIN_STOP_CLUSTERS = 4
+/**
+ * How many times over an arm may lose its per-stage stop across its entire life before it is stopped regardless
+ * of what the current cohort says. The per-stage stop is measured since `s.baseline`, and the baseline is
+ * recaptured on every transition and every re-base (`captureBaseline`), so a stopped arm that is re-armed - by a
+ * cool-down expiring, by a manual flip, or by having its evidence renamed for an unrelated reason - begins again
+ * from zero and can lose the same stop indefinitely.
+ *
+ * Measured 2026-09-21: consensus stood at -$10.40 realized across `consensus` (-$3.00, 41 trades) and
+ * `consensus:pre-matcher-20260919` (-$7.40, 116) while its ladder row read "41 settled since stage start, net
+ * $-3.00" - and its own pre-registration carries a -$8 hard money stop "ungated by the cluster floor" that says
+ * in terms that it "still counts every dollar". sports-anchor stood at -$7.31 on 3 wins in 19 trades, having
+ * been stopped at -$5.14 on 09-11 and re-armed 52 minutes after the cool-down expired with no evidence read.
+ *
+ * Two, not one, on purpose: an arm whose first run was ruined by a defect that has since been fixed deserves a
+ * second run. It does not deserve a third.
+ */
+export const LIFETIME_STOP_MULTIPLE = 2
 /** When the v27 fee-model fix cleared every strategy's net-cents accumulator (main.log, 2026-09-18). */
 export const CALIB_CLEARED_AT = Date.parse('2026-09-18T13:34:23Z')
 
@@ -466,6 +488,13 @@ export function decideStage(ev: StageEvidence, notch: number, lastCheckpoint: nu
   // Hard stop: -$5 per size notch, or three per-trade stakes, whichever is larger.
   const stop = Math.max((ev.stopDollars ?? LIVE_STOP_DOLLARS) * Math.max(1, notch), 3 * (ev.stake ?? 0))
   if (ev.netDollars <= -stop) return { kind: 'stop', checkpoint: lastCheckpoint, reason: `net $${ev.netDollars.toFixed(2)} hit the -$${stop} stop at size x${notch}` }
+  // The lifetime floor. `netDollars` restarts at every re-base; this does not. Checked right after the per-stage
+  // stop and before every other rule, including the cluster floor - the cluster floor exists to stop a BAND from
+  // being read off one day, and this is not a band, it is money that has already left the account.
+  const lifeStop = stop * LIFETIME_STOP_MULTIPLE
+  if (ev.lifetimeDollars !== undefined && ev.lifetimeDollars <= -lifeStop) {
+    return { kind: 'stop', checkpoint: lastCheckpoint, reason: `lifetime net $${ev.lifetimeDollars.toFixed(2)} across every cohort is past the -$${lifeStop} lifetime floor (${LIFETIME_STOP_MULTIPLE}x the -$${stop} stage stop); the stage ledger reads $${ev.netDollars.toFixed(2)} because the baseline was recaptured` }
+  }
   // t on G-1 degrees of freedom when the SE is clustered; the normal quantile only when we do not know.
   const z = ev.clusters !== undefined && ev.clusters >= 2 ? clusterT(ev.clusters - 1) : CONFIDENCE_Z
   const lo = ev.mean - z * ev.se
@@ -1288,7 +1317,14 @@ export class Ladder {
     const adverse = mk
       ? { n: mk.n, mean: mk.mean, lo: mk.lo, hi: mk.hi, coverage: missing === undefined ? undefined : mk.n / (mk.n + missing) }
       : undefined
-    return { n, netDollars: (p?.realizedPnl ?? 0) - (b.realizedPnl ?? 0), mean, se, sd, clusters, adverse, unit: 'c/contract', stake }
+    // Sum every cohort this arm has ever traded under. Re-based evidence is renamed, never deleted, so the
+    // `<key>:<label>` rows are the arm's own history: `consensus` + `consensus:pre-matcher-20260919`,
+    // `sports-anchor` + `sports-anchor:pre-20260911-0105`. The stage ledger above is a delta and forgets them.
+    let lifetimeDollars = 0
+    for (const [k, v] of Object.entries(st.perfByStrategy ?? {})) {
+      if (k === key || k.startsWith(`${key}:`)) lifetimeDollars += v?.realizedPnl ?? 0
+    }
+    return { n, netDollars: (p?.realizedPnl ?? 0) - (b.realizedPnl ?? 0), lifetimeDollars, mean, se, sd, clusters, adverse, unit: 'c/contract', stake }
   }
 
   private microMakerEvidence(since: number): StageEvidence {

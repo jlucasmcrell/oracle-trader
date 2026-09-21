@@ -56,6 +56,24 @@ eq('stage: a conclusively-losing band stops between checkpoints', decideStage(xC
 eq('stage: an inconclusive band still waits for the checkpoint', decideStage(xC(S(34, -1, -1, 5)), 1, 1).kind, 'hold')
 eq('stage: a losing band on too few clusters still waits', decideStage(xC(S(34, -4.44, -3.43, 1), 2), 1, 1).kind, 'hold')
 eq('stage: a WINNING arm never scales up between checkpoints', decideStage(xC(S(34, 4, 5, 1)), 1, 1).kind, 'hold')
+// 2026-09-21: the per-stage stop is a delta against s.baseline, and the baseline is recaptured on every
+// transition and every re-base - so a stopped arm that is re-armed starts its stop counter again from zero.
+// consensus sat at -$10.40 lifetime across two cohorts while its stage ledger read -$3.00.
+eq('stage: the lifetime floor stops an arm whose cohort was re-based',
+  decideStage({ ...xC(S(41, -3.0, -1, 1)), lifetimeDollars: -10.4 }, 1, 0).kind, 'stop')
+eq('stage: the lifetime floor is not reached at one stop-width',
+  decideStage({ ...xC(S(41, -3.0, -1, 5)), lifetimeDollars: -7.31 }, 1, 0).kind, 'hold')
+eq('stage: no lifetime figure means no lifetime verdict',
+  decideStage(xC(S(41, -3.0, -1, 5)), 1, 0).kind, 'hold')
+// It outranks the cluster floor: the floor guards against reading a BAND off one day, and this is money already
+// gone, not a band.
+eq('stage: the lifetime floor ignores the cluster floor',
+  decideStage({ ...S(41, -3.0, -1, 1), clusters: 1, lifetimeDollars: -10.4 }, 1, 0).kind, 'stop')
+// And it scales with the notch, like the stage stop it is a multiple of.
+eq('stage: the lifetime floor scales with size',
+  decideStage({ ...xC(S(41, -3.0, -1, 5)), lifetimeDollars: -10.4 }, 2, 0).kind, 'hold')
+eq('stage: a profitable arm is never stopped by the lifetime floor',
+  decideStage({ ...xC(S(41, 4, 5, 1)), lifetimeDollars: 14.79 }, 1, 1).kind !== 'stop', true)
 // 2026-09-19 (§127): scaling up needs the same cluster floor as a stop and the 95% band, not the 80% one.
 eq('stage: checkpoint win on unverifiable clusters holds', decideStage(S(20, 1, 5, 2), 1, 0).kind, 'hold')
 eq('stage: checkpoint win scales up on enough clusters', decideStage(xC(S(20, 1, 5, 2)), 1, 0).kind, 'scale-up')

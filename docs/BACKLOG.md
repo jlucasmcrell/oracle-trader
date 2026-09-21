@@ -2380,3 +2380,35 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   the weighted view read +$0.69 where the arm was -$2.16. Either backfill the contract count on every grading
   path or refuse to report a weighted figure whose `wTrades` is under, say, 80% of `n`. Trigger: **2026-09-26**,
   with the contract-weighted baseline read (172).
+
+- **216. `leadLagProvenCoins` is absent and the fallback points size at the losing cohort (2026-09-21, section
+  152). OPERATOR - this is a size.** `leadLag.ts:170,173` gives full size only to coins in `leadLagProvenCoins`
+  and falls back to `['BTC','ETH']` when the key is missing, capping the other six at `leadLagNewCoinContracts`
+  = 2. On the post-round-115 fast path BTC/ETH is -$1.99 on 114 contracts while the six capped coins are +$8.53 on
+  374. So the arm is currently sized *into* its losing cohort. Raising the notch without fixing this first makes
+  it worse, not better. Trigger: **whenever the operator decides the lead-lag notch** - the two decisions are one
+  decision.
+- **217. Lead-lag size: notch 1 -> 4 (2026-09-21, section 152). OPERATOR.** The good era ran 4 contracts and
+  earned +19.15c/contract; within that era order size 1 / 2 / 3-4 earned +16.97 / +22.09 / +18.85c, i.e. size was
+  a flat multiplier. Era E (today, same fast path) is +1.34c/contract with an 80% band of [-2.84, +5.51] that
+  includes zero, so a 4x multiplies a loss just as readily. `ladder.ts:467` scales the arm stop with the notch, so
+  notch 4 means a $40 stop on a ~$91 account. The ladder's own next checkpoint is 9 trades away and scale-ups
+  double, so it reaches notch 2 by itself. Trigger: **2026-09-24**, or the next checkpoint, whichever is first.
+- **218. The nightly review cannot read its own history (2026-09-21, section 152).** It has auto-applied six
+  parameter changes lifetime, all restrictive, none ever reverted, and nothing in `src/main` reads a prior review
+  file back - so it cannot detect that one of its own changes made things worse. Give the packet the last N
+  applied changes with the P&L of the days either side, and add a revert proposal type. Until then
+  `reviewAutoApplyLive` is the only brake and it is on (backlog 185, operator, 2026-09-27). Trigger: **2026-09-27**,
+  with that decision.
+- **219. The dislocation threshold gates its own log (2026-09-21, section 152).** `leadLag.ts` records the
+  dislocation row inside the threshold branch, so the minimum recorded gap is exactly the configured floor: 4.0
+  every day through 09-18, 6.0 on 09-19 through 09-21. The setting destroys the data needed to judge the setting,
+  which is why no fine-grained value for it is supportable from fills. Log at a 2-3c observation threshold while
+  continuing to trade at the configured floor. Trigger: **2026-10-02**, with the floor's own forward test.
+- **220. A stopped arm is re-armed by a timer with the demotion cap discarded (2026-09-21, section 152).**
+  `tradeSmallEntry` (ladder.ts:619) re-promotes a disabled arm to real money on an expired cool-down alone,
+  reading only mode, stage, `operatorHold` and `cooldownUntil`; line 632 is `void maxDemotions`, discarding the
+  cap on how many times a stopped arm may be re-armed. sports-anchor was re-armed this way on 09-14 after a
+  -$5.14 stop and went on to 3 wins in 19 trades. The new lifetime floor (section 152) bounds the damage but does
+  not fix the re-arm. Honour `ladderMaxDemotionsBeforeGate`, and require evidence rather than a clock. Trigger:
+  **2026-09-24**.

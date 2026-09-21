@@ -5341,3 +5341,128 @@ So the accurate statement is narrower than the one above: the slot raise doubled
 whose edge has never been established, and it stayed doubled for three days after the number that justified it was
 withdrawn. That is a governance defect (backlog 214), not a proven cause of a specific $9.28.
 
+## §152 - 2026-09-21 11:14Z: the best day, reconstructed - and the stop counter that re-basing kept resetting
+
+The operator: "during the entire lifetime of the app [...] there were times when we were clearly doing something
+right, and times we were clearly doing something wrong - and attributing both of those situations to luck, rather
+than just say 'we were +$30 today, let's go back to exactly what we were doing that day' and seeing what happens
+when we do. 'We definitely don't want to go back to those settings because of all of these other reasons even
+though none of these other reasons seemed to hurt us that day'."
+
+He is right about the pattern, and the archaeology found something worse than a bias.
+
+### What the best day actually was
+
+`kalshi-auto.json.bak_round76_20260912-084224` was written at 12:42:24Z on 09-12, five seconds before round 76's
+own restart - so it is the terminal state of the winning era, not merely a snapshot from that morning. Against
+the live config: **136 keys then, 152 now, 124 byte-identical.** `amountPerTrade`, `maxOpenPositions`,
+`maxDailyLossPct`, `maxBalancePct`, `stopEntry`, `dryRun` are all unchanged. There is no hidden money change.
+
+The good stretch was one arm on two coins. 09-09 -> 09-12 netted +$50.64; the 15-minute crypto markets, which are
+lead-lag and nothing else (all 1,671 leadlag-tagged fills sit on `KX*15M`, and no other strategy has a single 15M
+fill), netted **+$57.58 on 95 markets**. Everything else in the book over those four days was **-$6.94**. On 09-12
+itself: +$33.39 account, +$36.21 from 15M, -$2.82 from everything else.
+
+Lead-lag realized P&L by configuration era, each settlement assigned to the era of its first fill:
+
+| era | boundary | net | contracts | c/contract |
+|---|---|---|---|---|
+| A good era | -> 09-12 12:42:29Z | **+$65.50** | 342 | **+19.15** |
+| B1 round 76 slow reads, still 4 contracts | -> 09-12 14:12:48Z | -$6.91 | 128 | -5.40 |
+| B2 round 85, 8 contracts | -> 09-13 10:05:43Z | +$8.27 | 443 | +1.87 |
+| C round 91, 7 coins / 10s poll / 14s latency | -> 09-16 07:33:46Z | **-$66.48** | 2,382 | -2.79 |
+| D round 99 restore | -> 09-17 08:07:05Z | +$6.02 | 16 | +37.60 |
+| E round 115 fast path (today) | -> dump | +$6.53 | 488 | +1.34 |
+
+Lead-lag lifetime is **+$12.92 on 899 settled markets** against an account at -$59.11. The only clearly profitable
+thing in the book is the arm every throttle since has been aimed at.
+
+### The structural finding: a blown stop can be laundered by a re-base
+
+The ladder's hard money stop is `ev.netDollars <= -stop`, and `netDollars` is a delta against `s.baseline`.
+`captureBaseline` runs on every stage transition and every evidence re-base (ladder.ts:808, 1009, 1049). So an arm
+that loses its stop and is later re-armed - by a cool-down expiring, by a manual flip, or by having its cohort
+renamed for an unrelated reason - **starts its stop counter again from zero, and can lose the same stop
+indefinitely.** Two live arms were alive today for exactly that reason:
+
+- **consensus: -$10.40 realized** across `consensus` (-$3.00, 41 trades) and `consensus:pre-matcher-20260919`
+  (-$7.40, 116 trades), while its ladder row read "41 settled since stage start, net $-3.00". Its own
+  pre-registration (`docs/PREREGISTERED-polymarket-consensus.md`, lines 75-76) carries a **-$8 realized hard money
+  stop "ungated by the cluster floor [...] regardless of sample size"**, and line 127 says in terms that it "still
+  counts every dollar". The §129 re-basing split the cohort in two and neither half reached -$8 alone.
+- **sports-anchor: -$7.31 on 19 trades, 3 wins and 16 losses.** It was stopped at -$5.14 on 09-11 and re-armed 52
+  minutes after the cool-down expired (`ladder.json`, 09-14T01:57:54Z) with the whole justification being
+  "trade-small mode: real-money micro test 2 (stop -$5)". `tradeSmallEntry` (ladder.ts:619) reads only mode,
+  stage, `operatorHold` and `cooldownUntil`; line 632 is literally `void maxDemotions`. No evidence was consulted.
+
+### Changed
+
+- **`ladder.ts`: a lifetime floor that no re-base can reset.** `StageEvidence.lifetimeDollars` sums
+  `perfByStrategy` across an arm's key and every `<key>:<label>` cohort it has ever traded under;
+  `LIFETIME_STOP_MULTIPLE = 2` stops the arm when that crosses twice the per-stage stop, checked immediately after
+  the hard stop and ahead of the cluster floor - the cluster floor guards against reading a *band* off one day,
+  and this is not a band, it is money that has already left the account. Two, not one, on purpose: an arm whose
+  first run was ruined by a defect since fixed deserves a second run, not a third. Six tests.
+- **`consensusEnabled` -> false.** This executes the arm's own pre-registration rather than overriding it.
+  Two open positions hold to settlement; nothing is liquidated.
+- **`sportsAnchorLiveEnabled` -> false**, restoring the good-day value. Zero open positions.
+- **`fadeMinEdgeCents` 3 -> 1.5.** Two unattended writes (`reviews/2026-09-20.json` 06:08:39Z 1.5->2;
+  `reviews/2026-09-21.json` 06:46:50Z 2->3) on fade calibration at -5.21c/contract - a statistic §140 established
+  the same day was four losses inside one 09-18 17:00Z settlement window out of 36 graded events, 32 of them
+  positive, and declined to act on. The loop had already acted, and tightened again the next night.
+- **`convergenceMaxDailyTrades` 4 -> 6.** `ladder.ts:877` computes this as `6 x notch` and convergence is at notch
+  1, so 6 is the owning component's own value and **4 is a number the ladder can never produce**.
+- **`maxLlmPerScan` 3 -> 4** (the code default; immaterial, `vetMode` is `rules` so no LLM gates a trade).
+- **`maxPerUnderlying` 8 -> 4.** Changed by nobody: no entry in the 5,343-line change log, none in BACKLOG, none
+  in MAINTENANCE-LOG, none in any nightly review, no migration. Bounded by snapshots only to 09-12 12:42Z ->
+  09-17 08:16Z, i.e. inside the declared degraded window. Not free - the cap does bind (`gas:AAA` sat at 8/8 on
+  09-18 and 09-19) - so it is taken on risk grounds, not as a free win.
+
+### Deliberately NOT reverted, including three corrections to what was reported earlier today
+
+- **`leadLagCoins`.** This looks like a throttle and is the opposite: the good day ran BTC/ETH only and the list is
+  now *wider*. On the fixed fast path **BTC/ETH is -$1.99 on 114 contracts and the six added coins are +$8.53 on
+  374**. Narrowing it would delete the cohort that is earning. The lifetime per-coin table says the reverse
+  (DOGE -18.55, XRP -12.08, HYPE -9.49) purely because round 91 added those coins straight into era C.
+- **`leadLagMinDislocationCents` 6.** Corrects an earlier claim: the good day did **not** run "no floor", it ran a
+  hardcoded **4.0c**, and there is not one recorded gap below 4.0c in the arm's entire life (43,531 rows). Cutting
+  realized fills by gap size gives `<6c` = -0.80c/ct [-2.85, +1.24] and `>=6c` = +2.12c/ct [-2.37, +6.61]; the
+  sub-bucket ordering flips sign between eras, so no fine-grained value is supportable from fills.
+- **The "99% signal collapse" was mostly a defect fix**, not the throttles - a third correction. Round 116 fixed
+  quotes that were stale by 20-40s; dislocations per live Polymarket book ran 0.41-0.48 through 09-16 and
+  0.11-0.19 after, so roughly three quarters of every dislocation the app ever logged was an artifact.
+- **`leadLagPollIntervalMs`** is already at the good-day cadence (60s measured in main.log through 09-12 and from
+  09-17 on; 10s only during 09-13..09-16).
+- **Engine `riskLimits.maxOpenPositions` 80 -> 0.** The harm was never the cap, it was the two authenticated GETs
+  round 76 put in front of every order. Round 115 removed them and the dislocation-to-sweep interval today is
+  0.06s median / 0.12s p90, identical to the good period. Reverting would delete the only engine-level bound on
+  concurrent exposure for nothing.
+- **`leadLagMaxContractsPerOrder` 1 -> 4 is the single largest lever and it is the operator's**, being a position
+  size. Two traps recorded for when he decides: `ladder.ts:883` recomputes the key as `notch x contractsPerNotch`,
+  so a hand-edited config value is silently overwritten - the **notch** is the thing to change; and `leadLag.ts:173`
+  gives full size only to `leadLagProvenCoins`, which is absent from the live config and falls back to
+  `['BTC','ETH']` (leadLag.ts:170), capping every other coin at `leadLagNewCoinContracts` = 2. As configured,
+  notch 4 would quadruple the losing cohort and only double the winning one (backlog 216).
+- **The four load-bearing code fixes stay**: the canonical fee model (six of seven implementations disagreed with
+  the venue; `netCentsOf` divided a per-contract fee by the contract count again, and that is the metric the
+  ladder ranks on), the fill-direction mapping (B-23), round 115's order fast path, and round 116's orderbook
+  quotes.
+
+### The ratchet, counted
+
+77 change events in 15 days against **6 reverts**. Two of the six were rollbacks inside an hour, two were ordered
+by the operator (one of them today), leaving **two the project reached on its own** after living with a change.
+**Exactly two of 77 changes were triggered by something going right**, and one of those two removed size from the
+winning arm. The nightly loop has auto-applied six parameter changes lifetime, **all restrictive, zero reverts** -
+and it structurally cannot do better: it writes `applied` with `from`/`to`, and nothing in `src/main` ever reads a
+prior review back (`grep` finds the reviews directory at exactly one line, `nightlyReview.ts:258`, the path
+helper). It cannot notice that a change made things worse because it is never told it made one.
+
+The attribution asymmetry is real but subtler than "we called it luck": the word appears three times in 5,343
+lines and never to dismiss one of our own wins. The wins get dismantled statistically instead - §57 "twenty
+straight wins is unremarkable at zero edge", §127 retiring the winning period's own +8.94c/contract as "a regime".
+That rigour is correct in isolation. The asymmetry is that it is applied almost exclusively to whether a win
+counts, and almost never to whether a change is warranted.
+
+Tests 20/20, `tsc --noEmit` clean, restart verified (build 11:13:38Z, electron start 11:13:53Z), config snapshot
+saved as `kalshi-auto.json.bak_bestday_20260921-100500` before the edit.
