@@ -18,7 +18,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { VenueAdapter } from '../../shared/venue'
-import type { OrderResult } from '../../shared/types'
+import type { OrderBook, OrderResult } from '../../shared/types'
 import { HttpError } from '../util/http'
 import { PreSubmitRefusal } from '../engine/engine'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
@@ -150,6 +150,83 @@ interface PolyQuote {
   bid?: number
   ask?: number
   marketId: string
+  /** The Polymarket Up token this quote is for (the event-speed shadow reads its pushed top by it). */
+  upToken: string
+}
+
+/** What the event-speed shadow needs from a pushed Kalshi book (KalshiWsClient satisfies it). */
+export interface FastBookSource {
+  getBook(ticker: string): OrderBook | null
+  start(tickers: string[]): void
+  stop(): void
+  compare(ticker: string, rest: OrderBook): void
+}
+export interface FastPair { ticker: string; upToken: string; end: number }
+export interface FastOpen { at: number; net: number; peak: number }
+
+/**
+ * Event-speed lead-lag shadow (section 159). Both books are held in memory - Polymarket's pushed top and Kalshi's
+ * pushed book - so a gap is seen within 250 ms of either venue moving, where the live arm looks once a minute.
+ * Returns the rows to record: 'open' when a side's gap first clears `minNetCents` after Kalshi's one-contract taker
+ * fee, 'close' with its duration and peak when it falls back or the window leaves the map. Mutates `open`. Pure
+ * otherwise; the engine runs it on a timer and never trades on it.
+ *
+ * Refuses (never opens, and closes any open gap on): the last minute of a window (the settlement average, not a
+ * lag), a Polymarket top older than 5 s, a Polymarket spread over 5c, a price outside 5-95c, a missing Kalshi side.
+ */
+export function fastGaps(
+  pairs: ReadonlyMap<string, FastPair>,
+  topOf: (token: string) => { bid: number; ask: number; at: number } | undefined,
+  bookOf: (ticker: string) => OrderBook | null,
+  open: Map<string, FastOpen>,
+  now: number,
+  minNetCents: number
+): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  const iso = new Date(now).toISOString()
+  const live = new Set<string>()
+  for (const [coin, p] of pairs) {
+    const pt = topOf(p.upToken)
+    const kb = bookOf(p.ticker)
+    const pm = pt ? (pt.bid + pt.ask) / 2 : 0
+    const usable = p.end - now >= 60_000 && pt !== undefined && kb !== null && kb.bids.length > 0 && kb.asks.length > 0 &&
+      now - pt.at <= 5_000 && pt.ask > pt.bid && pt.ask - pt.bid <= 0.05 + 1e-9 && pm > 0.05 && pm < 0.95
+    for (const side of ['YES', 'NO'] as const) {
+      const key = `${p.ticker}|${side}`
+      live.add(key)
+      const was = open.get(key)
+      let net = -Infinity
+      let px = 0
+      if (usable) {
+        const kBid = kb!.bids[0].price
+        const kAsk = kb!.asks[0].price
+        px = side === 'YES' ? kAsk : 1 - kBid
+        net = 100 * (side === 'YES' ? pm - kAsk : kBid - pm) - kalshiTakerFeeCentsFor(px, 1)
+      }
+      if (net >= minNetCents) {
+        if (!was) {
+          open.set(key, { at: now, net, peak: net })
+          rows.push({
+            ts: iso, ev: 'open', c: coin, t: p.ticker, side, pm: +pm.toFixed(4), pb: pt!.bid, pa: pt!.ask, pAgeMs: now - pt!.at,
+            kb: kb!.bids[0].price, ka: kb!.asks[0].price, kbSz: kb!.bids[0].size, kaSz: kb!.asks[0].size,
+            px: +px.toFixed(4), net: +net.toFixed(2), endMs: p.end
+          })
+        } else if (net > was.peak) {
+          was.peak = net
+        }
+      } else if (was) {
+        open.delete(key)
+        rows.push({ ts: iso, ev: 'close', c: coin, t: p.ticker, side, durMs: now - was.at, peak: +was.peak.toFixed(2), why: usable ? 'gap closed' : 'book unusable' })
+      }
+    }
+  }
+  for (const [key, was] of open) {
+    if (live.has(key)) continue
+    open.delete(key)
+    const [t, side] = key.split('|')
+    rows.push({ ts: iso, ev: 'close', t, side, durMs: now - was.at, peak: +was.peak.toFixed(2), why: 'window gone' })
+  }
+  return rows
 }
 
 /**
@@ -505,6 +582,37 @@ export class LeadLagEngine {
    */
   private readonly polyWs: PolyClobWs | null
 
+  /** Event-speed shadow: each coin's current window, the second Kalshi book client, and the gaps now open (section 159). */
+  private fastPairs = new Map<string, FastPair>()
+  private fast: { books: FastBookSource; timer: ReturnType<typeof setInterval>; open: Map<string, FastOpen>; minNet: number } | null = null
+
+  /**
+   * Start the event-speed shadow. Needs the Polymarket socket (this engine's own) and a pushed Kalshi book client.
+   * Records to `<state>-fast-shadow.jsonl`; never trades. `minNetCents` is deliberately below the live 6c floor so the
+   * read can choose a threshold from the data.
+   */
+  attachFastShadow(books: FastBookSource, minNetCents = 2): void {
+    if (this.fast || !this.polyWs) return
+    const open = new Map<string, FastOpen>()
+    const timer = setInterval(() => {
+      const f = this.fast
+      if (!f || !this.polyWs) return
+      const rows = fastGaps(this.fastPairs, (tk) => this.polyWs?.top(tk), (t) => f.books.getBook(t), f.open, Date.now(), f.minNet)
+      for (const r of rows) this.appendFastRow(r)
+    }, 250)
+    timer.unref?.()
+    this.fast = { books, timer, open, minNet: minNetCents }
+    this.log(`[leadlag] event-speed shadow on: both books in memory, checked every 250 ms, gaps from ${minNetCents}c net`)
+  }
+
+  private appendFastRow(row: Record<string, unknown>): void {
+    try {
+      appendFileSync(this.path.replace(/\.json$/, '') + '-fast-shadow.jsonl', JSON.stringify(row) + '\n')
+    } catch (e) {
+      this.log('[leadlag] fast shadow log failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   private wsTop(upToken: string): PolyQuote['ws'] {
     const t = this.polyWs?.top(upToken)
     return t ? { bid: t.bid, ask: t.ask, ageMs: Math.max(0, Date.now() - t.at), changes: t.changes } : undefined
@@ -530,7 +638,7 @@ export class LeadLagEngine {
         if (bids.length && asks.length) {
           const bid = Math.max(...bids)
           const ask = Math.min(...asks)
-          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId, ws, at }
+          if (ask > bid) return { source: 'clob-book', mid: (bid + ask) / 2, bid, ask, marketId, upToken, ws, at }
         }
       }
     } catch {
@@ -543,7 +651,7 @@ export class LeadLagEngine {
       if (!midRes.ok) return null
       const mid = num(((await midRes.json()) as { mid?: string }).mid)
       if (mid === null) return null
-      return { source: 'clob-mid', mid, marketId, ws, at }
+      return { source: 'clob-mid', mid, marketId, upToken, ws, at }
     } catch {
       return null
     }
@@ -689,6 +797,10 @@ export class LeadLagEngine {
         const kYesBid = top.bid
         const kYesAsk = top.ask
         pairsObserved++
+        // Event-speed shadow: remember this coin's window, and let the second book client check itself against the
+        // REST top it would otherwise never see (it cannot read its books until the price convention is settled).
+        this.fastPairs.set(pair.coin, { ticker, upToken: poly.upToken, end: windowEndMs })
+        this.fast?.books.compare(ticker, { venue: 'kalshi', marketId: ticker, bids: [{ price: kYesBid, size: 0 }], asks: [{ price: kYesAsk, size: 0 }] })
 
         // Lead/lag evidence: which venue moved since the previous look at this window.
         const kMid = (kYesBid + kYesAsk) / 2
@@ -793,6 +905,12 @@ export class LeadLagEngine {
       if (kalshiFail > 0 && now - this.lastKalshiFailLogAt > 60_000) {
         this.lastKalshiFailLogAt = now
         this.log(`[leadlag] Kalshi leg failed for ${kalshiFail} of ${pairs.length} pairs this cycle`)
+      }
+      // Event-speed shadow: drop past windows and point the second Kalshi book client at this window's tickers.
+      for (const [c, p] of this.fastPairs) if (p.end <= now) this.fastPairs.delete(c)
+      if (this.fast) {
+        const tickers = [...this.fastPairs.values()].map((p) => p.ticker)
+        if (tickers.length) this.fast.books.start(tickers)
       }
       this.foundLast = foundDislocations
       // Every pair lands in exactly one bucket, so this adds up to the pair count.

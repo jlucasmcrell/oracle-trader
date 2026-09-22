@@ -268,6 +268,8 @@ export interface AutoTraderConfig {
   fadeMinHorizonMinutes: number
   /** fade v3: at most this many fade positions on crypto underlyings closing in the same clock hour (0 = no cap). */
   fadeMaxCryptoPerCloseHour?: number
+  /** Event-speed lead-lag shadow (section 159): records gaps from pushed books every 250 ms. Never trades. Default on. */
+  leadLagFastShadow?: boolean
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
   /** Allow settlement-convergence to execute with REAL money (it is a paper experiment until proven). */

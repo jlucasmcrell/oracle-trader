@@ -6078,3 +6078,43 @@ operator's to open.
   on the verified fee. The spot-first gate's own whole-cent fee is its registered rule and is left as registered.
 - **The cross-venue researcher's "median 6c" edge** was not reproduced: first sight of each episode has a median of
   1.0c after both fees. Its verdict (not worth building) stands.
+
+## §159 - 2026-09-22 21:48Z: why we do not trade in milliseconds - we do; we look once a minute. The event-speed shadow is on
+
+The operator: "I still don't understand why we can't order in milliseconds. Do I need to co-locate somewhere?"
+
+**Measured, not assumed.** Network from this machine (5 samples each, fresh TLS every time):
+
+| venue | TCP connect | full request |
+|---|---|---|
+| Kalshi (behind CloudFront; the edge is near us, the origin in AWS) | 13-29 ms | 54-72 ms |
+| Polymarket US | 10-31 ms | 39-83 ms |
+| Polymarket CLOB | 9-36 ms | 128-308 ms |
+
+The order path since the round-115 fast path (order journal, 1,104 Kalshi orders since 09-17; the gap log's own
+timings, 565 lead-lag sweeps): inside the app, request to send median **1 ms** (p90 57); Kalshi's answer median
+**45 ms** (p90 95); gap seen to filled or cancelled median **60 ms** (p90 107); the Polymarket price acted on was
+median **68 ms** old. **We already trade in milliseconds.** What is slow is how often we LOOK: lead-lag polls once
+every 60 seconds. The good era's edge was catching Kalshi orders not yet updated after a move, and the spot-first
+shadow found its model's gaps lasting a median 2 s; a once-a-minute look sees a two-second gap by luck.
+
+**Co-location** would take the 13-29 ms connect to ~1-2 ms. That matters only once the look is event-driven; it
+means running the app, and its keys, on a cloud machine in AWS us-east - the operator's decision, and it is
+second-order until the shadow below says gaps last under ~100 ms.
+
+**The pieces were already built and never used for trading.** A Kalshi WebSocket book client (`kalshiWs.ts`,
+shadow, 1.17M updates, 0 sequence gaps, 99.8% agreement with REST today: 49,474 of 49,580), a Polymarket CLOB socket
+(`polyClobWs.ts`, shadow), and a Coinbase/Kraken spot socket (`liveSpot.ts`).
+
+**Built: the event-speed lead-lag shadow** (`docs/PREREGISTERED-leadlag-fast-shadow.md`). `fastGaps`
+(`leadLag.ts`) runs on a 250 ms timer over both books in memory - no network call - and records every gap that
+clears Kalshi's one-contract fee by 2c or more ('open', with both books and sizes) and its duration ('close'). A
+second Kalshi book client serves the 15-minute windows, because the shared one resubscribes only on a 30% drift and
+the windows roll every 15 minutes; it settles its own price convention from the REST tops the scan already fetches
+(`KalshiWsClient.compare`) and cannot return a book until it has. Records only; it has no order path. Nine
+review-fixes assertions (562/0): open once, not twice, close with duration, stale Polymarket top, wide Polymarket
+spread, the last minute, a window leaving, the NO side reading the Kalshi bid. Grader
+`scripts/backtests/leadlag_fast_shadow.py`, checked on hand-built rows. Deployed 21:46:44Z; the convention settled
+at 21:48:45Z (yes-leg, 0/10 flip votes, the same as the shared client) and the first gap was recorded at 21:48:47Z
+(HYPE YES: Polymarket 0.92/0.96 on a 6 ms-old top against a Kalshi ask of 0.913 for 2 contracts, 2.14c net).
+Read on or after 2026-09-26: gaps per hour, how long they last, and whether buying them pays.

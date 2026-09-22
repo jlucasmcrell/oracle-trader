@@ -6,7 +6,7 @@ import { bracketState, inBlackout, inBlackoutLocal, printFills, stationLocalHour
 import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, parseOpenMeteoHourly, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
-import { kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
+import { fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
@@ -543,6 +543,30 @@ eq('brake: trips past the limit', dailyBrakeBlock(10, { date: DAY, realized: -12
 eq('brake: yesterday does not bind today', dailyBrakeBlock(10, { date: '2026-09-08', realized: -40, tripped: true }, DAY), null)
 eq('brake: no ledger yet', dailyBrakeBlock(10, undefined, DAY), null)
 eq('brake: a NaN ledger never halts', dailyBrakeBlock(10, { date: DAY, realized: NaN, tripped: false }, DAY), null)
+
+// ---- event-speed lead-lag shadow (section 159): gaps from two pushed books, opened and closed with a duration ----
+{
+  const now = 1_790_000_000_000
+  const pairs = new Map([['BTC', { ticker: 'T1', upToken: 'U1', end: now + 600_000 }]])
+  const book = (bid: number, ask: number) => ({ venue: 'kalshi' as const, marketId: 'T1', bids: [{ price: bid, size: 10 }], asks: [{ price: ask, size: 20 }] })
+  const top = (bid: number, ask: number, ageMs = 100) => ({ bid, ask, at: now - ageMs })
+  const open = new Map()
+  // Polymarket 0.54/0.56 (mid 0.55) against a Kalshi ask of 0.46: 9c before the fee, so the YES side opens.
+  const r1 = fastGaps(pairs, () => top(0.54, 0.56), () => book(0.45, 0.46), open, now, 2)
+  eq('fast: a gap that clears the fee opens once, on the right side', r1.map((r) => [r.ev, r.side, r.px, r.kaSz]), [['open', 'YES', 0.46, 20]])
+  eq('fast: its net is the gap minus the one-contract fee', Math.abs((r1[0].net as number) - (9 - kalshiTakerFeeCents(0.46))) < 0.011, true)
+  eq('fast: an open gap is not logged again', fastGaps(pairs, () => top(0.54, 0.56), () => book(0.45, 0.46), open, now + 250, 2), [])
+  const r3 = fastGaps(pairs, () => top(0.54, 0.56), () => book(0.53, 0.54), open, now + 1_250, 2)
+  eq('fast: when Kalshi catches up the gap closes with its duration', r3.map((r) => [r.ev, r.side, r.durMs, r.why]), [['close', 'YES', 1_250, 'gap closed']])
+  eq('fast: a Polymarket top older than 5 s is not a lead', fastGaps(pairs, () => top(0.54, 0.56, 6_000), () => book(0.45, 0.46), new Map(), now, 2), [])
+  eq('fast: a Polymarket spread over 5c is not a price', fastGaps(pairs, () => top(0.50, 0.57), () => book(0.40, 0.41), new Map(), now, 2), [])
+  const late = new Map([['BTC', { ticker: 'T1', upToken: 'U1', end: now + 30_000 }]])
+  eq('fast: nothing opens in a window\'s last minute (the settlement average, not a lag)', fastGaps(late, () => top(0.54, 0.56), () => book(0.45, 0.46), new Map(), now, 2), [])
+  const o2 = new Map()
+  fastGaps(pairs, () => top(0.54, 0.56), () => book(0.45, 0.46), o2, now, 2)
+  eq('fast: a window that leaves the map closes its open gaps', fastGaps(new Map(), () => undefined, () => null, o2, now + 5_000, 2).map((r) => [r.ev, r.t, r.why]), [['close', 'T1', 'window gone']])
+  eq('fast: the NO side reads the Kalshi bid', fastGaps(pairs, () => top(0.34, 0.36), () => book(0.45, 0.46), new Map(), now, 2).map((r) => [r.ev, r.side, r.px]), [['open', 'NO', 0.55]])
+}
 
 // ---- weather category block covers precipitation (2026-09-09: fade opened KXRAIN 8h before close) ----
 eq('weather series: rain', isWeatherSeries({ id: 'KXRAIN-26SEP08-AUS' }), true)

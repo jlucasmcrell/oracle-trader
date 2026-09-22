@@ -2667,3 +2667,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   re-login weekly whatever the auto-restart setting says. The sentinel now pages within 30 minutes of it going down.
   IBC (the open-source IB Controller) automates the login and the weekly restart but needs the IBKR username and
   password in its config file - the operator's to set up, never this app's. Trigger: **the next time the page fires**.
+
+- **233. Lead-lag at event speed: read the shadow (2026-09-22, section 159).** `python scripts/backtests/leadlag_fast_shadow.py
+  --since 2026-09-22T21:48Z` on or after **2026-09-26** with 3+ UTC days of rows; rule in
+  `docs/PREREGISTERED-leadlag-fast-shadow.md`. The durations it reports settle the co-location question: under ~100 ms
+  and this machine is too slow whatever the code; seconds and it is not.

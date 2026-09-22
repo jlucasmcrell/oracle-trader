@@ -730,6 +730,7 @@ export class AutoTrader {
   private auxStatus: (() => Pick<AutoStatus, 'ladder' | 'lastReview'>) | undefined
   /** Live WS book cache — shadow-graded against REST before it may be trusted. */
   private ws?: KalshiWsClient
+  private leadLagFastAttached = false
   private sportsAnchor = new SportsAnchor()
   private sportsGameOddsAnchor = new SportsGameOddsAnchor()
   /** Latest sharp-anchor observation per Kalshi market (from the shadow polls). */
@@ -4463,6 +4464,16 @@ export class AutoTrader {
     const paused = await this.exchangePausedNow(base)
     // Refresh the position-cap count now, while the poll fetches quotes, so a sweep never waits on account reads.
     this.engine.warmOpenPositionCount(VENUE)
+    // Event-speed lead-lag shadow (section 159): a second pushed Kalshi book for the 15-minute windows, which roll too
+    // often for the shared client's drift guard. Records only; it cannot trade.
+    if (!this.leadLagFastAttached && this.config.wsEnabled && this.config.leadLagFastShadow !== false) {
+      const kAdapter = this.engine.getAdapter(VENUE)
+      if (kAdapter instanceof KalshiAdapter) {
+        const url = kAdapter.wsUrl()
+        this.leadLagEngine.attachFastShadow(new KalshiWsClient(url, () => kAdapter.wsHeaders(url), (t, m) => console.warn(`[leadlag-fast] ${t}: ${m}`)))
+        this.leadLagFastAttached = true
+      }
+    }
     await this.leadLagEngine.scanAndSweep(
       this.engine.routedAdapter(VENUE, 'leadlag'),
       this.leadLagCfg(),
