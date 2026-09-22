@@ -2622,3 +2622,20 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   note, or give it the distinct hypothesis its name implies (a favorite filter, e.g. only the side above 0.5).
   Not done today: it changes what an arm trades and the lab has one open position in each, so it belongs with the
   225 design. Trigger: **with 225**, or the first time either arm's ledger is read for a verdict.
+
+- **227. Lead-lag: does the good era's mechanism still find anything? (2026-09-22, section 156).** Run
+  `python scripts/backtests/leadlag_list_mechanism.py --since 2026-09-22T18:02Z` on **2026-09-25** (about 30,000 shadow
+  rows by then). If OLD fills are frequent and their result is positive with a band clear of zero, the stale Kalshi
+  orders still exist: put the list-price condition on the live path (trade only when the live book still offers the
+  list price) and take the size question (backlog 217) to the operator with that evidence. If OLD fills are rare or
+  unprofitable, the race is over at our speed: say so, keep lead-lag at one contract as a probe, and stop spending
+  analysis on it.
+- **228. fade's correlation is invisible to `maxPerUnderlying` (2026-09-22, section 156).** Four crypto dailies on
+  four coins closing at the same hour are one bet on crypto direction, and `crypto:BTC`, `crypto:ETH`, ... count
+  separately. The 09-21 cluster and 09-18 together are the entire negative sample that stopped fade. Before fade is ever re-armed, cap concurrent fade
+  exposure per asset class and close hour. Trigger: **any proposal to re-arm fade**, and no later than **2026-10-03**
+  (the stop/take-profit re-read, backlog 177).
+- **229. news is off pending a direction fix (2026-09-22, section 156).** `newsSignals` maps headline polarity straight
+  to YES/NO. Re-enable only with the market's framing applied (`strikeOf` for scalar markets; skip event markets whose
+  framing cannot be parsed) and a test on an "above" and a "below" market. Trigger: **2026-10-09**, or whenever the
+  strategy space is reviewed, whichever first.

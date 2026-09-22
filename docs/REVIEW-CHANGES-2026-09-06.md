@@ -5877,3 +5877,108 @@ refusal while the app runs, refusal on a wrong sha; nothing was written by any o
 
 **Not done here.** IB Gateway has not been logged in since the reboot, so the IBKR paper lab is dark; logging in
 is the operator's. Backlog 224's remaining two items are app-side and need a restart of their own.
+
+## §156 - 2026-09-22 18:02Z: why lead-lag won, measured on public data; the re-arm floor; a shadow that tests the old mechanism; news off
+
+The operator: "Let's go through your code again, re-check all the strategies, make sure we are still in the best
+position possible [...] let's see if you can figure out why we were winning before and what truly happened."
+
+Every number below is from a script in the session scratchpad, run against the venue settlement dump, the app's own
+logs, and **Kalshi's and Coinbase's public, unauthenticated data** - so the market-side findings do not depend on
+anything this app records or on which quote source it used. Coinbase candles were used only as a price series.
+
+### Where the money came from
+
+The best stretch, 09-09 to 09-12, netted +$50.64. Bitcoin and Ether 15-minute markets made **+$58.28**; everything
+else lost $6.34. Lead-lag is the only clearly profitable thing the app has ever had. And it was concentrated: in the
+good era **five 15-minute windows produced $50.66 of its $65.50** (96 windows, 61% positive).
+
+### What it was NOT
+
+- **Not a volatile market.** In the good era 86% of lead-lag's contracts were bought in windows where the coin moved
+  less than 0.1%, and those earned +23.5c/contract. The peak day, 09-12, was the quietest day in the period.
+- **Not a broadly mispriced Kalshi market.** Every Bitcoin and Ether 15-minute market since 09-04 (1,782 and ~1,200,
+  public minute candles): the spread at minute 7 was 1.0c in every period; buying the cheap side at the ask never made
+  money in any period (-6.5c, -4.1c, -3.4c, +1.0c, -0.0c for BTC); fading or following a 12c move never made money.
+  Bitcoin's volume per market grew about a third over the month (Ether's about a sixth). Kalshi reacted to a 1-minute coin move within the same minute
+  (+16 to +18c) with no catch-up over the next three minutes, in the good era and now alike.
+- **Not the 6c gap floor.** Before 09-17, gaps of 6c or more were the MORE profitable ones in every era.
+- **Not an inverted Polymarket token.** The "Up token by name" fix (f0cc162) was precautionary; Gamma listed
+  ["Up","Down"] throughout.
+- **Not holding both sides of a window.** On the paired contracts the two legs cost less than $1 combined:
+  +$24.28 before fees, from the price whipsawing and the arm buying each side cheap.
+
+### What it WAS: speed, not signal
+
+Every gap the arm logged, re-priced against **Kalshi's own public minute prices** instead of our quote (BTC/ETH,
+thinned to one per ticker, side and minute):
+
+| era | rows | real gap | Kalshi moved toward Polymarket in 5 min | result at the real ask |
+|---|---|---|---|---|
+| good (to 09-12 12:42Z) | 10,074 | +11.0c | **+3.4 +/- 0.5c** | **+2.2 +/- 0.9c** |
+| round 76/85 | 729 | +11.9c | +6.5 +/- 2.0c | +7.5 +/- 3.3c |
+| round 91 (the -$66 stretch) | 4,808 | +6.9c | **+7.0 +/- 0.8c** | **+5.1 +/- 1.3c** |
+| restore | 863 | +9.6c | +11.5 +/- 1.9c | +10.5 +/- 2.9c |
+| since 09-17 09:40Z | 237 | +14.0c | **-0.4 +/- 3.8c** | **-4.0 +/- 5.9c** |
+
+Two conclusions follow.
+
+1. **The good era's signal, bought at the going price, was worth about +2c/contract. Our fills made +19c.** The other
+   ~17c came from being filled BELOW the going price: buying Kalshi orders that had not been updated after a Bitcoin
+   move, before their owners could cancel. That is a speed edge. The cleanest evidence in the whole record agrees:
+   round 76 (09-12 12:46Z) put ~0.4 s of account reads in front of every order and changed nothing else, and the arm
+   went from +19.15c to -5.40c per contract within 90 minutes (128 contracts).
+2. **The 09-13..09-16 losses were our execution, not the signal.** The same gaps at Kalshi's real prices made
+   +5.1c/contract in the round-91 era while our fills lost 2.8c: the 14 s order path.
+
+Since 09-17 the gaps the arm sees do not close and lose at the real ask. Splitting all 821 since then (all eight
+coins, at the logged executable price) by who moved in the prior minute: Polymarket-moved-first -2.3 +/- 7.2c (141),
+Kalshi-moved-away +1.0 +/- 4.7c (311), neither +2.0 +/- 4.3c (369), all +0.9 +/- 2.9c. There is no profitable slice
+for a filter to rescue.
+
+**What remains unknown, stated plainly.** 09-17 changed two things at once: round 115 made the order path fast again,
+and round 116 replaced the stale list quote with the live book. Whether the stale Kalshi orders the good era caught
+still exist cannot be settled from public data: they live for seconds, minute candles cannot see them, and the public
+trade tape is too noisy (the 5c-jump taker markout, clustered by market, overlaps zero in every period: before 09-17
++3.93 [-3.31, +1.16], from 09-17 -0.31 [-3.13, +1.36]). An earlier reading of that tape as a clean break was withdrawn
+for that reason. The 09-17 09:16-09:40Z window, which ran the list quotes, is not a clean replay either: 36 of 36 IOCs
+missed, but those orders also waited 0.9-1.9 s on a position-count read.
+
+### Changed
+
+- **`src/main/strategies/leadLag.ts`: a shadow quote row, every observed pair on every scan**
+  (`leadlag-quotes-shadow.jsonl`): Polymarket mid/bid/ask, the live book, and the LIST quote the arm priced from
+  before round 116 - which the scan already fetches to resolve the ticker. Nothing reads it at runtime; trading is
+  unchanged. It also closes the instrument gaps of backlog 219 and 221 (the gap log is gated by the trade threshold
+  and records only dislocations). `scripts/backtests/leadlag_list_mechanism.py` grades the OLD mechanism (gap
+  against the list, IOC at list + 1c, fills only if the live book still offers it) against the NEW one, one contract,
+  at the live price with the 1-contract fee, to settlement. Verified on hand-built cases. Two new review-fixes
+  assertions (550/0): one row per observed pair, list and book quotes kept apart.
+- **`src/main/ladder/ladder.ts`: an arm past its lifetime floor is not re-armed by a cool-down.** `tradeSmallEntry`
+  read only mode, stage, operatorHold and the cool-down. momentum (-$14.42 lifetime) and book-imbalance (-$12.38) are
+  both past the -$10 floor, with cool-downs expiring 09-27 and 09-25: each would have gone back to real money and
+  traded until the next judging pass stopped it again, every cycle. `lifetimeFor()` now feeds both the stop and the
+  re-arm. Five tests (ladder 173/0).
+- **Config `newsEnabled` -> false**, app stopped, restarted 18:01:53Z. The arm chooses YES or NO from the count of
+  "positive" and "negative" words in a headline (`polarity`, autoTrader.ts:2599) and never reads what the market asks
+  (`strikeOf` exists but is not called): an "inflation rose" headline buys YES on "will inflation stay below X".
+  One trade in its life, lost. A logic defect, not a performance call.
+
+### Reviewed and deliberately left alone
+
+- **fade** stays stopped. The ladder's stop is arithmetically correct (band -13.18..-1.62 over 5 day-clusters), but
+  its whole negative sample sits on two days - 09-18 (-286c on 21 grades) and 09-21 (-433c on 24, including four
+  crypto dailies on BTC/ETH/SOL/DOGE closing 2026-09-21T17:00Z that lost together) - while 09-19, 09-20 and 09-22
+  were positive. Lifetime +$2.17 on 314 trades: spread capture at best, with correlated tails. Its real gap is that
+  `maxPerUnderlying` treats each coin as a separate underlying (backlog 228).
+- **mean-reversion**: +$14.37 lifetime, but +$22.33 is one LaLiga ticket; the rest lost. Unmeasured, left running.
+- **convergence** runs live while its own pre-registration says it has not passed (358 events, net 0.00c, lower bound
+  -2.26c). That is the operator's `trade-small` mode doing what it was chosen to do, not a defect; one fill since 09-14.
+- **dutch** (0 trades ever on this build) and **cross-venue** (4 trades, one market, one day, -$0.73): harmless.
+- **lead-lag size** stays at 1. Nothing since 09-17 supports raising it.
+
+Self-inflicted, noted: the analysis downloads hit Kalshi's public rate limit (HTTP 429) once. The app logged two
+single-pair misses in that half hour and nothing on the order path. Downloads stopped there.
+
+Tests: ladder 173/0, review-fixes 550/0, typecheck clean. Restart verified (bundle 18:01:36Z, electron 18:01:53Z);
+13 shadow rows in the first minute.

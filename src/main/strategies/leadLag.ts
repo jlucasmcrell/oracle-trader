@@ -411,6 +411,20 @@ export class LeadLagEngine {
     }
   }
 
+  /**
+   * Shadow quote row, every observed pair on every scan: Polymarket, the live Kalshi book and the Kalshi LIST quote.
+   * Nothing reads it at runtime. It exists so the pre-round-116 mechanism - an IOC at the list's 20-40 s old price,
+   * which fills only when a Kalshi order has not caught up with a move - can be graded offline against what the arm
+   * does now (REVIEW-CHANGES section 156). Compact keys: the file gains ~11k rows a day.
+   */
+  private appendQuoteRow(row: Record<string, unknown>): void {
+    try {
+      appendFileSync(this.path.replace(/\.json$/, '') + '-quotes-shadow.jsonl', JSON.stringify(row) + '\n')
+    } catch (e) {
+      this.log('[leadlag] quote shadow log failed: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   /** Paired signal-only evidence: every clearing observation is the 10 s arm; one scan per UTC minute is also the 60 s arm. */
   private appendCadenceRow(d: LeadLagDislocation, sample60: boolean, pollIntervalMs: number): void {
     try {
@@ -685,6 +699,14 @@ export class LeadLagEngine {
         if (this.prev.size > 64) {
           for (const [k, v] of this.prev) if (now - v.at > 3600_000) this.prev.delete(k)
         }
+        // Shadow only: the list quote is still in hand from the ticker lookup above, so record it next to the book.
+        const listBid = Number(kalshiMarket.yes_bid_dollars)
+        const listAsk = Number(kalshiMarket.yes_ask_dollars)
+        this.appendQuoteRow({
+          ts: new Date(now).toISOString(), c: pair.coin, t: ticker, end: windowEndMs,
+          pm: +poly.mid.toFixed(4), pb: poly.bid, pa: poly.ask, bb: kYesBid, ba: kYesAsk,
+          lb: Number.isFinite(listBid) ? listBid : null, la: Number.isFinite(listAsk) ? listAsk : null
+        })
 
         const threshold = cfg.leadLagMinDislocationCents / 100
         const canTrade = mode === 'live' && armed && !killed && cfg.leadLagLiveEnabled

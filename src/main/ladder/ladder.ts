@@ -653,12 +653,18 @@ export function tradeSmallEntry(
   cooldownUntil: number | undefined,
   operatorHold: boolean,
   now: number,
-  target: 'tiny-live' | 'live' = 'tiny-live'
+  target: 'tiny-live' | 'live' = 'tiny-live',
+  lifetimeDollars?: number,
+  lifetimeFloor?: number
 ): Decision | null {
   if (mode !== 'trade-small') return null
   if (stage !== 'shadow' && stage !== 'paper' && stage !== 'blocked' && stage !== 'disabled') return null
   if (operatorHold) return null
   if (cooldownUntil && now < cooldownUntil) return null
+  // An arm whose whole life has already lost the lifetime floor is not re-armed by a clock. Without this the floor
+  // stopped an arm and the cool-down handed it straight back to real money (2026-09-22: momentum -$14.42 and
+  // book-imbalance -$12.38 lifetime, re-arming on 09-27 and 09-25). A gate or the operator can still promote it.
+  if (lifetimeDollars !== undefined && lifetimeFloor !== undefined && lifetimeDollars <= -lifetimeFloor) return null
   void maxDemotions
   return { to: target, reason: `trade-small mode: real-money micro test ${demotions + 1} (stop -$${LIVE_STOP_DOLLARS})` }
 }
@@ -704,7 +710,20 @@ export class Ladder {
   /** Trade-small entry for a strategy, or null to fall back to its gate. */
   private tradeSmall(s: LadderStrategy, target: 'tiny-live' | 'live' = 'tiny-live'): Decision | null {
     const cfg = this.autoTrader.getConfig()
-    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, s.operatorHold ?? false, Date.now(), target)
+    // The same floor decideStage applies at notch 1: max(stage stop, three stakes) x LIFETIME_STOP_MULTIPLE.
+    const floor = Math.max(LIVE_STOP_DOLLARS, 3 * (cfg.amountPerTrade ?? 0)) * LIFETIME_STOP_MULTIPLE
+    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, s.operatorHold ?? false, Date.now(), target, this.lifetimeFor(s.id), floor)
+  }
+
+  /** Realized dollars across every cohort an arm has traded under, or undefined for arms not on the trader's ledger. */
+  private lifetimeFor(id: LadderStrategyId): number | undefined {
+    const key = this.traderKey(id)
+    if (!key) return undefined
+    let total = 0
+    for (const [k, v] of Object.entries(this.autoTrader.getStatus().perfByStrategy ?? {})) {
+      if (k === key || k.startsWith(`${key}:`)) total += v?.realizedPnl ?? 0
+    }
+    return total
   }
 
   /** Why trade-small entry did not fire (prefix for the gate verdict). */
@@ -1320,10 +1339,7 @@ export class Ladder {
     // Sum every cohort this arm has ever traded under. Re-based evidence is renamed, never deleted, so the
     // `<key>:<label>` rows are the arm's own history: `consensus` + `consensus:pre-matcher-20260919`,
     // `sports-anchor` + `sports-anchor:pre-20260911-0105`. The stage ledger above is a delta and forgets them.
-    let lifetimeDollars = 0
-    for (const [k, v] of Object.entries(st.perfByStrategy ?? {})) {
-      if (k === key || k.startsWith(`${key}:`)) lifetimeDollars += v?.realizedPnl ?? 0
-    }
+    const lifetimeDollars = this.lifetimeFor(s.id) ?? 0
     return { n, netDollars: (p?.realizedPnl ?? 0) - (b.realizedPnl ?? 0), lifetimeDollars, mean, se, sd, clusters, adverse, unit: 'c/contract', stake }
   }
 

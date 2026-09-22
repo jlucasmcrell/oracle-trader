@@ -108,6 +108,12 @@ eq('trade-small off when mode unset', tradeSmallEntry(undefined, 'shadow', 0, 2,
 eq('trade-small promotes shadow', tradeSmallEntry('trade-small', 'shadow', 0, 2, undefined, false, T)?.to, 'tiny-live')
 eq('trade-small promotes paper', tradeSmallEntry('trade-small', 'paper', 0, 2, undefined, false, T)?.to, 'tiny-live')
 eq('trade-small promotes blocked', tradeSmallEntry('trade-small', 'blocked', 1, 2, undefined, false, T)?.reason, 'trade-small mode: real-money micro test 2 (stop -$5)')
+// 2026-09-22: the cool-down must not re-arm an arm whose lifetime is past the floor (momentum -$14.42, book-imbalance -$12.38).
+eq('trade-small refuses an arm past its lifetime floor', tradeSmallEntry('trade-small', 'disabled', 2, 2, undefined, false, T, 'tiny-live', -14.42, 10), null)
+eq('trade-small refuses at exactly the floor', tradeSmallEntry('trade-small', 'disabled', 2, 2, undefined, false, T, 'tiny-live', -10, 10), null)
+eq('trade-small re-arms inside the floor', tradeSmallEntry('trade-small', 'disabled', 1, 2, undefined, false, T, 'tiny-live', -8.17, 10)?.to, 'tiny-live')
+eq('trade-small re-arms a profitable arm', tradeSmallEntry('trade-small', 'disabled', 1, 2, undefined, false, T, 'tiny-live', 2.17, 10)?.to, 'tiny-live')
+eq('trade-small with no ledger figure behaves as before', tradeSmallEntry('trade-small', 'disabled', 1, 2, undefined, false, T, 'tiny-live', undefined, 10)?.to, 'tiny-live')
 eq('trade-small re-enters a disabled micro-maker as live', tradeSmallEntry('trade-small', 'disabled', 0, 2, undefined, false, T, 'live')?.to, 'live')
 eq('trade-small never touches tiny-live', tradeSmallEntry('trade-small', 'tiny-live', 0, 2, undefined, false, T), null)
 eq('trade-small never touches live', tradeSmallEntry('trade-small', 'live', 0, 2, undefined, false, T), null)

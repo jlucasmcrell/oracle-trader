@@ -940,6 +940,12 @@ async function leadLagContainmentTests(): Promise<void> {
     eq('leadlag: a malformed body costs one coin its turn, not the batch (note is a summary that adds up)', [s1.note.startsWith('scanned 8 15m crypto pairs (6 live CLOB books), found 1 dislocations'), /1 Kalshi fetch failed/.test(s1.note), /1 errors/.test(s1.note)], [true, true, true])
     eq('leadlag: a throw past the fetch guard reaches the per-pair catch, is logged once, and the rest still sweep', [logs.filter((l) => /SOL pair error \(contained\)/.test(l)).length, s1.foundLast], [1, 1])
     eq('leadlag: the late pair settled INSIDE its own cycle - one sweep, guard released after', [orders.length, s1.tradesExecuted, s1.active], [1, 1, false])
+    // Section 156: every observed pair gets a shadow row carrying BOTH Kalshi quotes - the live book it trades on and
+    // the list it traded on before round 116 - so the old mechanism can be graded offline. Trading is unchanged above.
+    const qrows = readFileSync(joinPath(dir, 'state-quotes-shadow.jsonl'), 'utf8').trim().split('\n').map((x) => JSON.parse(x))
+    const qeth = qrows.find((r) => r.c === 'ETH')
+    eq('leadlag: one quote-shadow row per observed pair, not per dislocation', qrows.length, 6)
+    eq('leadlag: the shadow row keeps the list quote apart from the book quote', qeth ? [qeth.lb, qeth.la, qeth.bb, qeth.ba, qeth.pm] : null, [0.01, 0.99, 0.49, 0.5, 0.6])
     await engine.scanAndSweep(adapter, cfg, 'live', true, false, false)
     await engine.scanAndSweep(adapter, cfg, 'live', true, false, false)
     const s3 = engine.status(cfg)
