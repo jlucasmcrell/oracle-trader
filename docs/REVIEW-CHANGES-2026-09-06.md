@@ -5771,7 +5771,10 @@ kalshi-auto.json has no metaculusApiKey/oddsApiKey/llmApiKey/alertWebhookUrl and
 ladder.json still holds 20 strategies with history`, and `configLoss` against the counts published in the 16-05
 incident returns the whole event - four fields empty, `perfByStrategy 16 -> 0`, `liveArmed true -> false`. The two
 older quarantine files correctly did **not** fire (they predate the tick window) and `config-wiped` correctly did
-not (there is no stored baseline yet).
+not (there is no stored baseline yet). The scheduled task then proved it in production rather than in a dry run:
+the **11:20:01Z tick** loaded the new module and wrote the `config-defaulted` line into `data/sentinel/digest.md`,
+storing `{"keys":{"metaculusApiKey":false,...},"strategies":0,"openTrades":0,"enabled":false,"liveArmed":false}` in
+`state.json` - counts and booleans, no value anywhere.
 
 **No restart.** Nothing in `src/` changed; the whole diff is one new script module, five lines of wiring and a test.
 Restarting the app now would also land in front of the operator's restore, which needs it stopped.
