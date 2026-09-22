@@ -4220,3 +4220,344 @@ Full section, with every number and its provenance, is `docs/reports/2026-09-21.
 
 **Delivery note:** this is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. The report is
 written to `docs/reports/2026-09-21.md` for the 08:30 desktop task to deliver.
+
+## Repair 2026-09-21T13:50Z
+
+Headless on-call session (Windows task, `scripts/repair.ps1`), one incident:
+`data/sentinel/incidents/2026-09-21T13-35-log-warn-cf-reference-observation-reject.md`. **Outcome: FIXED.**
+
+The finding was five `[cf-reference] observation rejected: EBUSY` warns. They are one 12 ms burst
+(main.log 285769-285773, 13:20:02.784→.796Z) and the only EBUSY lines in the log's whole 24-day span, so the
+question was what held the file for that instant. `OracleTrader-StateBackup` had started 1.3 s earlier (task
+LastRunTime 09:20:01 local = 13:20:01Z) and that run mirrored exactly the file named in the warning
+(`D:\oracle-trader-backup\mirror\userData\cf-reference-shadow\2026-09-21.jsonl`, 42,326,790 B, mtime 09:20).
+`scripts/state-backup.py` mirrored with `shutil.copy2`, which on the installed interpreter (3.13.13, Anaconda)
+takes the `_winapi.CopyFile2` branch — the Win32 copy API opens the source with `FILE_SHARE_READ` only, so
+every write from another process fails with a sharing violation for the length of the copy, and libuv reports
+that to Node as EBUSY. Confirmed by A/B on a live-appended 24 MB file, alternating copiers twice:
+`shutil.copy2` 6,288 then 6,655 failed appends, the shared-handle copy 0 and 0; and narrowed to `CopyFile2`
+specifically, since `shutil.copyfile` and `shutil.copystat` on their own each lose nothing.
+
+This was fixed rather than suppressed because cf-reference is the mildest victim, not the only one.
+`orderJournal.save()` (`src/main/store/orderJournal.ts:69-73`) latches `Order journal write failed;
+submissions blocked` on ANY append error, `fillReconciler` (`:166-169`) latches `Execution archive write
+failed`, and `order-journal.jsonl` is both mirrored and written into the versioned zip by that same hourly
+task. The identical collision there stops the app submitting orders until someone restarts it. One cause, one
+change: the backup stops locking.
+
+New `scripts/lib/win_share.py` — `open_shared()` (CreateFileW with FILE_SHARE_READ|WRITE|DELETE) and
+`copy_shared()` (a `copy2` drop-in: copy bytes, then `copystat`). `state-backup.py` uses `copy_shared` in the
+mirror (line 70), `open_shared` in the sha verification (line 80), and `ZipInfo` + `open_shared` in place of
+`ZipFile.write` for the versioned zip (lines 111-116); `backup.py` takes the same change at its one `z.write`
+(lines 31-36). A copy made this way is a prefix-consistent snapshot of an append-only file, which is what a
+mirror of a jsonl log should be, and the test asserts it.
+
+Verified: new suite `npm run test:backup-share` 4/4, and it fails on the pre-fix path (swap
+`state_backup.copy_shared` back to `shutil.copy2`: "64 of 170 appends failed during the mirror"); typecheck
+clean, build clean, `review-fixes` 548/0, `ladder` 168/0, `adversarial` 89/0. Live against the production
+task, not a stand-in: a 32 MB probe file in `%APPDATA%\oracle-trader` under continuous append for 90 s while
+`Start-ScheduledTask OracleTrader-StateBackup` ran (13:45:52→13:45:59Z, `ok ... userData 28/289 copied`,
+mirroring both the probe and the live 43 MB cf-reference day file) — **35,703 appends, 0 failures**, where the
+pre-fix path loses about half. The probe and its mirror copy were deleted afterwards. `backup.py` was then run
+for this session's backup and exercised its own patched path over the full tree: 2,211 files, 5,516 MB raw,
+698 MB zip, `testzip None`, zero skipped files —
+`oracle-trader-REPAIR-2026-09-21-20260921-094802.zip`. No EBUSY in main.log after 13:40Z.
+
+**No restart.** Nothing in `src/` changed; the fix is entirely in two Python scripts the app does not load.
+Restarting a live trading process for that would be risk without a reason.
+
+**Noted, not acted on** — filed as backlog **223**: the three appenders are still fragile on their own.
+cf-reference logs a failed write in the same words as a malformed frame and drops the row; the order journal
+and the fill archive latch a permanent failure that only a restart clears. Nothing on this box routinely holds
+those files now, but an antivirus scan or the operator copying a log still can. That is a second behavioural
+change on a path that was not this incident's cause, so it is a backlog item rather than a second diff today.
+
+## Repair 2026-09-21T16:05Z
+
+**Incident `2026-09-21T16-05-metaculus-stale` — NEEDS-OPERATOR. No code changed; nothing built, tested,
+restarted, suppressed or backed up.** The sentinel dispatched this for an hourly shadow whose file had not
+moved since 13:35:41Z. The shadow is real but it is the smallest part of it: the Metaculus token lives in
+`%APPDATA%\oracle-trader\kalshi-auto.json`, and that file was **zero-filled by the unclean shutdown at
+14:00:57Z** (`Kernel-Power 41`, `EventLog 6008`; OS back up 14:24:32Z; `main.log` stops mid-cadence at
+14:01:09.245Z and resumes 14:25:49.258Z; the electron main process starts 14:25:40.73Z, the post-boot
+autostart). At 14:25:49.327Z `JsonStore.load()` (`src/main/store/json.ts:45-62`) could not parse it and
+quarantined it at `:57` as `kalshi-auto.json.corrupt-1790000749327` — 256,251 bytes, **every byte 0x00**
+(`nulBytes 256251`, `lastNonNul -1`), nothing salvageable. The same event took
+`fill-reconciler-ibkr.json` (200 bytes, also all NUL). A NUL scan of the whole of `%APPDATA%\oracle-trader`
+and the repo's `data/` found no third casualty; `ladder.json` is intact and still being written.
+
+**The shadow's own mechanism, for the record.** `scripts/metaculus-shadow.cjs:336-348` reads the token from
+that config, finds the empty string, logs `no Metaculus token yet` and returns at `:347` **before** `collect()`
+— and `last-mc.json` is only written inside `collect()`, at `:178`. So the task is green (`Last Result 0`,
+`Last Run Time 11:50:02 AM` = the sentinel's own restart at 15:50:01.617Z) while the one mtime the sentinel
+watches (`scripts/lib/task-watch.mjs:19`) never moves. Reproduced by hand at 16:06:14.684Z: that exact line,
+exit 0, no write.
+
+**What the crash actually cost**, diffed against `D:\oracle-trader-backup\versions\state-20260921-094553.zip`
+(13:45:53Z, 257,614 bytes, `configVersion 27`) — key lengths only, no key value read or printed:
+`metaculusApiKey` 100 chars, `oddsApiKey` 88, `llmApiKey` 92 → **all three empty**; `liveArmed` true →
+**false**; `enabled` true → **false**; `state.openTrades` **27 → 0**, `pendingOrders` 5 → 0,
+`perfByStrategy` **16 strategies → 0**, `signals` 40 → 0. `amountPerTrade 1`, `maxDailyLossPct 20` and
+`ladderMode trade-small` read identically before and after only because they equal the app's current defaults
+— which is why a 5,692-byte replacement passed for the 250 KB original without a sound.
+
+**Since 14:25:49Z the trader has been disarmed and blind.** Disarmed is the safe half: it is placing nothing.
+Blind is not — the venue's book is settling **unbooked** against an empty `openTrades`:
+`[kalshi] positions merged` 25 at 14:25:51Z, 21 at 14:59:50Z, 20 at 15:05:05Z, 19 at 15:10:05Z, balance
+$56.14 → $61.00, with no trade rows to attribute any of it to.
+
+**One action taken**, defensive and touching no state: `state-backup.py` rotates `versions/` at
+`KEEP_VERSIONS = 72` hourly (`scripts/state-backup.py:35,136-137`), so the 13:45:53Z zip — the **only**
+surviving copy of the three API keys — would have been deleted around 2026-09-24. Copied out of the rotation
+to `D:\oracle-trader-backup\preserved\PRECRASH-20260921T134553Z-state.zip`, sha256 verified identical.
+`preserved/` is outside the rotation, which lists only `versions/`.
+
+**For the operator** (full detail in the incident file): stop the app first — it is rewriting
+`kalshi-auto.json` live — restore the top-level `kalshi-auto.json` member from that preserved zip, and note
+that its `openTrades` is a 13:45:53Z snapshot with at least 8 of the 27 already settled, so a wholesale
+restore re-arms a trader with a stale open-trade list. Whether the fill reconciler re-syncs that cleanly on
+start was not verified here; the safer order is restore, start with `liveArmed` off, confirm the reconciler
+and settlement sweep have caught up against the venue, then re-arm. The arm, the keys and the limits were not
+touched by this session and will not be.
+
+**Not suppressed**: `metaculus-stale` is reporting a true outage and must keep firing until the token is back.
+
+**Two findings left as findings, not diffs.** (a) `src/main/store/json.ts:55` logs this class of event as
+`[json-store] load failed: {}` — a bare `console.warn` of an `Error`, which electron-log renders as `{}`, so
+the line names neither the file nor the cause; the sibling loader at `:25` builds a legible message and did,
+310 ms later, for the ibkr file. (b) Nothing sanity-checks the config after a quarantine — not a missing key,
+not a lost arm, not `openTrades` empty while `positions merged` is non-zero. Either is a second behavioural
+change on a path that was not this incident's cause, and neither can be verified without a restart that must
+not happen before the operator's restore.
+
+**Rejected hypothesis, so it is not re-derived.** `JsonStore.save()` writes its temp file with
+`{ flush: true }` (`src/main/store/json.ts:72`) and the comment at `:70-71` credits that with closing this
+exact hole; the obvious suspicion was that Electron's Node silently ignores the option. It does not. This
+build is Electron 33.4.11 / Node 20.18.3, and `writeFileSync(..., { flush: 'not-a-boolean' })` throws
+`ERR_INVALID_ARG_TYPE` — the option is parsed and validated, so the data was fsynced and the rename still
+landed ahead of it. Durability of the rename itself is the open question, and it was out of scope here.
+
+## Repair 2026-09-22T04:05Z
+
+**Incident `2026-09-22T04-05-metaculus-stale` — NEEDS-OPERATOR, and the same one as 11 h 48 m earlier. No
+code changed; nothing built, tested, restarted, suppressed or backed up.** `metaculus-stale` fired again
+because nothing has been restored: the token still lives in a `kalshi-auto.json` that the 2026-09-21T14:00:57Z
+power loss zero-filled, and the app is still running on `DEFAULT_CONFIG`. The full proof is in
+`2026-09-21T16-05-metaculus-stale.md` and was not re-derived. What this session did was re-verify that the
+picture is unchanged, re-verify that the recovery path is still there, and measure what the delay has cost.
+
+**Unchanged, re-measured rather than assumed.** The task's own command by hand at 04:06:01.396Z printed the
+one line `no Metaculus token yet ... nothing to do` and exited 0; `schtasks` shows Ready / Last Result 0 /
+last run 03:50:02Z, so the task is healthy and has nothing to do. `kalshi-auto.json` at 04:04Z still has
+`metaculusApiKey`, `oddsApiKey` and `llmApiKey` at **length 0** (lengths only were read), `enabled false`,
+`liveArmed false`, `openTrades 0`. No second crash: the electron cohort still starts 14:25:40-49Z and the
+per-boot `[kalshi] account-verified request pacing` line last appears at 14:25:49.258Z. The venue credentials
+were never involved — they are in `config.json` (mtime 2026-09-12), all seven fields intact, which is why the
+account still reads and settles normally.
+
+**What the delay cost, and it is one-sided.** `[kalshi] positions merged` has gone 25 → 21 → 19 → 10 → 6 → **4**
+(03:36:09Z) and the balance $56.14 → $71.66; the read-only GET dump at 04:10:33Z
+(`scratchpad/repair-20260922-kalshi.json`) shows 4 positions, $3.91 exposure, $5.23 portfolio value. Compared
+ticker by ticker with the preserved snapshot's 27 `openTrades`, **23 have now settled unbooked** and the 4
+survivors (`KXNETFLIXRANKMOVIE-26SEP21-WHY`, `KXWTI-26SEP2214-T98.99`, `KXBTCPRICE-85000-26SEP18`,
+`KXNCAAMBUAC-27-EKY`) are all in it — yesterday the split was 19 settled / 8 live. The config half of that
+file (three keys, the alert webhook, the limits, 16 strategies' `perfByStrategy`) has lost nothing by waiting;
+the state half has lost almost everything, and restoring it wholesale now hands the trader 23 phantom rows.
+The recovery path itself is sound: `D:\oracle-trader-backup\preserved\PRECRASH-20260921T134553Z-state.zip`
+still hashes to `554aa64b17ae31a6…`, identical to `versions\state-20260921-094553.zip`, which ages out of the
+72-hour rotation around 2026-09-24.
+
+**Two things recorded, neither touched.** One pre-crash order is still resting on Kalshi
+(`KXHORMUZMAX-26SEP20-SEP17`, sell/no 1.10 @ $0.09, created 2026-09-21T09:04:04Z) with the app's
+`pendingOrders` empty, so nothing is managing it; it carries `expiration_time 2026-09-22T12:52:00Z` and leaves
+the book by itself, and this session does not cancel orders. And the loss is still silent: the only
+warn/error signature in main.log from 00:00Z to 04:10Z today is the already-suppressed
+`[ibkr-lab] Error: Gateway API not available yet` (499 lines) — the arms are not erroring, they are switched
+off. **Not suppressed**, for 16-05's reason: this is a true outage and the only signal that caught the config
+loss. The two findings 16-05 left standing (`src/main/store/json.ts:55` logging `load failed: {}` with neither
+file nor cause; no post-quarantine sanity check on the config) are unchanged and still cannot be verified
+without a build and a restart that must not land in front of the operator's restore. The operator's steps are
+in the incident file; the only one that changed is that the restored `openTrades` is now 23/27 stale, so start
+disarmed and let the reconciler square it before re-arming.
+
+## 2026-09-22 (daily maintenance, headless 11:00-11:40Z)
+
+Full detail, with every number and its provenance, is REVIEW-CHANGES **§154**.
+
+### The one thing that needs the operator
+
+**The trader has been disarmed and blind for 21 hours and only you can end it.** The 2026-09-21T14:00:57Z power
+loss zero-filled `%APPDATA%\oracle-trader\kalshi-auto.json`; the app quarantined it correctly and came up on
+defaults. Three API keys empty, `liveArmed` false, `enabled` false, 16 strategies' performance history gone. It is
+placing nothing, which is the safe half; the unsafe half is that the venue book has been settling against an empty
+ledger - 23 of the 27 pre-crash positions have now settled unbooked and 4 are left.
+
+The recovery is unchanged and still available:
+`D:\oracle-trader-backup\preserved\PRECRASH-20260921T134553Z-state.zip`. Re-verified this session:
+45,335,442 bytes, sha256 `554aa64b17ae31a680c95d8b436044680174aec36662b3a88fc711947b55dda0`, byte-identical to
+`versions\state-20260921-094553.zip`, which is still present and ages out of the 72-hour rotation around 09-24.
+The preserved copy sits outside that rotation.
+Stop the app first - it is rewriting that file every minute - restore the top-level `kalshi-auto.json` member,
+start with `liveArmed` off, let the reconciler and settlement sweep square against the venue, then re-arm. Its
+`openTrades` is a 13:45:53Z snapshot and **23 of its 27 rows are now stale**, so a wholesale restore hands the
+trader phantom positions if you re-arm before the sweep catches up. Full steps: the incident files
+`data/sentinel/incidents/2026-09-21T16-05-metaculus-stale.md` and `2026-09-22T04-05-metaculus-stale.md`.
+
+**Measured today, and it is good news for the restore:** the ladder set `operatorHold` on seven arms at 14:27Z on
+09-21, reading the wipe as seven panel switch-offs. `ladder.ts:842` clears that hold automatically the moment the
+config says live again, so **you do not need to re-tick seven boxes in the panel.** What does not come back is
+their evidence - each re-baselined against an empty `perfByStrategy` and will re-baseline again at the restore.
+
+Second, smaller: **IB Gateway is down** (it died with the host; nothing on this box starts it - backlog 120), so
+the 23-arm IBKR paper lab has scanned nothing since 14:00:50Z. It resumes by itself when you log in. And OpenRouter
+credit is **$11.75**, low but not failed; the nightly review still ran.
+
+### 1. Liveness: nothing was down
+
+App up (pid 3752, since the post-boot autostart at 14:25:40Z on 09-21), `main.log` current to the second, ladder
+tick 35 min old, BTC collector up, today's nightly review present, sentinel `at` 10:50:01Z. Every hourly shadow
+inside its window except `metaculus-shadow`, which is stale for the reason above - its token was in the wiped file.
+**Zero open sentinel incidents**: all 18 on disk are now CLOSED, including the two `metaculus-stale` repairs of
+16:05Z and 04:05Z, both correctly closed NEEDS-OPERATOR. One had never been closed at all -
+`2026-09-11T23-35-undispatched.md`, written when the 90-minute rate limit refused a session and carrying no Status
+line since. Its signature (the Kalshi universe page bound) reopened as incident 2026-09-18T23-20 and was FIXED
+there, with no page-bound warning in main.log since 2026-09-18T23:27:50Z; closed today as superseded, so the OPEN
+sweep is honest. Four suppressions, none expiring today: the `[ibkr-lab]
+Gateway API` one runs to **2026-09-24** and is backlog 120's decision point; the `[reconciler] run failed` one
+expired on 09-18 and is already inert (the sentinel drops expired rows at load), and its signature has not fired
+since 2026-09-18T09:28:46Z, so nothing is hiding behind it. Five background recorders (sports-books, spot-shadow,
+weather-books, inplay-books, plus mmsim/ladder15/crypto15) all alive.
+
+### 2. Venue-true, last 24 h
+
+**Kalshi -$6.11** after $0.17 fees over 28 settlements - every one a pre-crash position settling unbooked, which is
+why the app's own trackers show nothing. Cash $71.66, 4 open positions at $3.91 cost ($5.23 at market), 1 resting
+order. **Polymarket US $0.00**, 0 resolutions, balance $39.85. Nothing traded on either venue: the Kalshi side is
+disarmed by the wipe and the Polymarket US mini-trader has logged nothing since 2026-09-12 with all its arms on
+hold. The one resting Kalshi order is the pre-crash `KXHORMUZMAX-26SEP20-SEP17` sell/no 1.10 @ $0.09 that nothing
+is managing; it expires by itself at 12:52Z today and this session does not cancel orders.
+
+Ladder: 17 of 20 strategies on `operatorHold`, 3 in timed cool-downs (momentum to 09-27, book-imbalance to 09-25,
+volume-spike to 10-05, all at the 2-demotion cap). No promotions, no stops, no scale-ups - the ladder cannot grade
+what is not trading.
+
+Sharp anchor, rebuilt from `anchor-grades.jsonl` because `state.sportsShadow` was in the wiped file: `gradedN`
+**1,056**, `gradedBrier` **0.1248**, `ruleN` 517, `ruleNet` **+20.61c** (+0.04c/contract). The file gained **0 rows
+in 24 h** and its last grade is 2026-09-21T13:02Z - with `oddsApiKey` empty the anchor polls and grades nothing.
+Odds API spend today **0 of 645**.
+
+### 3. The due read: IBKR calibration slopes by category (backlog 155)
+
+**Read as registered. There is nothing to re-baseline, and the reason is structural rather than a shortage of
+days.** Since the round-121 change on 09-18 the `calibration` arm has **one open position and zero closed trades**
+(G16FL_110326_REP YES @ $0.86 + $0.01 fee, opened 2026-09-19T00:11:57Z, settles **2026-11-17**);
+`political-favorite` holds the identical position, same side, same millisecond. The frozen
+`calibration:pre-slopes-20260918` cohort still reads 16 closed, **+0.81c/contract, band [-9.26, +10.89]** - the
+lab's best mean and a band spanning zero.
+
+17 of the lab's 281 markets are `Elections`/`Government`. Outside them the 1.0 slope makes fair value equal the
+mid and only a crossed book can enter - which is the change working as designed, and it did fire three times on
+09-18. Inside them the binding constraint is `IBKR_HOLD_MAX_DAYS = 60` applied to `expiresAt`. Replaying all 8,690
+political frames of 09-18 to 09-21 through the live rule: **the only two contracts whose recalibration gap ever
+cleared the bar (HORC_1126_Republican +0.44c, HORC_1126_Democratic +0.50c) are 104 days out and enter the window
+on 2026-11-05 - two days after the 2026-11-03 election that decides them.** The constant's comment says "the
+election contracts expire about 47 days out"; that is the distance to election day, while the code compares the
+certification date, 14 to 62 days later.
+
+**No change made.** Widening the window admits contracts that cannot settle inside any test; the hypothesis needs a
+marked-to-market exit, which is a different arm with its own pre-registration (backlog **225**, trigger
+2026-10-12). And since round 121 `political-favorite` computes the same number as `calibration` on the same
+category at the same threshold, so the lab is reporting two copies of one result (backlog **226**). Backlog 155 is
+retired from the queue.
+
+### 4. The trigger sweep, and two more that came due
+
+`node scripts/due-triggers.mjs` listed exactly one item due today (155) before the run and **nothing due** after
+it, so the day's registered reads are closed out. Two further items carry a 2026-09-22 date in their own text
+rather than in the parser's format, and both were read:
+
+**160, paid model callers: PASS, retired.** Today's nightly review is one `deepseek/deepseek-v4-flash` call on
+openrouter.ai, status 200, $0.0007; no `gpt-5.6-sol` on either day; yesterday's whole LLM spend was $0.0568 over 68
+calls, 63 of them free-tier gemini critics. One thing the pass hides: it reached the router directly rather than
+your `api.deepseek.com` endpoint, because `llmApiKey` was in the wiped file.
+
+**204, sports-anchor freshness: premise confirmed, not fixed by its own registration.** `last_update` appears
+nowhere in `sportsAnchor.ts`'s 950 lines and the local `bookmakers` type does not declare the field, so the Odds
+API timestamp is discarded at parse and freshness is measured from receipt. The fix changes what the arm trades and
+belongs with the anchor's own evidence; trigger re-pointed at its first checkpoint.
+
+### 5. What was built: the sentinel now looks at the file that was destroyed (backlog 224c)
+
+The 18-hour silence had one mechanical cause - **nothing in `scripts/sentinel.mjs` read `kalshi-auto.json`.** Every
+light stayed green because every one of them watches a different file, and the alarm that eventually fired was an
+hourly shadow's stale mtime under the symptom's name.
+
+New `scripts/lib/config-watch.mjs`, three signatures: `config-quarantined` (a new `*.corrupt-<epoch>` since the last
+tick - it would have caught 09-21 within 15 minutes), `config-wiped` (a watched field present last tick and empty
+now, or `perfByStrategy` falling from N>0 to zero; `openTrades` is deliberately **not** a trigger, since it reached
+zero legitimately over the 18 hours as the book settled), and `config-defaulted` (a structurally default config
+while `ladder.json` - a separate file that survived - still holds strategies with history; this is the one that
+fires with no stored baseline, which is exactly how 18 hours passed). No key value is read, returned, stored or
+logged anywhere: a key is a boolean, and the test asserts that the fingerprint written to disk cannot carry one.
+
+Verified: new suite `npm run test:config-watch` (38 assertions, the 09-21 wipe reproduced from counts only),
+typecheck clean, build clean, **`npm test` 22/22 suites**. Live against the real damaged file, the `--dry` tick now
+reports `The auto-trader is running on a default config` and names the cause. Backup
+`oracle-trader-MAINT-2026-09-22-20260922-071304.zip` (2,240 files, 753 MB, `testzip None`).
+
+**No restart**: nothing in `src/` changed, and a restart now would land in front of your restore, which needs the
+app stopped. 224(a) (the `[json-store] load failed: {}` line that names neither file nor cause) and 224(b)
+(`alertWebhookUrl` living in the file that gets wiped, so the app's own alarm dies with the state it should report)
+both need that restart and stay open.
+
+### 6. Shadows and gates
+
+- **HRRR vs NBM, day 5:** HRRR still ahead on 405 paired daily-high forecasts - MAE **1.93** vs 2.25, bias -0.29 vs
+  -1.27, closer on 216 against 177 with 12 ties. Yesterday's verdict holds.
+- **Mention shadow:** 119 graded (count met, its 2026-09-25 date not). The evidence is against it - base-rate Brier
+  **0.2390 against the market's 0.1447**, counterfactual taker **-4.74c/contract** over 42 trades, both sub-corpora
+  agreeing. A base rate worse than the price is not a signal.
+- **Polymarket consensus shadow:** 157,651 graded, hit 0.72 at a mean price of 0.71, Brier 0.0907, **+4.63c** at the
+  Kalshi ask net of fee over 1,436 matched. Concentrated in btc and `highest`; mlb/wta/atp negative. Trigger
+  unchanged, not met.
+- **BTC convergence gate:** FAIL / NOT YET - 358 events, 970 graded, net 0.00c, Bonferroni lower bound -2.26c
+  against a +1c bar.
+- **Quoter shadow gate:** insufficient sample for the allowed cohort (51 settled proxy fills over 27 events, needs
+  30/40). The blocked cohort is -4.39c over 1,211 with band [-6.89, -1.88] - the gates are still refusing quotes
+  that would have lost.
+- **Metaculus shadow:** zero pairs, token lost with the config. Nothing to report until the restore.
+
+### 7. Errors in the last 24 h
+
+371 `[ibkr-lab] Gateway API not available yet` warns (suppressed signature, the gateway is down), 2 IBKR request
+timeouts, 5 `[cf-reference] observation rejected: EBUSY` at 13:20:02Z on 09-21 - the pre-fix burst that the repair
+session diagnosed and fixed the same afternoon, with none since - and one `[auto-trader] scan wedged for 15 min`
+at 00:22:43Z on 09-21, which is the new watchdog doing its job during the host's trouble. No new signatures.
+
+### 8. Open questions for the operator (not blocking)
+
+- The restore above is the only thing that unblocks the trading board. Everything else below is on hold behind it.
+- OpenRouter credit $11.75. Not failed, but the nightly review and the hunch path fall back to Ollama below it.
+- IB Gateway holds your credentials and nothing here can start it; the paper lab is paused, not broken.
+
+### 9. Delivery
+
+This is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. The report is written to
+`docs/reports/2026-09-22.md` for the 08:30 desktop task to deliver.
+
+### Ten-line summary
+
+1. Nothing was down: app, collector, ladder tick, nightly review, sentinel and every shadow but Metaculus are live,
+   and all twelve sentinel incidents on disk are CLOSED.
+2. The trader has been disarmed and blind for 21 hours - the 09-21 power loss zero-filled kalshi-auto.json - and
+   only the operator can restore it; the preserved pre-crash zip was re-verified today.
+3. The ladder's seven operatorHolds self-clear at the restore; the operator does not have to re-tick the panel.
+4. Venue-true 24 h: Kalshi -$6.11 on 28 unbooked settlements, Polymarket US $0.00. Nothing traded anywhere.
+5. Due read 155 performed: the re-baselined calibration arm has one open position and zero closed trades, and the
+   two political contracts that showed edge only enter its 60-day window two days after their election.
+6. 160 read: PASS - nightly review on deepseek-v4-flash, status 200, $0.0007, no frontier model.
+7. 204 read: premise confirmed, deferred to the anchor's own checkpoint as its registration requires.
+8. Built 224(c): the sentinel now watches kalshi-auto.json with three signatures and names the cause instead of
+   metaculus-stale. 38 new assertions, npm test 22/22, tsc and build clean, no restart needed.
+9. Sharp anchor rebuilt from its jsonl: gradedN 1,056, Brier 0.1248, ruleN 517, ruleNet +20.61c, 0 new rows in 24 h.
+10. Open for the operator: the config restore, IB Gateway (down since the crash), OpenRouter credit at $11.75.

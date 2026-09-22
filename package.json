@@ -30,6 +30,8 @@
     "test:collection": "node scripts/tests/collection-integrity.test.mjs",
     "test:recorder-lock": "node scripts/tests/recorder-lock.test.mjs",
     "test:task-watch": "node scripts/tests/task-watch.test.mjs",
+    "test:config-watch": "node scripts/tests/config-watch.test.mjs",
+    "test:backup-share": "python scripts/tests/backup-share.test.py",
     "test:migration": "node scripts/tests/run.cjs scripts/tests/config-migration.test.ts",
     "test:fee": "node scripts/tests/run.cjs scripts/tests/kalshi-fee.test.ts",
     "test:paper-mc": "node scripts/tests/run.cjs scripts/tests/paper-mc.test.ts",

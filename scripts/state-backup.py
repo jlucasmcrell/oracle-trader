@@ -18,6 +18,9 @@ newest zip, and exits non-zero if either fails, so the scheduled task reports fa
 """
 import hashlib, json, os, random, shutil, sys, time, zipfile
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib'))
+from win_share import copy_shared, open_shared  # reading a live log must not block the app's appends
+
 DEST = os.environ.get('ORACLE_STATE_BACKUP_DEST', r'D:\oracle-trader-backup')
 APPDATA = os.path.join(os.environ['APPDATA'], 'oracle-trader')
 REPO = r'G:\PROJECTS\oracle-trader'
@@ -61,8 +64,10 @@ def mirror(label, root):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         try:
             # An append-only log being written while we read it copies fine; a locked
-            # sqlite/leveldb file does not, and must not fail the whole run.
-            shutil.copy2(src, dst)
+            # sqlite/leveldb file does not, and must not fail the whole run. The read
+            # shares the file with writers: shutil.copy2 does not, and locking a live
+            # jsonl for the length of a copy makes the app's own appends fail (EBUSY).
+            copy_shared(src, dst)
             copied += 1
             written += st.st_size
         except OSError as e:
@@ -72,7 +77,7 @@ def mirror(label, root):
 
 def sha(p, limit=None):
     h = hashlib.sha256()
-    with open(p, 'rb') as f:
+    with open_shared(p) as f:
         while True:
             b = f.read(1 << 20)
             if not b:
@@ -103,7 +108,12 @@ def main():
         for src, rel, st in walk(APPDATA):
             if st.st_size <= VERSION_MAX_BYTES and rel.count(os.sep) <= 1:
                 try:
-                    z.write(src, rel.replace('\\', '/'))
+                    # Same sharing rule as the mirror: ZipFile.write() would open the
+                    # source without sharing it, and order-journal.jsonl is in here.
+                    info = zipfile.ZipInfo.from_file(src, rel.replace('\\', '/'))
+                    info.compress_type, info._compresslevel = zipfile.ZIP_DEFLATED, 6
+                    with open_shared(src) as f, z.open(info, 'w') as out:
+                        shutil.copyfileobj(f, out, 1 << 20)
                 except OSError as e:
                     # Electron holds an exclusive handle on `lockfile` while it runs; that file is
                     # a mutex, not state. Anything else unreadable shows up in the CRITICAL check.

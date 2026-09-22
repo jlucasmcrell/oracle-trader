@@ -7,6 +7,7 @@
 //   2. defects: new error signatures in main.log since the last tick, a failed nightly
 //      review, stopped-strategy rests whose cancel keeps failing, a venue error that
 //      persists in a mini-trader, long-horizon positions in the short-horizon traders,
+//      a destroyed or defaulted kalshi-auto.json (lib/config-watch.mjs),
 //      scheduled-task failures, OpenRouter credit, Ollama, disk;
 //   3. action: a dead app or a stale hourly task is revived directly (Start-ScheduledTask);
 //      a defect becomes an incident file under data/sentinel/incidents and, within the
@@ -27,6 +28,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
+import { WATCHED_KEYS, configLoss, fingerprint, isDefaultedConfig, newQuarantines } from './lib/config-watch.mjs'
 import { recorderPids } from './recorder-lock.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
@@ -70,7 +72,7 @@ if (argv[0] === 'status') {
   process.exit(0)
 }
 
-const state = readJson(STATE, { lastRunAt: 0, seen: {}, notes: {}, dispatches: [], mini: {}, revived: {} })
+const state = readJson(STATE, { lastRunAt: 0, seen: {}, notes: {}, dispatches: [], mini: {}, revived: {}, configFp: null })
 const since = sinceArg ? Date.parse(sinceArg) : state.lastRunAt ? Math.min(state.lastRunAt, now - 5 * MIN) : now - 20 * MIN
 const suppressions = readJson(SUPP, []).filter((s) => !s.until || Date.parse(s.until) > now)
 const suppressed = (text) => suppressions.find((s) => {
@@ -192,6 +194,35 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
       add(key, 'repair', `${task} still stale after a restart`, `${file} last written ${iso(t)}; task started at ${iso(last)} without effect`)
     }
   }
+}
+// The app's own config and ledger file, which nothing here used to look at. A power loss zero-filled it on
+// 2026-09-21 and the trader ran disarmed, keyless and blind for 18 hours behind an all-green liveness board
+// (backlog 224). Three signatures, because each one exists in a case the others do not: the quarantine only
+// happens if JsonStore took that path, the transition only fires if this process saw the file before it went,
+// and the standing note is what survives a sentinel restart in the middle of an unrepaired outage.
+{
+  const cfgFp = fingerprint(readJson(path.join(UD, 'kalshi-auto.json'), null))
+  let entries = []
+  try {
+    entries = fs.readdirSync(UD, { withFileTypes: true }).filter((d) => d.isFile()).map((d) => ({ name: d.name, mtimeMs: mtime(path.join(UD, d.name)) }))
+  } catch {
+    // user-data directory unreadable: the app-down check owns that finding
+  }
+  const quarantined = newQuarantines(entries, since)
+  if (quarantined.length) {
+    add('config-quarantined', 'repair', `The app quarantined ${quarantined.length} state file(s)`, quarantined.map((q) => `${q.name} at ${iso(q.mtimeMs)}`).join(' | ') + ` | JsonStore.load() could not parse them and the app is running on defaults for whatever they held.`)
+  }
+  const loss = configLoss(state.configFp, cfgFp)
+  if (loss) {
+    add('config-wiped', 'repair', 'The auto-trader config lost keys or its strategy ledger', `${loss.summary} | kalshi-auto.json compared against the fingerprint stored at the previous tick (counts and presence only, never values).`)
+  }
+  const ladderStrategies = Object.keys(ladder.strategies ?? {}).length
+  if (isDefaultedConfig(cfgFp, ladderStrategies)) {
+    add('config-defaulted', 'notify', 'The auto-trader is running on a default config', `kalshi-auto.json has no ${WATCHED_KEYS.join('/')} and an empty perfByStrategy, while ladder.json still holds ${ladderStrategies} strategies with history - so this is a destroyed config, not a new install. enabled=${cfgFp.enabled} liveArmed=${cfgFp.liveArmed} openTrades=${cfgFp.openTrades}. Restoring it is the operator's (it carries keys and the arm).`)
+  }
+  // Only a successful read updates the baseline: overwriting it from a failed read would erase the
+  // evidence the next tick needs to see the loss.
+  if (cfgFp) state.configFp = cfgFp
 }
 // A relaunch beside a live writer is refused by the recorder's own lock and leaves a cmd window behind, so a
 // stale recorder whose process is still alive is reported, not relaunched. (2026-09-15: this tick and the

@@ -5629,3 +5629,187 @@ Odds API 278 of 645 credits today (09-19 came within one credit of the cap at 64
 `ruleN` 503, `ruleNet` +21.37, `gradedN` 1,034, `gradedBrier` 0.1254 mean; `anchor-grades.jsonl` gained 108 rows in
 24 h, whose own `rulePnl` sums to **-$0.91** - the anchor's out-of-sample rule gave back a little today, and its
 live arm is -$2.17 over 8.
+
+## §154 - 2026-09-22 11:20Z: the due read found an arm with nothing to grade, and the sentinel learned to look at the file the power loss destroyed
+
+### The day's standing fact: the trader is disarmed and blind, and only the operator can end that
+
+Nothing in this section changes that. The 2026-09-21T14:00:57Z power loss zero-filled
+`%APPDATA%/oracle-trader/kalshi-auto.json`; the app quarantined it and came up on `DEFAULT_CONFIG`, and it has been
+running that way for **21 hours**. Three API keys empty, `liveArmed` false, `enabled` false, `perfByStrategy`
+16 strategies -> 0. The diagnosis, the preserved pre-crash zip and the restore steps are in the repair incidents
+`2026-09-21T16-05-metaculus-stale.md` and `2026-09-22T04-05-metaculus-stale.md` and are not re-derived here. One
+thing WAS re-checked, because the whole restore depends on it: the preserved pre-crash zip is still on disk at
+45,335,442 bytes, sha256 `554aa64b17ae31a680c95d8b436044680174aec36662b3a88fc711947b55dda0`, byte-identical to
+`versions/state-20260921-094553.zip`, which has not yet aged out of the 72-hour rotation.
+
+Two consequences measured today that were not in those files:
+
+**The ladder read the wipe as seven panel switch-offs, and it will read the restore as seven switch-ons.**
+`ladder.ts:832-842` re-syncs a strategy's stage whenever `liveish(configStage) !== liveish(state.stage)`, and sets
+`operatorHold = !liveish(configStage)` in that branch. At 14:27:49-57Z on 09-21 it wrote seven rows reading
+`tiny-live -> disabled | manual change in the panel` (convergence to `shadow`; fade, cross-venue, dutch, lead-lag,
+mean-reversion, news to `disabled`) and set `operatorHold` on each. 17 of 20 strategies now carry the hold. **That
+half self-heals**: the same branch clears the hold the moment the config says live again, so the restore does not
+need the operator to re-tick seven boxes in the panel. What does not self-heal is the evidence - each of the seven
+took a fresh `captureBaseline()` against an empty `perfByStrategy`, so their live evidence restarts at the restore
+rather than continuing. That is the ladder's normal behaviour for a manual flip and is arguably the right answer for
+a trader that has been dark for a day; it is recorded here so it is not later read as a second defect.
+
+**The anchor's running totals are gone; its ledger is not.** `state.sportsShadow` and `state.sportsPollAt` (with the
+`__spentDay:` Odds API counters) were in the wiped file and read `null` today. `anchor-grades.jsonl` is a separate
+append-only file and is intact at **1,056 rows**, from which the totals rebuild exactly: `gradedN` 1,056,
+`gradedBrier` **0.1248**, `ruleN` 517, `ruleNet` **+20.61c** (+0.04c/contract). It gained **0 rows in 24 h** and its
+last grade is 2026-09-21T13:02:32Z - with `oddsApiKey` empty the anchor polls nothing and grades nothing, so Odds
+API spend today is **0 of 645**. The jsonl is the ledger of record and the totals are recoverable from it; nobody
+needs to reconstruct them by hand at the restore.
+
+### The due read: IBKR calibration slopes by category (backlog 155, registered for today)
+
+Round 121 (2026-09-18) replaced the single 1.15 log-odds slope with the Becker per-category slopes - 1.15 for
+`Elections` and `Government`, 1.0 everywhere else - and re-baselined the arm, prior statistics frozen under
+`calibration:pre-slopes-20260918`. Today's registered read is that re-baseline. **There is nothing to re-baseline,
+and the reason is structural rather than a shortage of days.**
+
+Post-change, over four days, `calibration` has **one open position and zero closed trades**: G16FL_110326_REP YES at
+$0.86 plus $0.01 fee, opened 2026-09-19T00:11:57.772Z, holds to settlement **2026-11-17**. `political-favorite` holds
+the identical position - same market, same side, same millisecond - and also has zero closed trades. The frozen
+`calibration:pre-slopes-20260918` cohort still shows 16 closed, +$0.13, **+0.81c/contract, band [-9.26, +10.89]**
+over 2 day-clusters: the lab's best mean and a band that spans zero, blocked by its own live-eligibility gate at
+16/30 closed and 8/10 events. So the post-slopes arm cannot be compared with the pre-slopes arm at all - it will
+produce its first graded contract in November.
+
+Why so little fires. The lab universe holds 281 ForecastEx markets, of which **17 are `Elections` or `Government`**
+(110 Financial Markets, 91 Economic Indicators, 42 Environmental, 12 Technology, 9 Conditional). Outside those 17
+the slope is 1.0, fair value equals the frame mid, and the entry rule (`estimate - ask - 0.02 >= -0.015`, i.e. fair
+at least 0.5c over the ask) can only be met by a crossed book - which is not a defect, it is the change working as
+designed, and it did fire three times on 09-18 on genuinely crossed Economic-Indicator books (`UNR_0926_4`,
+`PREMP_0926_10000`, `UHLAX_091926_78`).
+
+Inside the 17, the binding constraint is not the edge but `IBKR_HOLD_MAX_DAYS = 60`, which `add()` applies to
+`expiresAt` before any edge is evaluated. Replaying every political frame in
+`ibkr-lab.json.quotes-2026-09-{18,19,20,21}.jsonl` through the live rule (8,690 fresh frames):
+
+| contract | expiry | days out | eligible frames | best gap | verdict |
+|---|---|---|---|---|---|
+| HORC_1126_Republican  | 2027-01-04 | 104 | 0     | **+0.44c** | clears the bar, structurally excluded |
+| HORC_1126_Democratic  | 2027-01-04 | 104 | 0     | **+0.50c** | clears the bar, structurally excluded |
+| G16FL_110326_REP      | 2026-11-17 | 56  | 1,459 | -1.39c | clears the -1.5c bar; admitted |
+| G16FL_110326_DEM      | 2026-11-17 | 56  | 461   | -1.90c | eligible, never close |
+| G16FL_110326_JS       | 2026-11-17 | 56  | 422   | -2.46c | eligible, never close |
+| G16FL_110326_VB       | 2026-11-17 | 56  | 422   | -51.0c | locked 0.99/0.99 |
+| the other 11          | 2026-11-23 to 2027-01-04 | 62-104 | 0 | -1.52c to -7.25c | excluded and not close |
+
+**The two contracts that actually showed a recalibration edge are the two the window refuses.** HORC and SENM expire
+2027-01-04 (the new Congress is seated) and enter the 60-day window on **2026-11-05** - two days *after* the
+2026-11-03 election that decides them. A hold-to-settlement arm measured against `expiresAt` can therefore only
+enter a control-of-chamber contract once the result is known, which is not a test of a calibration slope at all.
+The constant's own comment says "the election contracts expire about 47 days out"; that is the distance to election
+day, while the code compares the **certification** date, 14 to 62 days later. The premise was wrong when it was
+written and the code has been correct-by-accident since.
+
+The other three products do enter the window before their election (AXXMI on 2026-09-24, MLAXG on 2026-10-12), so
+the arm is not dead - it is on a calendar. `G16FL_110326_REP` passed on 1,459 of its 1,459 eligible frames at an
+unchanged 0.85 ask; the per-day admission dedupe turned that into two entries (09-18, 09-19), one of which filled.
+**No change made today**: raising the window lets in contracts that cannot settle inside any reasonable test, and
+lowering it makes the arm emptier. The hypothesis needs a marked-to-market exit rather than a wider window, and that
+is a different arm with its own pre-registration - backlog **225**. The duplicate-hypothesis problem (since round
+121, `political-favorite` and `calibration` compute the same number on the same category and will report two copies
+of one result) is backlog **226**.
+
+Read as registered, recorded, and both follow-ups given triggers. Backlog 155 is retired from the queue.
+
+### Two more triggers that came due today
+
+**160, paid model callers (registered: read `model-usage` on 2026-09-22; confirm `nightly-review` shows a flash model
+with status 200 and no frontier model). PASS.** Today's review: one call, `deepseek/deepseek-v4-flash` on
+openrouter.ai, status 200, $0.0007. No `gpt-5.6-sol` call on 09-21 or 09-22. Yesterday's whole LLM spend was
+$0.0568 across 68 calls (63 of them gemini-3.8-flash/3.5-flash-lite critics on the free tier, 7 `deepseek-v4-pro`
+news vetting, 2 review). **One thing the pass hides**: on 09-21 the review used the operator's direct
+`api.deepseek.com` endpoint and fell back to the router once; today it went straight to the router, because
+`llmApiKey` was in the wiped file. The registered condition is met by a path that is itself a symptom.
+
+**204, sports-anchor freshness (registered: with today's IBKR read, or the anchor's first checkpoint).** Premise
+confirmed unchanged: `last_update` appears nowhere in `sportsAnchor.ts`'s 950 lines, and the local `bookmakers`
+type at `:130-133` does not even declare the field, so the Odds API's per-book timestamp is discarded at parse and
+freshness is measured from receipt. **Not fixed, by its own registration** - it changes what the arm trades and
+belongs with the anchor's own evidence - and the arm has had no input at all since the key was lost. Trigger
+re-pointed at the anchor's first checkpoint.
+
+### The build: the sentinel now looks at the file that was destroyed (backlog 224c)
+
+The 18-hour silence had one mechanical cause: **nothing in `scripts/sentinel.mjs` read `kalshi-auto.json`.** Every
+liveness light stayed green because every one of them watches a different file. The signal that eventually fired was
+an hourly shadow's stale mtime, filed under `metaculus-stale` - the symptom's name - two hours late.
+
+New `scripts/lib/config-watch.mjs` (a separate module for the reason `lib/task-watch.mjs` is: `sentinel.mjs` runs a
+live tick on import and cannot otherwise be asserted). Three signatures, because each covers a case the others do
+not:
+
+- `config-quarantined` (repair): any `*.corrupt-<epoch>` file in the user-data directory newer than the last tick.
+  Fires within 15 minutes of `JsonStore.load()` taking the quarantine path - it would have caught 09-21 at 14:25Z.
+- `config-wiped` (repair): a watched field that was present at the previous tick and is empty now, or
+  `perfByStrategy` falling from N>0 to zero. `openTrades` is deliberately **not** a trigger: it reached zero
+  legitimately over the 18 hours after the wipe as the book settled, and a settled book must never look like a
+  destroyed file.
+- `config-defaulted` (notify): the standing note for the hours and days after the transition - a config that is
+  structurally the app's fresh default while `ladder.json`, a separate file that survived, still holds strategies
+  with history. That second half is what keeps it quiet on a genuinely new install, and it is why this one fires
+  with **no stored baseline at all** - a sentinel restarted in the middle of an unrepaired outage has no previous
+  tick to compare against, which is exactly how 18 hours passed.
+
+No key value is read, returned, stored or logged anywhere in the module: a key is a boolean, present or not, and the
+fingerprint is written to `data/sentinel/state.json` every tick, so the test asserts that directly. A failed or
+unparseable read returns `null` and decides nothing rather than reporting everything as lost (audit B-54's third
+value), and only a successful read updates the stored baseline - overwriting it from a failed read would erase the
+evidence the next tick needs.
+
+Verified. New suite `npm run test:config-watch`, 38 assertions, the 09-21 wipe reproduced from counts only.
+Typecheck clean, build clean, `npm test` **22/22 suites**. Live against the real damaged file: `node
+scripts/sentinel.mjs --dry` now reports `[notify] The auto-trader is running on a default config -
+kalshi-auto.json has no metaculusApiKey/oddsApiKey/llmApiKey/alertWebhookUrl and an empty perfByStrategy, while
+ladder.json still holds 20 strategies with history`, and `configLoss` against the counts published in the 16-05
+incident returns the whole event - four fields empty, `perfByStrategy 16 -> 0`, `liveArmed true -> false`. The two
+older quarantine files correctly did **not** fire (they predate the tick window) and `config-wiped` correctly did
+not (there is no stored baseline yet).
+
+**No restart.** Nothing in `src/` changed; the whole diff is one new script module, five lines of wiring and a test.
+Restarting the app now would also land in front of the operator's restore, which needs it stopped.
+
+**Still open, and not attempted today**: 224(a), `JsonStore.load()` logging `[json-store] load failed: {}` with
+neither the file nor the reason (`src/main/store/json.ts:55`), and 224(b), `alertWebhookUrl` living in the very file
+that gets wiped, so the app's own push path dies with the state it should be reporting. Both need a build and a
+restart; (b) also needs a webhook stored somewhere this session is not allowed to copy it to. They stay on 224 with
+the restore as their trigger.
+
+### The rest of the board
+
+**HRRR vs NBM, day 5 (registered daily since 2026-09-21).** HRRR still ahead on 405 paired daily-high forecasts:
+MAE **1.93** vs 2.25, bias -0.29 vs -1.27, closer on 216 against 177 with 12 ties. The verdict that moved the
+weather fair value to HRRR yesterday holds.
+
+**Mention shadow.** 96,346 observation rows, 692 strikes, **119 graded** (the go-live trigger's count is met; its
+date, 2026-09-25, is not). The evidence is against it: base-rate Brier **0.2390 against the market's 0.1447**, and
+the 15c-gap counterfactual taker is **-4.74c/contract over 42 trades**. Both sub-corpora agree (fed 0.1716 vs
+0.0959, trump-period 0.2846 vs 0.1776). A base rate that is worse than the price is not a signal.
+
+**Polymarket consensus shadow.** 13,567 signals, 157,651 graded, hit rate 0.72 at a mean price of 0.71, Brier
+0.0907; +4.63c/contract at the Kalshi ask net of fee over 1,436 matched and +4.37c at the Polymarket US price over
+24,474. Concentrated in btc (n=46,825, +0.88c) and `highest` (n=29,154, +0.59c); mlb, wta and atp are negative. Its
+go-live trigger (build-queue 13) is unchanged and not met today.
+
+**Gates.** BTC convergence FAIL/NOT-YET: 358 events, 970 graded strike-trades, net 0.00c, Bonferroni lower bound
+-2.26c against a +1c bar. Quoter shadow: insufficient sample for the allowed cohort (51 settled proxy fills over 27
+events, needs 30/40); the blocked cohort remains -4.39c over 1,211 with a band of [-6.89, -1.88], which still says
+the gates refuse quotes that would have lost.
+
+**Venue-true, last 24 h.** Kalshi **-$6.11** after $0.17 fees over 28 settlements - all of them pre-crash positions
+settling unbooked against an empty ledger, which is why the app's own P&L shows nothing. Cash $71.66, 4 open
+positions at $3.91 cost ($5.23 at market), 1 resting order. Polymarket US **$0.00**, 0 resolutions, balance $39.85.
+The one resting Kalshi order is the pre-crash `KXHORMUZMAX-26SEP20-SEP17` sell/no 1.10 @ $0.09 that nothing is
+managing; it expires by itself at 2026-09-22T12:52Z and this session does not cancel orders.
+
+**IBKR paper lab: paused, not broken.** `ibkr-lab.json` `lastScanAt` is 2026-09-21T14:00:50.728Z at scan 9,953 - the
+IB Gateway died with the host and nothing on this box starts it (backlog 120; no `ibgateway`/java process, 4001 and
+4002 refusing). Read from the lab's own file rather than the log's silence, as 120 requires. It resumes by itself
+when the operator logs in.

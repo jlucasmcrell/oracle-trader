@@ -91,6 +91,50 @@ open is folded in here with its reason. Done items are removed, not ticked.
 
 ## Recently done (so nobody re-does them)
 
+2026-09-22 (daily maintenance, §154): **155 READ and retired.** The round-121 per-category slopes were built on
+09-18; today's registered read of the re-baselined `calibration` and `political-favorite` found there is nothing to
+re-baseline and the reason is structural. Both arms hold ONE position between them - the same market, side and
+millisecond (G16FL_110326_REP YES @ $0.86, opened 2026-09-19T00:11:57Z, settles 2026-11-17) - and zero closed
+trades; the frozen `calibration:pre-slopes-20260918` cohort still reads 16 closed, +0.81c/contract, band
+[-9.26, +10.89]. 17 of the lab's 281 markets are `Elections`/`Government`; outside them the 1.0 slope makes fair
+value equal the mid and only a crossed book can enter (it did, three times on 09-18). Inside them the binding
+constraint is `IBKR_HOLD_MAX_DAYS = 60` applied to `expiresAt`: replaying all 8,690 political frames of 09-18 to
+09-21 through the live rule, the only two contracts whose recalibration gap ever cleared the bar
+(HORC_1126_Republican +0.44c, HORC_1126_Democratic +0.50c) are 104 days out and enter the window on 2026-11-05,
+two days AFTER the election that decides them. The constant's comment ("about 47 days out") measures to election
+day; the code compares the certification date, 14 to 62 days later. No change made - the fix is a marked-to-market
+exit, not a wider window (**225**), and `political-favorite` is now a duplicate of `calibration` on that category
+(**226**).
+
+2026-09-22 (daily maintenance, §154): **160 READ, PASS, that half retired.** `nightly-review` today is one call to
+`deepseek/deepseek-v4-flash` on openrouter.ai, status 200, $0.0007; no `gpt-5.6-sol` on 09-21 or 09-22; the whole of
+yesterday's LLM spend was $0.0568 over 68 calls. Noted: it reached the router directly rather than via the
+operator's `api.deepseek.com` endpoint because `llmApiKey` was in the wiped file - the condition passes through a
+path that is itself a symptom. The remaining paid callers (hunch-challenger, news vetting) are the operator's.
+
+2026-09-22 (daily maintenance, §154): **224(c) DONE.** `scripts/lib/config-watch.mjs` + `npm run test:config-watch`
+(38 assertions) give the sentinel three signatures on `kalshi-auto.json` it never had: `config-quarantined` (a new
+`*.corrupt-<epoch>` since the last tick), `config-wiped` (a watched field present last tick and empty now, or
+`perfByStrategy` N>0 -> 0; `openTrades` is deliberately not a trigger), and `config-defaulted` (a structurally
+default config while `ladder.json` still holds strategies with history - the one that fires with no stored
+baseline, which is how 18 hours passed). No key value is read, returned or stored; the test asserts that. Verified
+live: the `--dry` tick now names the real cause instead of `metaculus-stale`. (a) and (b) stay open on 224.
+
+2026-09-21 (repair session, incident 2026-09-21T13-35): the hourly state backup no longer locks the files the
+app is appending to. `shutil.copy2` on Windows goes through the Win32 `CopyFile2` API, which opens the source
+with `FILE_SHARE_READ` only, so for the length of each copy every write from another process fails with a
+sharing violation - Node reports it as EBUSY. That is what dropped five cf-reference observations at
+13:20:02.78Z, 1.3 s into the `OracleTrader-StateBackup` run that mirrored that exact 42 MB day file. The same
+collision on `order-journal.jsonl` (mirrored AND zipped every hour) would have latched `Order journal write
+failed; submissions blocked` until a restart, which is why the backup was fixed rather than the shadow log's
+warn suppressed. New `scripts/lib/win_share.py` (`open_shared` via `CreateFileW` with all three share flags,
+`copy_shared` as a `copy2` drop-in); `state-backup.py` uses it for the mirror, the sha verification and the
+versioned zip, and `backup.py` for its one `z.write`. A/B on a live-appended 24 MB file: copy2 6,288 and 6,655
+failed appends, copy_shared 0 and 0. New suite `npm run test:backup-share` (4 scenarios, fails on the pre-fix
+path); typecheck, build, review-fixes 548/0, ladder 168/0, adversarial 89/0. Verified live against the
+production task: 35,703 appends to a probe file in `%APPDATA%` during the 13:45:52Z run, 0 failures. No app
+code changed, so no restart. Follow-up: 223 (the appenders themselves still drop or latch on a locked file).
+
 2026-09-21 (repair session, incident 2026-09-20T23-50): the autoTrader scan loop can no longer wedge forever.
 `tick()`'s `busy` flag is a plain boolean cleared in a `finally`, so a scan that THROWS releases it but a scan
 that never SETTLES does not - on 2026-09-20 the 21:12:17Z tick stalled during a host freeze (the whole process
@@ -1057,8 +1101,11 @@ incident file lists more than ~5 near-identical signatures.
   list cache, so the gap can be composed of two stale halves and is never re-derived before execution. Bounded
   today because the arm is maker-first and rests 1c inside the live book, so only the taker fallback can execute
   on a stale gap. The fix is plumbing (`last_update` through `lineConsensus`, a fresh book read before the taker
-  fallback) and it changes what the arm trades, so it belongs with the anchor's own evidence. Trigger: with the
-  **2026-09-22** IBKR calibration read, or the anchor's first checkpoint, whichever comes first.
+  fallback) and it changes what the arm trades, so it belongs with the anchor's own evidence. **Read 2026-09-22
+  (§154): premise confirmed, not fixed, by the registration's own terms.** `last_update` appears nowhere in
+  `sportsAnchor.ts`'s 950 lines and the local `bookmakers` type at `:130-133` does not declare the field, so the
+  Odds API timestamp is discarded at parse. The arm has had no input at all since `oddsApiKey` was lost on 09-21.
+  Trigger re-pointed at the anchor's first checkpoint.
 - **205. A partial maintenance run suppresses the day's catch-up (2026-09-20, seen this morning).** The 09-19
   07:00 headless run exited 0 after deciding to wait for a background cull-gate, so `maintenance.ps1`'s
   per-day guard ("today's maintenance already completed (exit 0 in log)") skipped the 11:30 catch-up, and
@@ -2000,8 +2047,6 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 153. **Polymarket US maker rebate in the paper lab (trigger: 2026-09-19).** Credit 0.0125 x p(1-p) on `join`/`improve`
     fills (documented formula, paid at trade); keep the liquidity program out; re-baseline both arms.
 154. **Polymarket US consensus and sports-anchor paper arms (trigger: 148/1 has a week).** Both signals exist.
-155. **IBKR calibration slopes by category (trigger: 2026-09-22).** Replace the single 1.15 with the Becker per-
-    category slopes; re-baseline `calibration` and `political-favorite`.
 156. **Watch the catalog walk's gateway load (trigger: 2026-09-19, one day after `1388cb7` first runs).** The
     background full-catalog walk added 2026-09-18 (§118, `polymarketUs.ts` `refreshCatalog`) fires up to 2,000
     gateway GETs paced 120 ms (~500 req/min) every 30 min. Hours before it was committed, that same gateway
@@ -2076,8 +2121,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **160. OpenRouter spend (§127, Minimax F-28). PARTLY DONE 2026-09-19 (§128).** Per-caller metering exists
   (`model-usage`). The nightly review now runs on the operator's deepseek-flash endpoint with the router flash
   model as first fallback; gpt-5.6-sol is no longer in its path. Remaining paid callers: hunch-challenger
-  (gpt-5.6-sol) and news vetting (deepseek-v4-pro) - operator's. Trigger: read `model-usage` on **2026-09-22**;
-  confirm `nightly-review` shows a flash model with status 200 and no frontier model.
+  (gpt-5.6-sol) and news vetting (deepseek-v4-pro) - operator's. **Read 2026-09-22 (§154): PASS** - one
+  `deepseek/deepseek-v4-flash` call, status 200, $0.0007, and no frontier model on either day. The registered
+  condition is retired; the two operator-owned paid callers are all that is left of this item and they carry no
+  trigger.
 - **161. Lead-lag coin cohort forward window (§127, ChatGPT F-03).** Frozen from 2026-09-19 00:00Z; read at >= 400
   contracts and >= 5 day-clusters as one cohort (**2026-09-24** at the earliest). No membership change before then.
 - **162. Cross-series implication pairs (§129, Gemini Pro F-05 / Flash F-14).** Backlog 76 covered one ladder; this
@@ -2508,3 +2555,64 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   runId); add a SEPARATE reported line - wall-clock minutes covered per UTC day, from the row timestamps - and
   judge the run against both at its verdict. Trigger: **before the run's 2026-10-17 verdict**, i.e. read on
   **2026-10-10**.
+- **223. Three appenders lose (or latch on) a write the moment anything else holds their file
+  (2026-09-21, repair session, incident 2026-09-21T13-35).** `cfReferenceShadow.ts:56` catches a failed
+  `appendFileSync` and logs it as `observation rejected`, the same words it uses for a malformed frame, and the
+  observation is gone; `orderJournal.save()` (`store/orderJournal.ts:69-73`) and `fillReconciler`
+  (`store/fillReconciler.ts:166-169`) instead latch a PERMANENT failure (`submissions blocked`,
+  `Execution archive write failed`) that only a restart clears. The cause on this box - the hourly backup's
+  `shutil.copy2` - was removed today, so nothing routinely holds those files any more; an antivirus scan or an
+  operator copying a log still can. Fix: retry-then-queue the line in cf-reference (no sleeping in the WS
+  handler), and make the two latching paths distinguish a transient sharing violation from a real write
+  failure. Not done in the repair session because it is a second behavioural change on a path that was not the
+  incident's cause. Trigger: **the next EBUSY/EPERM append signature in main.log**, or the next time any of
+  these three files is touched.
+
+- **224. A power loss wiped the trader's state and nothing raised an alarm for 18 hours (2026-09-22).** The unclean
+  shutdown at 2026-09-21T14:00:57Z zero-filled `kalshi-auto.json`; the app quarantined it correctly and came up on
+  defaults - disarmed, no keys, empty ledger - which is the safe direction, but the only signal was an hourly
+  shadow's stale file, filed as incident `2026-09-21T16-05-metaculus-stale.md` under the symptom's name rather than
+  the cause's, and the restore it handed to the operator then sat for 16 more hours. Three gaps: (a)
+  `JsonStore.load()` logs `[json-store] load failed: {}` (`src/main/store/json.ts:55`), naming neither the file nor
+  the reason, where `loadJsonOrQuarantine` (`:25`) already builds a legible line; (b) `alertWebhookUrl` lives in the
+  same file that was wiped, so the app's own alert path dies with the state it should be reporting - the alarm has
+  to come from the sentinel or from a webhook stored outside `kalshi-auto.json`; (c) no sentinel check exists for
+  `config.enabled`/`liveArmed` false while `[kalshi] positions merged` is non-zero, or for a new
+  `kalshi-auto.json.corrupt-*`. Also noted: the ladder read the wipe as the operator switching seven live arms off in
+  the panel and set `operatorHold` on each (all were unset before the crash), so a state loss silently becomes an
+  operator decision. Trigger: **at the pre-crash restore** (it needs a restart anyway), and no later than
+  **2026-09-24**.
+  **(c) DONE 2026-09-22 (§154):** `scripts/lib/config-watch.mjs` gives the sentinel three signatures on that file -
+  `config-quarantined`, `config-wiped` and `config-defaulted` - with `npm run test:config-watch` (38 assertions) and
+  a live `--dry` tick that now names the cause instead of `metaculus-stale`. No key value is read or stored.
+  **(a) and (b) remain**, both needing a build and a restart that must not land in front of the operator's restore;
+  (b) additionally needs a webhook held outside `kalshi-auto.json`, which is the operator's to place.
+  **Measured 2026-09-22:** the ladder wrote seven `manual change in the panel` rows at 14:27:49-57Z on 09-21 and set
+  `operatorHold` on each, but `ladder.ts:842` clears that hold the moment the config says live again - so the
+  restore does not need the operator to re-tick seven boxes. What does not come back is the evidence: each of the
+  seven re-baselined against an empty `perfByStrategy` and will re-baseline again at the restore.
+
+- **225. The IBKR recalibration hypothesis cannot be graded by a hold-to-settlement arm (2026-09-22, §154, from
+  the 155 read).** `calibration` and `political-favorite` hold to settlement, and `add()` refuses any contract whose
+  `expiresAt` is more than `IBKR_HOLD_MAX_DAYS = 60` away (`ibkrSignals.ts:56,82`). On ForecastEx that date is the
+  CERTIFICATION date, not election day: the two contracts whose recalibration gap actually cleared the bar over
+  09-18 to 09-21 (HORC_1126_Republican +0.44c, HORC_1126_Democratic +0.50c) expire 2027-01-04 and enter the window
+  on 2026-11-05, two days after the 2026-11-03 election decides them. The one contract that did trade
+  (G16FL_110326_REP) settles 2026-11-17, so the re-baselined arm produces its first graded contract in November.
+  Widening the window is the wrong fix - it admits contracts that can never settle inside a test. The right shape
+  is a SEPARATE arm with a marked-to-market exit (a fixed horizon, or an exit at the venue mid), which is a
+  different hypothesis and needs its own pre-registration and its own cohort constant (`IBKR_RULES_SINCE`, item
+  135). Do NOT change `IBKR_HOLD_MAX_DAYS`. Trigger: **2026-10-12**, when MLAXG_110326 enters the window and the
+  arm has a pre-election political contract it can actually hold - read then whether any entry fired, before
+  designing the exit arm.
+- **226. `political-favorite` has been a duplicate of `calibration` since round 121 (2026-09-22, §154).**
+  `ibkrSignals.ts:97-104` computes `fair` with `calibrationSlope(category)` and `politicalFair` with a hardcoded
+  1.15, then runs `political-favorite` only when the category matches `/Election|Government/i` - exactly the
+  categories for which `CALIBRATION_SLOPE` is now 1.15. The two numbers are identical on every market where the
+  second arm is allowed to run, at the same -0.015 threshold, so they emit the same signal on the same side: both
+  entered G16FL_110326_REP YES at the same millisecond (`openedAt` 1789776717772) and the lab will report two
+  copies of one result as if they were two arms. Before round 121 the arms were genuinely different (1.15 on
+  politics against 1.15 on everything). Fix is one of: retire `political-favorite` into `IBKR_RETIRED` with this
+  note, or give it the distinct hypothesis its name implies (a favorite filter, e.g. only the side above 0.5).
+  Not done today: it changes what an arm trades and the lab has one open position in each, so it belongs with the
+  225 design. Trigger: **with 225**, or the first time either arm's ledger is read for a verdict.
