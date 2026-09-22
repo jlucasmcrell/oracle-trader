@@ -187,6 +187,7 @@ const DEFAULT_CONFIG: AutoTraderConfig = {
   fadeEntryMode: 'maker',
   fadeMinEdgeCents: 1.5,
   fadeMinHorizonMinutes: 60,
+  fadeMaxCryptoPerCloseHour: 1,
   // Mirror side of the same calibrated bias (thinner evidence → 2× padding).
   // Evidence: 62-day point-in-time replay (2026-09-02, family-capped) put the
   // favorite leg at maker -8.42c / taker -10.28c, negative at every clustering
@@ -403,6 +404,7 @@ export function capacityKey(reason: string): string | undefined {
   if (reason.startsWith('per-market entry cap')) return 'per-market-cap'
   if (reason.startsWith('re-entry lockout')) return 're-entry-lockout'
   if (reason.startsWith('momentum: one entry')) return 'momentum-one-per-day'
+  if (reason.startsWith('crypto close-hour full')) return 'crypto-close-hour'
   return undefined
 }
 
@@ -2947,6 +2949,19 @@ export class AutoTrader {
           this.state.pendingOrders.filter((p) => underlyingOf(p.marketId) === u).length
         if (held >= cfg.maxPerUnderlying) return `underlying ${u} full (${held}/${cfg.maxPerUnderlying})`
       }
+    }
+    // fade's correlated tail (fade v3). underlyingOf counts crypto:BTC, crypto:ETH ... separately, so four coins'
+    // dailies closing the same hour pass the cap above as four bets. They are one bet on crypto direction: on
+    // 2026-09-21 BTC/ETH/SOL/DOGE fade positions closing 17:00 ET lost together, most of the sample that stopped fade.
+    const cryptoPerHour = cfg.fadeMaxCryptoPerCloseHour ?? 1
+    if (sig.strategy === 'fade' && cryptoPerHour > 0 && sig.closeTime !== undefined && (underlyingOf(sig.marketId) ?? '').startsWith('crypto:')) {
+      const hour = Math.floor(sig.closeTime / 3_600_000)
+      const sameHourCrypto = (marketId: string, closeTime: number | undefined): boolean =>
+        closeTime !== undefined && Math.floor(closeTime / 3_600_000) === hour && (underlyingOf(marketId) ?? '').startsWith('crypto:')
+      const held =
+        this.state.openTrades.filter((t) => t.strategy === 'fade' && sameHourCrypto(t.marketId, t.closeTime)).length +
+        this.state.pendingOrders.filter((p) => p.strategy === 'fade' && sameHourCrypto(p.marketId, p.closeTime)).length
+      if (held >= cryptoPerHour) return `crypto close-hour full (${held}/${cryptoPerHour} fade positions on crypto closing that hour)`
     }
     // Horizon-mix cap: long-dated entries (>24h to settle) may only use a
     // few slots — the rest stay free for the intraday rotation, which is

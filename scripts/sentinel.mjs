@@ -27,6 +27,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
+import net from 'node:net'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
 import { WATCHED_KEYS, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from './lib/config-watch.mjs'
 import { recorderPids } from './recorder-lock.mjs'
@@ -553,6 +554,35 @@ try {
   ollama = 'down'
 }
 if (ollama !== 'up') add('ollama-down', 'notify', `Ollama ${ollama}`, 'The review, critic and hunches fall back to OpenRouter/DeepSeek; restart Ollama when convenient.')
+// IB Gateway: the IBKR lab needs it and nothing watched it (23,066 "Gateway API not available" warnings from
+// 2026-09-17 to 09-22; the operator found it down by looking). A logged-out or closed gateway does not listen, so
+// a bare TCP connect answers the question. Two consecutive down ticks before paging, so the gateway's own nightly
+// auto-restart (about a minute) never alerts; the findings throttle then caps it at one push per 6 h.
+const probePort = (port) => new Promise((resolve) => {
+  const s = net.createConnection({ host: '127.0.0.1', port })
+  const done = (ok) => { s.destroy(); resolve(ok) }
+  s.setTimeout(2000, () => done(false))
+  s.once('connect', () => done(true))
+  s.once('error', () => done(false))
+})
+let gateway = 'unknown'
+try {
+  const [live, paper] = await Promise.all([probePort(4001), probePort(4002)])
+  gateway = live || paper ? 'up' : 'down'
+} catch {
+  gateway = 'unknown'
+}
+if (gateway === 'down') {
+  state.gatewayDownTicks = (state.gatewayDownTicks ?? 0) + 1
+  state.gatewayDownSince = state.gatewayDownSince ?? now
+  if (state.gatewayDownTicks >= 2) {
+    add('ibkr-gateway-down', 'notify', 'IB Gateway is down - log in to restart the IBKR lab',
+      `No API listener on 127.0.0.1:4001 or :4002 for ${Math.round((now - state.gatewayDownSince) / 60000)} min (${state.gatewayDownTicks} checks). The IBKR paper lab is dark until the gateway is running and logged in.`)
+  }
+} else if (gateway === 'up') {
+  state.gatewayDownTicks = 0
+  state.gatewayDownSince = null
+}
 let diskFreeGb
 try {
   const s = fs.statfsSync('G:/')
@@ -649,6 +679,7 @@ const summary = {
   review: latest ? { date: latest.date, error: latest.error ? String(latest.error).slice(0, 120) : null, attempts: latest.attempts } : null,
   openrouterCredit: credits ?? null,
   ollama,
+  gateway,
   diskFreeGb: diskFreeGb ?? null,
   tasks,
   findings: findings.map((f) => ({ key: f.key, kind: f.kind, title: f.title })),

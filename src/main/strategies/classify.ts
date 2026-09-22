@@ -97,6 +97,18 @@ export function weatherSeatBlock(strategy: string, marketId: string): string | n
   return 'weather series: maker seat measured at -1.70c/contract and no arm evidence in this class'
 }
 
+/**
+ * Price-level markets on physical commodities and retail fuel. fade lost on them as a class in its own record: $3.93
+ * on 26 commodity markets (81% won at 90-97c) and $0.45 on 11 retail gas/diesel markets, against small gains nearly
+ * everywhere else (REVIEW-CHANGES section 157, PREREGISTERED-fade-v3). Matched on the full series segment so
+ * KXGOLDENGLOBES-style names can never collide with KXGOLD.
+ */
+const COMMODITY_SERIES = /^KX(WTI|BRENT|NATGAS|COPPER|GOLD|SILVER|PLATINUM|PALLADIUM|CORN|WHEAT|SOYBEAN|COFFEE|SUGAR|COTTON|COCOA|LUMBER)(D|W|M|Y|H|15M|MON)?$|^KX(AAAGAS|DIESEL)[A-Z]*$/
+export function isCommoditySeries(m: ClassifiableMarket): boolean {
+  const series = (m.seriesTicker ?? (m.id ?? '').split('-')[0]).toUpperCase()
+  return COMMODITY_SERIES.test(series) || /commodit/i.test(m.category ?? '')
+}
+
 export function fadeCategoryBlock(
   m: ClassifiableMarket,
   horizonMin: number,
@@ -105,16 +117,21 @@ export function fadeCategoryBlock(
   const c = (m.category ?? '').toLowerCase()
   const q = m.question ?? ''
   const near = horizonMin < 48 * 60
+  const weather = /weather|climate|temperature/.test(c) || isWeatherSeries(m) || WEATHER_WORDS.test(q)
   const group =
     /crypto/.test(c) || CRYPTO_WORDS.test(q)
       ? 'crypto'
-      : /financ|econom|compan/.test(c) || FINANCE_WORDS.test(q)
-        ? 'finance'
-        : /entertain|culture|music|movie|film|award/.test(c) || ENTERTAINMENT_WORDS.test(q)
-          ? 'entertainment'
-          : near && (/weather|climate|temperature/.test(c) || isWeatherSeries(m) || WEATHER_WORDS.test(q))
-            ? 'weather<48h'
-            : null
+      : isCommoditySeries(m)
+        ? 'commodities'
+        : /financ|econom|compan/.test(c) || FINANCE_WORDS.test(q)
+          ? 'finance'
+          : /entertain|culture|music|movie|film|award/.test(c) || ENTERTAINMENT_WORDS.test(q)
+            ? 'entertainment'
+            : weather
+              ? near
+                ? 'weather<48h'
+                : 'weather' // fade v3: beyond 48 h too - the weather seat is measured negative at every horizon
+              : null
   return group !== null && exceptions.includes(group) ? null : group
 }
 

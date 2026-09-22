@@ -266,6 +266,8 @@ export interface AutoTraderConfig {
    * simply correct, so lowering this trades outside the validated evidence.
    */
   fadeMinHorizonMinutes: number
+  /** fade v3: at most this many fade positions on crypto underlyings closing in the same clock hour (0 = no cap). */
+  fadeMaxCryptoPerCloseHour?: number
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
   /** Allow settlement-convergence to execute with REAL money (it is a paper experiment until proven). */

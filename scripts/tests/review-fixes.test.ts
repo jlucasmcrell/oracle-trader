@@ -553,8 +553,20 @@ eq('weather series: crypto is not weather', isWeatherSeries({ id: 'KXBTCD-26SEP0
 // The live miss: no category on the market (cold cache) and a title that says "rain", not "rainfall".
 eq('rain inside 48h is blocked with a cold category cache',
   fadeCategoryBlock({ id: 'KXRAIN-26SEP08-AUS', question: 'Will it rain in Austin on Sep 8?' }, 8 * 60), 'weather<48h')
-eq('rain beyond 48h is not blocked',
-  fadeCategoryBlock({ id: 'KXRAIN-26SEP08-AUS', question: 'Will it rain in Austin on Sep 8?' }, 72 * 60), null)
+// fade v3 (2026-09-22): weather is blocked at every horizon; beyond 48 h it carries its own group name so the veto
+// ledger can still tell the two apart. Until v3 this asserted null.
+eq('rain beyond 48h is blocked too (fade v3)',
+  fadeCategoryBlock({ id: 'KXRAIN-26SEP08-AUS', question: 'Will it rain in Austin on Sep 8?' }, 72 * 60), 'weather')
+// fade v3: commodity and retail-fuel price-level series are their own blocked group, whatever their category says.
+eq('fade v3: every commodity series fade traded is blocked',
+  ['KXWTI', 'KXWTIW', 'KXBRENTD', 'KXNATGASD', 'KXNATGASMON', 'KXCOPPERD', 'KXCOPPERW', 'KXGOLDD', 'KXGOLDW', 'KXSILVERD', 'KXSILVERW', 'KXSILVERMON', 'KXAAAGASD', 'KXAAAGASDCA', 'KXAAAGASW', 'KXDIESELD']
+    .map((s) => fadeCategoryBlock({ id: `${s}-26SEP2217-T1` }, 12 * 60)),
+  new Array(16).fill('commodities'))
+eq('fade v3: a GOLD-prefixed non-commodity series is not a commodity', fadeCategoryBlock({ id: 'KXGOLDENGLOBES-27JAN-X', question: 'Golden Globes best picture?' }, 12 * 60), null)
+eq('fade v3: politics and crypto are unchanged',
+  [fadeCategoryBlock({ id: 'KXTRUMPAPPROVE-26SEP22-B42', question: 'Trump approval above 42?' }, 12 * 60),
+    fadeCategoryBlock({ id: 'KXBTCD-26SEP2217-T115000', category: 'Crypto' }, 12 * 60, ['crypto'])],
+  [null, null])
 
 // ---- weather SEAT block: the generic arms stay out of the ladders entirely ----
 // 2026-09-09: mean-reversion, newly on the maker path, rested into three KXLOWT

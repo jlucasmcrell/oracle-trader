@@ -9,7 +9,7 @@ import { HistoryStore } from '../../src/main/store/history'
 import { FillReconciler } from '../../src/main/store/fillReconciler'
 import { HttpError, RateLimiter } from '../../src/main/util/http'
 import { PolymarketUsAdapter, usCashPnl } from '../../src/main/venues/polymarketUs'
-import { AutoTrader, restIsStale } from '../../src/main/strategies/autoTrader'
+import { AutoTrader, capacityKey, restIsStale } from '../../src/main/strategies/autoTrader'
 import { cfObservation } from '../../src/main/venues/cfReferenceShadow'
 import { loadJsonOrQuarantine } from '../../src/main/store/json'
 import { LeadLagEngine } from '../../src/main/strategies/leadLag'
@@ -269,6 +269,28 @@ async function main() {
     t.killSwitchCheck = () => { kill++; return 'kill-switch: test' }
     assert.equal(t.entryBlocked({ strategy: 'fade', marketId: 'KXX' }, { tradingActive: true, balance: 50 }), 'kill-switch: test')
     assert.equal(kill, 1, 'with a balance the kill switch is judged')
+  })
+  await test('fade v3: one fade position per clock hour across ALL crypto coins, not one per coin', () => {
+    const H = (Math.floor(Date.now() / 3_600_000) + 2) * 3_600_000
+    const t: any = Object.create(AutoTrader.prototype)
+    t.config = { stopEntry: false, maxDailyLossPct: 20, maxOpenPositions: 60, maxDailyTrades: 200, maxPerUnderlying: 4, maxLongHorizonPositions: 4 }
+    t.state = {
+      openTrades: [{ id: 'a', marketId: 'KXBTCD-26SEP2217-T115000', strategy: 'fade', closeTime: H + 60_000, outcome: 'NO', shares: 1, amount: 0.95 }],
+      pendingOrders: [], daily: { date: '', count: 0 }, dailyPnl: { date: '', realized: 0, tripped: false }
+    }
+    t.engine = { getExecutionMode: () => 'paper' }
+    t.venueLedgerStale = () => false
+    t.killSwitchCheck = () => null
+    t.subEngineHolds = () => false
+    t.churn = new Map()
+    const gate = (sig: any): string => t.entryBlocked(sig, { tradingActive: true, balance: 60 }) ?? ''
+    assert.match(gate({ strategy: 'fade', marketId: 'KXETHD-26SEP2217-T4500', closeTime: H + 60_000 }), /^crypto close-hour full/, 'a second coin closing the same hour is the same bet')
+    assert.doesNotMatch(gate({ strategy: 'fade', marketId: 'KXETHD-26SEP2218-T4500', closeTime: H + 3_660_000 }), /crypto close-hour/, 'the next hour is a different bet')
+    assert.doesNotMatch(gate({ strategy: 'fade', marketId: 'KXTRUMPAPPROVE-26SEP22-B42', closeTime: H + 60_000 }), /crypto close-hour/, 'non-crypto is untouched')
+    assert.doesNotMatch(gate({ strategy: 'mean-reversion', marketId: 'KXETHD-26SEP2217-T4500', closeTime: H + 60_000 }), /crypto close-hour/, 'other arms are untouched')
+    t.config.fadeMaxCryptoPerCloseHour = 0
+    assert.doesNotMatch(gate({ strategy: 'fade', marketId: 'KXETHD-26SEP2217-T4500', closeTime: H + 60_000 }), /crypto close-hour/, '0 switches the cap off')
+    assert.equal(capacityKey('crypto close-hour full (1/1 fade positions on crypto closing that hour)'), 'crypto-close-hour', 'the veto is graded like every capacity veto')
   })
   await test('B-25: a lost exit response is booked from the recovered order, not retried, settled or dropped', async () => {
     const mk = (over: Partial<any> = {}) => {
