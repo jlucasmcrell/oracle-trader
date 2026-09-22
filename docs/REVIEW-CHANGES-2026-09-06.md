@@ -6029,3 +6029,52 @@ and whether any of it is left at our speed is backlog 227's question.
 
 Scripts added: `scripts/backtests/spot_basis_regrade.py`, `scripts/backtests/fade_by_family.py`. Script changed:
 `scripts/spot-shadow-gate.mjs` (one filter on a descriptive line). Nothing in the app changed; no restart.
+
+## §158 - 2026-09-22 21:00Z: "get us back to profitable" - what was built, what was measured, and what the evidence allows
+
+The operator: "IBKR is back up. I hate that gateway, it does not seem to stay running. Do whatever you can to get us
+back to profitable. I cannot imagine the people that are winning have come up with some magic the smartest AI's in
+the world can't figure out."
+
+### Built and live
+
+- **fade v3** (`docs/PREREGISTERED-fade-v3.md`, deployed 20:42:25Z, commit fb4cc5d): commodities, retail fuel and
+  weather at every horizon blocked; one fade position on crypto per close hour across coins. Judged only on entries
+  from the restart; read on or after 2026-10-06 at 40 settled over 5 days. Seven maker rests placed in its first
+  minutes, none in a blocked family.
+- **IB Gateway watch** (`scripts/sentinel.mjs`): a TCP probe of 4001/4002 every tick, a push after two consecutive
+  down ticks, one per 6 h. The gateway is the standalone install at `C:\Jts\ibgateway`, started by hand - no task, no
+  Startup entry, no IBC - so any reboot leaves it down until someone logs in (backlog 232).
+- **The sports recorder keeps a game through its own window** (`scripts/sports-books.mjs`). Each 30-minute discovery
+  replaced the pair list with what was open on BOTH venues, so a game Polymarket delisted around kickoff stopped being
+  recorded: ~94% of games more than an hour early, median 4.3 h. Now prior pairs stay until gameStart + 5 h.
+  Restarted 20:51:43Z (pid 41940). Every in-game or post-final read of `data/sports-books` before that instant sees a
+  truncated sample - including backlog 163's 2026-09-25 read, which should count only rows after the fix.
+
+### Measured - five candidate edges, none of them money at our size and speed
+
+| candidate | what it would harvest | result |
+|---|---|---|
+| Kalshi vs Polymarket US moneyline arbitrage (`scripts/backtests/xvenue_arb_check.py`, 82,573 cycles, 5 days) | both sides of one game below $1 after both fees | 807 episodes, median **1.0c** after fees, p90 5.6c; **98% in play**; the two books fetched a median **2 s** apart, which in play is itself a price move. ~$3.50/day at one contract, first sight only. Not worth building (agrees with the 09-02 "dead" call on better data). |
+| Resolution sniping (sports book-collapse proxy; MLB with the official Stats API final) | the decided side still offered below $1 | sports: the winner offered at <= 97c in **1 of 14** clean in-game decisions, never at 95c; MLB: in **17 of 17** games the winning side had **no ask at all** when the feed said Final. Weather cannot be measured (no intraday observations are recorded). |
+| sports-anchor, the sharp-book arm (forensics of all 17 positions, 1,089 anchor grades) | Kalshi lagging devigged sportsbook odds | **A bug, not an inversion**: in-play entries priced off a 10-minute-cached mid, never re-checked against fair at submit (5 of 17 filled above fair, 3 already on the wrong side); minute-long take-profit/stop exits across the spread. The mapping is clean. The signal: +3.8c at the mid in play (517 markets, 167 games), **+0.7c [-3.6, +5.1] after a 2c half-spread and the fee**; pre-game only 18 observations. Stays off (backlog 230). |
+| IBKR paper lab, every arm (543 closed paper trades) | anything promotable to the funded account | nothing: every arm with a real sample is negative. The political-favourite cohort holds to settlement and its markets (the 2026-11-03 elections, e.g. G16FL_110326_REP) have not settled. |
+| Spot-first on the verified fee (see corrections) | Coinbase leading Kalshi 15-minute crypto | **-2.05c [-2.70, -1.39]**, n = 3,851 over 7 days - still a FAIL. |
+
+**What this says about "the people that are winning".** It is not magic, and it is not a better formula than ours:
+every structural test on Kalshi's liquid markets finds prices right to within the fee at our speed. The edges that
+exist live where we are not: sub-second execution (the only edge this app ever had was that - catching Kalshi orders
+not yet updated after a move), capital large enough to make 1-2c pay and to qualify for liquidity incentives (item
+78), and slow venues. What remains in reach is structural and slow - the favourite-longshot bias (fade v3), a faster
+lead-lag if the event-driven feeds pass their pre-registered reads (backlog 167, 2026-09-24; backlog 227,
+2026-09-25), and Polymarket US, which is measurably slow (its top changes in 8% of minutes; backlog 231) and is the
+operator's to open.
+
+### Corrections to this session's own numbers
+
+- **Kalshi's taker fee ceils to $0.0001, not to a whole cent** (`src/main/util/kalshiFee.ts`, 96.6% exact on 1,626
+  real orders). Several statements today and two new scripts charged a whole cent at one contract, overstating the fee
+  by up to ~1c. Corrected in `leadlag_list_mechanism.py` and `spot_basis_regrade.py`; the spot-first figures above are
+  on the verified fee. The spot-first gate's own whole-cent fee is its registered rule and is left as registered.
+- **The cross-venue researcher's "median 6c" edge** was not reproduced: first sight of each episode has a median of
+  1.0c after both fees. Its verdict (not worth building) stands.

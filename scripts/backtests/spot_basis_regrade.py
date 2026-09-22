@@ -48,8 +48,9 @@ def fair(spot, strike, close_ms, now_ms, sigma):   # the recorder's own formula 
     return 0.5 * (1 + erf(d2 / math.sqrt(2)))
 
 
-def fee_c(p):          # Kalshi taker fee for one contract, cents, rounded up
-    return math.ceil(round(7 * p * (1 - p), 6))
+def fee_c(p):          # Kalshi taker fee for one contract in cents: 0.07 P(1-P) ceiled to $0.0001 (src/main/util/kalshiFee.ts).
+    # The pre-registered gate itself charges a whole cent; that is its registered rule and is left alone there.
+    return math.ceil(round(0.07 * p * (1 - p) * 10000, 6)) / 100
 
 
 def ts_ms(s):

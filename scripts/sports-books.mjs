@@ -199,8 +199,15 @@ let discoveredAt = 0
 
 async function discover() {
   const [pm, ev] = [await moneylines(), await kalshiEvents()]
-  pairs = match(pm, ev)
-  discoveredAt = Date.now()
+  // Keep a pair that has left either venue's OPEN list until its own window ends, then add the new ones. Replacing
+  // the list outright dropped every game Polymarket delisted around kickoff (and every Kalshi market closed at the
+  // final): ~94% of games stopped being recorded more than an hour early, median 4.3 h, which is exactly the in-game
+  // and post-final stretch backlog 163 reads (found 2026-09-22, section 158).
+  const now = Date.now()
+  const byTicker = new Map(pairs.filter((p) => now <= Date.parse(p.gameStart) + AFTER_MS).map((p) => [p.ticker, p]))
+  for (const p of match(pm, ev)) byTicker.set(p.ticker, p)
+  pairs = [...byTicker.values()]
+  discoveredAt = now
   const games = new Set(pairs.map((p) => p.slug)).size
   log(`discovery: ${pm.length} Polymarket moneylines, ${ev.length} Kalshi two-sided events, ${pairs.length} matched sides across ${games} games`)
 }

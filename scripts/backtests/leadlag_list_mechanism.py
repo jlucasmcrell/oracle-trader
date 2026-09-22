@@ -27,8 +27,9 @@ a = ap.parse_args()
 since = dt.datetime.fromisoformat(a.since.replace('Z', '+00:00'))
 
 
-def fee(p):  # Kalshi taker fee for ONE contract, rounded up to the cent, in probability units
-    return math.ceil(round(7 * p * (1 - p), 6)) / 100
+def fee(p):  # Kalshi taker fee for ONE contract: 0.07 P(1-P) ceiled to $0.0001 (src/main/util/kalshiFee.ts, matched
+    # 96.6% of 1,626 real fee-bearing orders; the whole-cent ceil this used first overstated fees ~1.4x)
+    return math.ceil(round(0.07 * p * (1 - p) * 10000, 6)) / 10000
 
 
 rows = []

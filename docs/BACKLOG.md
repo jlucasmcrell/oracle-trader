@@ -2138,6 +2138,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **163. Post-final sports liquidity (§129, Flash F-15).** In the 151 read on **2026-09-25**: for each matched game,
   the Kalshi book in the cycles after the Polymarket US book collapses to 0/1 (the free "final" signal) - resting
   bids on the loser above 1c, asks on the winner below 99c, and for how many cycles.
+  **Note 2026-09-22 (section 158):** the recorder dropped ~94% of games hours before their window ended until
+  20:51:43Z that day (fixed in `sports-books.mjs`); count only rows after the fix for the in-game and post-final stretch.
+  An early read on the truncated data found the winner at <= 97c in 1 of 14 clean decisions and MLB asks absent at
+  Final in 17 of 17.
 - **164. Lead-lag Kalshi read bursts (§129, Gemini Pro F-01).** Count `Kalshi leg failed` cycles per day from the
   log. Trigger: **2026-09-26**; if above 2% of cycles on any day, pace the reads with the direction-seat
   sequencing preserved (the 120 ms stagger changed it and was reverted).
@@ -2643,3 +2647,23 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   to YES/NO. Re-enable only with the market's framing applied (`strikeOf` for scalar markets; skip event markets whose
   framing cannot be parsed) and a test on an "above" and a "below" market. Trigger: **2026-10-09**, or whenever the
   strategy space is reviewed, whichever first.
+
+- **230. Sports-anchor: fix the execution before it is ever re-armed (2026-09-22, section 158).** It is off. Before any
+  re-arm: compare the order price with the stored fair at submit and refuse when the live price has crossed it
+  (`sportsAnchor.ts:724` gaps against a 10-minute-cached mid, `autoTrader.ts:2002/2009-2024` keep in-play signals and
+  the price guard 10 minutes old); put it on the hold-to-settlement list (`autoTrader.ts:377-387`); grade calibration
+  on settlement, not on the exit (`autoTrader.ts:4879`). The signal itself is worth ~+3.8c at the mid in play and
+  ~+0.7c after an assumed 2c half-spread and the fee (517 markets, 167 games), and pre-game has only 18 observations -
+  so the fixed arm is a break-even candidate, not a winner, at our execution. Trigger: **any proposal to re-arm it**;
+  a pre-game-only shadow is the one version worth measuring (the Odds API credit cost decides whether to run it).
+- **231. Polymarket US is a slow venue - measure a one-legged lag onto it before the hold is ever lifted (2026-09-22,
+  section 158). OPERATOR (the venue is on hold).** In `data/sports-books` its top of book changes in 8% of 60 s cycles
+  (16% inside the brief in-game gaps). The two-legged arbitrage is not worth building (807 episodes in 5 days, median
+  1.0c after both fees, 98% in play, books fetched a median 2 s apart). A slow venue is where the good era's lead-lag
+  trick worked; the question is whether Kalshi's in-game moves predict Polymarket US's next price well enough to buy
+  its stale side. Trigger: **when the operator considers lifting the Polymarket US hold**.
+- **232. IB Gateway keeps going down (2026-09-22, section 158). OPERATOR.** Standalone install at C:\Jts\ibgateway,
+  started by hand: no scheduled task, no Startup entry, no IBC. Any reboot leaves it down, and IBKR forces a full
+  re-login weekly whatever the auto-restart setting says. The sentinel now pages within 30 minutes of it going down.
+  IBC (the open-source IB Controller) automates the login and the weekly restart but needs the IBKR username and
+  password in its config file - the operator's to set up, never this app's. Trigger: **the next time the page fires**.
