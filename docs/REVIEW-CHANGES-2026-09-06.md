@@ -6207,8 +6207,10 @@ comparing sixteen entry rules on the same five days, so those numbers flatter it
 
 ### Verification
 
-`npm test` 22/22 suites; review-fixes 589/0 with 15 new assertions (the feed: series walk, no observation before the
-window, first observation, both team markets on an 8c move, a missing book, no bridging across a gap; the settlement
+`npm test` 22/22 suites; review-fixes 590/0 with 16 new assertions (the feed: series walk, no observation before the
+window, first observation, its first-cycle report, both team markets on an 8c move, a missing book, no bridging across a gap; the settlement
 gate: provisional price refused, RESOLVED-but-disagreeing waits, 0, 1 and a void price; the cohort hold rule; the
 8c threshold). The adversarial ladder test now counts 21 arms and expects `lag` at multiplier 1. Built 22:16:22Z;
-the app restarted 22:16:32Z.
+the app restarted 22:16:32Z; the ladder armed `polyus-lag` at tiny-live on its first run, and the feed's first
+discovery matched 350 sides across 176 games (the recorder: 352 across 177). A dead feed would look like a quiet night,
+so it now reports its first in-play cycle and then once an hour; redeployed 22:21:24Z.

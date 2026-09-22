@@ -1498,6 +1498,7 @@ async function lagFeedTests(): Promise<void> {
   const kBooks = new Map<string, { bid: number; ask: number }>()
   let pm: { bid: number; bidSz: number; ask: number; askSz: number } | undefined = { bid: 0.41, bidSz: 50, ask: 0.43, askSz: 40 }
   const seriesAsked: string[] = []
+  const feedLog: string[] = []
   let bookCalls = 0
   const feed = new PolyUsLagFeed({
     moneylines: () => [row],
@@ -1514,7 +1515,8 @@ async function lagFeedTests(): Promise<void> {
       bookCalls++
       return new Map(tickers.filter((t) => kBooks.has(t)).map((t) => [t, kBooks.get(t)!]))
     },
-    pmTop: async () => pm
+    pmTop: async () => pm,
+    log: (line) => feedLog.push(line)
   })
   const t0 = Date.parse('2026-09-26T20:00:00Z')
   await feed.discover(t0)
@@ -1523,6 +1525,7 @@ async function lagFeedTests(): Promise<void> {
   kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-MISS', { bid: 0.41, ask: 0.43 })
   kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-FLA', { bid: 0.57, ask: 0.59 })
   eq('lag feed: the first observation has nothing to compare with', (await feed.step(t0)).length, 0)
+  eq('lag feed: the first in-play cycle says what it saw, so a dead feed cannot pass for a quiet night', feedLog.filter((l) => l.startsWith('first cycle')), ['first cycle in play: 2 of 2 sides observed across 1 games'])
   kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-MISS', { bid: 0.49, ask: 0.51 })
   kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-FLA', { bid: 0.49, ask: 0.51 })
   const hits = await feed.step(t0 + 60_000)

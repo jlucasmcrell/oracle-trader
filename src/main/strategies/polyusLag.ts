@@ -245,6 +245,8 @@ export class PolyUsLagFeed {
   private discoveredAt = 0
   private discovering: Promise<void> | null = null
   private prev = new Map<string, LagObs>()
+  /** A dead feed looks exactly like a quiet night, so it reports its first in-play cycle and then once an hour. */
+  private tally = { since: 0, cycles: 0, observed: 0, missing: 0, hits: 0, first: true }
 
   constructor(private io: LagFeedIo, private cfg: LagConfig = LAG_DEFAULTS) {}
 
@@ -305,6 +307,21 @@ export class PolyUsLagFeed {
       if (!prev) continue
       const decision = lagTrigger(p, prev, obs, now, this.cfg)
       if (decision) hits.push({ pair: p, decision, obs })
+    }
+    const missing = active.filter((p) => !kb.get(p.ticker) || !pb.get(p.slug)).length
+    const t = this.tally
+    if (t.first) {
+      t.first = false
+      this.io.log?.(`first cycle in play: ${active.length - missing} of ${active.length} sides observed across ${pb.size} games`)
+    }
+    if (!t.since) t.since = now
+    t.cycles++
+    t.observed += active.length - missing
+    t.missing += missing
+    t.hits += hits.length
+    if (now - t.since >= 3600_000) {
+      this.io.log?.(`last hour: ${t.cycles} cycles in play, ${t.observed} side observations, ${t.missing} missing a book, ${t.hits} triggers`)
+      Object.assign(t, { since: now, cycles: 0, observed: 0, missing: 0, hits: 0 })
     }
     return hits
   }
