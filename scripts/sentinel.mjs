@@ -28,7 +28,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawn } from 'node:child_process'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
-import { WATCHED_KEYS, configLoss, fingerprint, isDefaultedConfig, newQuarantines } from './lib/config-watch.mjs'
+import { WATCHED_KEYS, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from './lib/config-watch.mjs'
 import { recorderPids } from './recorder-lock.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
@@ -95,13 +95,35 @@ const add = (key, kind, title, evidence) => {
 
 // ------------------------------------------------------------------ helpers
 /** The app's own push webhook (Auto-Trader panel, "alert webhook"): Discord, or ntfy-style POST with a Title header. */
+// The config's address when it has one, else the sentinel's own cached copy - so a destroyed config cannot also
+// silence the alarm about it (lib/config-watch.mjs resolveWebhook). The address is never logged.
+let WEBHOOK_SOURCE = 'none'
 const WEBHOOK = (() => {
+  const cachePath = path.join(UD, WEBHOOK_CACHE)
+  let cfgUrl = ''
+  let cached = ''
   try {
-    const url = readJson(path.join(UD, 'kalshi-auto.json'), {}).config?.alertWebhookUrl
-    return typeof url === 'string' && /^https:\/\//.test(url) ? url : ''
+    cfgUrl = readJson(path.join(UD, 'kalshi-auto.json'), {}).config?.alertWebhookUrl ?? ''
   } catch {
-    return ''
+    // a failed read decides nothing; the cache still answers
   }
+  try {
+    cached = readJson(cachePath, {}).url ?? ''
+  } catch {
+    // no cache yet
+  }
+  const r = resolveWebhook(cfgUrl, cached)
+  WEBHOOK_SOURCE = r.source
+  if (r.writeCache && !DRY) {
+    try {
+      const tmp = cachePath + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify({ url: r.url, savedAt: new Date().toISOString() }))
+      fs.renameSync(tmp, cachePath)
+    } catch {
+      // a cache write never blocks the sentinel; the next tick retries
+    }
+  }
+  return r.url
 })()
 async function pushAlert(title, message) {
   if (!WEBHOOK || DRY) return

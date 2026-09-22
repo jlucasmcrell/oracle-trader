@@ -7,7 +7,7 @@
 // (backlog 224). The regressions that would bring that back are: losing one of the three signatures,
 // letting a failed read overwrite the baseline, or ever putting a key VALUE in the fingerprint.
 import assert from 'node:assert/strict'
-import { WATCHED_KEYS, QUARANTINE_RE, configLoss, fingerprint, isDefaultedConfig, newQuarantines } from '../lib/config-watch.mjs'
+import { WATCHED_KEYS, QUARANTINE_RE, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from '../lib/config-watch.mjs'
 
 const T = Date.UTC(2026, 8, 21, 14, 25, 49)
 const MIN = 60_000
@@ -109,4 +109,20 @@ assert.ok(QUARANTINE_RE.test('kalshi-auto.json.corrupt-1790000749327'))
 assert.equal(QUARANTINE_RE.test('kalshi-auto.json'), false)
 assert.equal(QUARANTINE_RE.test('ibkr-lab.json.bak_calib_20260918-174316'), false, 'a .bak is not a quarantine')
 
-console.log(`config watch: ${WATCHED_KEYS.length} watched fields, 3 signatures, 38 assertions passed (2026-09-21 wipe reproduced from counts only)`)
+// ---- the alarm must survive the wipe it reports (2026-09-22) ----
+// config-defaulted fires on a wiped config, and the wipe empties alertWebhookUrl. If the push address came only
+// from the config, the alarm about a destroyed config could never be delivered.
+const HOOK = 'https://example.invalid/topic'
+const OTHER = 'https://example.invalid/new-topic'
+assert.deepEqual(resolveWebhook(HOOK, ''), { url: HOOK, writeCache: true, source: 'config' }, 'first sight of an address seeds the cache')
+assert.deepEqual(resolveWebhook(HOOK, HOOK), { url: HOOK, writeCache: false, source: 'config' }, 'an unchanged address is not rewritten every tick')
+assert.deepEqual(resolveWebhook(OTHER, HOOK), { url: OTHER, writeCache: true, source: 'config' }, 'the operator changing the address in the panel wins and refreshes the cache')
+assert.deepEqual(resolveWebhook('', HOOK), { url: HOOK, writeCache: false, source: 'cache' }, 'THE CASE: a wiped config still reaches the operator through the cache')
+assert.deepEqual(resolveWebhook(undefined, HOOK), { url: HOOK, writeCache: false, source: 'cache' }, 'a config with the field missing entirely')
+assert.deepEqual(resolveWebhook('', ''), { url: '', writeCache: false, source: 'none' })
+assert.deepEqual(resolveWebhook('http://insecure.invalid/t', ''), { url: '', writeCache: false, source: 'none' }, 'only https is ever pushed to')
+assert.deepEqual(resolveWebhook('', 'not a url'), { url: '', writeCache: false, source: 'none' }, 'a corrupt cache is not an address')
+assert.equal(resolveWebhook(wiped.config.alertWebhookUrl, healthy.config.alertWebhookUrl).url, healthy.config.alertWebhookUrl, 'the 14:25:49Z wiped file, against a cache seeded from the healthy one')
+assert.ok(!WEBHOOK_CACHE.includes('/') && !WEBHOOK_CACHE.includes('kalshi-auto'), 'the cache is its own file in userData, never inside the config it backs up')
+
+console.log(`config watch: ${WATCHED_KEYS.length} watched fields, 3 signatures, 48 assertions passed (2026-09-21 wipe reproduced from counts only; alarm survives the wipe)`)

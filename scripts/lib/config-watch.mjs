@@ -16,6 +16,28 @@
 /** Config fields whose disappearance is a loss, not a setting. */
 export const WATCHED_KEYS = ['metaculusApiKey', 'oddsApiKey', 'llmApiKey', 'alertWebhookUrl']
 
+/**
+ * The sentinel's own copy of the alert webhook, kept in %APPDATA%/oracle-trader: outside the repo, which is
+ * public, and outside kalshi-auto.json, which is the file a power loss destroys.
+ */
+export const WEBHOOK_CACHE = 'alert-webhook.json'
+
+const isHook = (u) => typeof u === 'string' && /^https:\/\//.test(u)
+
+/**
+ * Which address to push to, and whether the cached copy needs refreshing. The config wins whenever it holds a
+ * valid address; the cache is used only when the config has lost it.
+ *
+ * Until 2026-09-22 the sentinel read the webhook out of kalshi-auto.json alone, so `config-defaulted` - the check
+ * written for the 2026-09-21 wipe - could never reach the operator: the wipe that trips it has already emptied
+ * the only copy of the address it would push to. Returns no value anywhere but `url`; nothing here logs it.
+ */
+export function resolveWebhook(configUrl, cachedUrl) {
+  if (isHook(configUrl)) return { url: configUrl, writeCache: configUrl !== cachedUrl, source: 'config' }
+  if (isHook(cachedUrl)) return { url: cachedUrl, writeCache: false, source: 'cache' }
+  return { url: '', writeCache: false, source: 'none' }
+}
+
 /** JsonStore.load() renames an unparseable file to `<name>.corrupt-<epoch ms>` (src/main/store/json.ts:57). */
 export const QUARANTINE_RE = /\.corrupt-\d+$/
 

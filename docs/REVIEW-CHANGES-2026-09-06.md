@@ -5816,3 +5816,64 @@ managing; it expires by itself at 2026-09-22T12:52Z and this session does not ca
 IB Gateway died with the host and nothing on this box starts it (backlog 120; no `ibgateway`/java process, 4001 and
 4002 refusing). Read from the lab's own file rather than the log's silence, as 120 requires. It resumes by itself
 when the operator logs in.
+
+## §155 - 2026-09-22 11:42Z: the trader restored from the pre-crash backup and re-armed; the wipe alarm can now reach the operator
+
+The operator, asked whether to restore after the 2026-09-21 power loss (incident
+`2026-09-21T16-05-metaculus-stale.md`, section 154): "Go".
+
+**What had happened.** The unclean shutdown at 2026-09-21T14:00:57Z zero-filled `kalshi-auto.json`. The app
+quarantined it at 14:25:49Z and ran on `DEFAULT_CONFIG` - disarmed, three API keys empty, empty ledger - for
+**21 h 17 m**, placing nothing. The ladder read the defaulted switches as the operator turning seven live arms off
+in the panel (`ladder.ts:833-842`): each got a "manual change in the panel" history row, a re-baseline against the
+empty ledger, and `operatorHold: true`. None of the seven had a hold before the crash.
+
+**Restore, in the order the incident recommended.**
+
+1. App stopped 11:39Z under `data/sentinel/agent.lock`. `kalshi-auto.json` **and** `ladder.json` restored from
+   `D:\oracle-trader-backup\preserved\PRECRASH-20260921T134553Z-state.zip` (sha256 `554aa64b17ae31a6...`, the
+   copy the on-call session preserved). Both files, because restoring the config alone clears the seven holds only
+   by re-reading each arm as a fresh panel switch-on, which zeroes its stage evidence; restoring the ladder from
+   the same instant removes the seven post-crash rows and keeps every arm's evidence. The live arm was held off
+   for the first boot. The defaulted files were kept aside (`*.postcrash-*`).
+2. Booted disarmed 11:40:02Z: 152 config keys, all three keys present by length (values never read), `enabled`
+   true. Within a minute the reconciler took `openTrades` **27 -> 4**, matching `[kalshi] positions merged 4`, and
+   `pendingOrders` 5 -> 0 by 11:51Z. It booked the 24 positions that had closed while the app was down:
+
+   | cohort | trades booked | realized |
+   |---|---|---|
+   | fade | 21 | -$3.85 |
+   | consensus (pre-11:15Z cohort) | 1 | -$1.00 |
+   | mean-reversion | 2 | -$0.41 |
+   | total | 24 | **-$5.26** |
+
+   Side effect, left alone: those settlements landed yesterday but were booked into **today's** `dailyPnl`, which
+   reads -$5.26 while the venue's own day reads +$0.08 on 2 settlements. The kill switch takes the worse ledger,
+   so it will halt about $5 earlier than it should today. That is the conservative direction and loss limits are
+   the operator's.
+3. The ladder's first pass on the restored evidence, 11:42:03Z, **stopped fade**: "checkpoint 73 trades, net
+   $-3.97, mean -7.40c/contract (80% band -13.18..-1.62): losing money with 80% confidence over 5 day-clusters".
+   The 21 fade settlements booked in step 2 are real venue settlements; the stop is the ladder's own rule on real
+   evidence and stands.
+4. Armed 11:42:40Z (`liveArmed` true, verified restart: electron 11:42:40Z after the 11:12:34Z bundle, which is
+   HEAD's source). Live arms: lead-lag, convergence, cross-venue, news, dutch, mean-reversion. The Polymarket
+   websocket lead-lag reads connected at 11:45:41Z and streams normally, dropping for a moment at each 15-minute
+   rollover. Balance $71.66, four positions open.
+
+**The alarm could not have reached anyone.** Section 154's `config-defaulted` check detects a wiped config
+correctly, but `pushAlert` read its webhook from `kalshi-auto.json` - the file the wipe empties - so the one
+check built for this incident would have filed a local incident and pushed nothing, which is the exact failure
+that cost 18 hours. `resolveWebhook` (`scripts/lib/config-watch.mjs`) now returns the config's address when it has
+one and otherwise the sentinel's own copy in `%APPDATA%\oracle-trader\alert-webhook.json` - outside the public
+repo and outside the file that gets destroyed. The config always wins, a changed address refreshes the cache, only
+https is used, and the value is never logged. Ten new assertions; with the fallback removed the suite fails on
+"THE CASE: a wiped config still reaches the operator through the cache". Seeded by a scheduled sentinel tick at
+11:53:21Z and confirmed equal to the config's address without printing it.
+
+**`scripts/restore-state.py`** is the procedure as a command: restores both files from one zip, dry run by
+default, optional sha check, refuses `--apply` while electron runs, holds the arm off unless `--keep-arm`, prints
+secrets as lengths only, copies each replaced file aside and writes temp + fsync + rename. Exercised: dry run,
+refusal while the app runs, refusal on a wrong sha; nothing was written by any of them.
+
+**Not done here.** IB Gateway has not been logged in since the reboot, so the IBKR paper lab is dark; logging in
+is the operator's. Backlog 224's remaining two items are app-side and need a restart of their own.

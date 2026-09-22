@@ -2582,6 +2582,12 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   the panel and set `operatorHold` on each (all were unset before the crash), so a state loss silently becomes an
   operator decision. Trigger: **at the pre-crash restore** (it needs a restart anyway), and no later than
   **2026-09-24**.
+  **Status 2026-09-22 (section 155):** (c) done by section 154's `config-watch`; (b) done - the sentinel keeps
+  its own copy of the webhook and no longer goes silent with the config; the restore is `scripts/restore-state.py`.
+  Remaining, both app-side: the legible `JsonStore.load` line, and the ladder turning a defaulted config into
+  seven operator holds (the restore script undoes it; the app should not create it - `ladder.strategy()` should
+  not treat a post-quarantine default as a panel switch-off). Trigger: **the next planned app restart**, and no
+  later than **2026-09-24**.
   **(c) DONE 2026-09-22 (§154):** `scripts/lib/config-watch.mjs` gives the sentinel three signatures on that file -
   `config-quarantined`, `config-wiped` and `config-defaulted` - with `npm run test:config-watch` (38 assertions) and
   a live `--dry` tick that now names the cause instead of `metaculus-stale`. No key value is read or stored.
