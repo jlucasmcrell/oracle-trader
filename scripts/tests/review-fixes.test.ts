@@ -6,12 +6,13 @@ import { bracketState, inBlackout, inBlackoutLocal, printFills, stationLocalHour
 import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, parseOpenMeteoHourly, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
-import { kalshiGameEvents, lagTrigger, matchPolyUsGames, polyUsTakerFee } from '../../src/main/strategies/polyusLag'
+import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
+import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
-import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter } from '../../src/main/venues/polymarketUs'
+import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter, resolvedLongPrice } from '../../src/main/venues/polymarketUs'
 import { isPinnedQuote, refreshedCloseTime, settlementProbeDue, statsBand, stuckSettlements } from '../../src/main/strategies/ledgerAudit'
 import { GENERIC_STRATEGIES, leadLagRowCounts } from '../../src/main/ladder/ladder'
 import { ConsensusFeed, CONSENSUS_RULE, consensusAgeHours, consensusRefusal, parseConsensusSignals } from '../../src/main/strategies/consensus'
@@ -582,10 +583,10 @@ eq('brake: a NaN ledger never halts', dailyBrakeBlock(10, { date: DAY, realized:
   const flaDown = lagTrigger(fla, obs(t0 - 60_000, 0.57, 0.59), obs(t0, 0.49, 0.51), t0)
   eq('polyus-lag: Kalshi down on the short team buys the LONG side', flaDown && [flaDown.pmSide, flaDown.forKalshiTeam, flaDown.price], ['long', false, 0.43])
   eq('polyus-lag: never before the game starts', lagTrigger(miss, obs(t0 - 60_000 - 86_400_000, 0.41, 0.43), obs(t0 - 86_400_000, 0.49, 0.51), t0 - 86_400_000), null)
-  eq('polyus-lag: a 4c Kalshi move is below the 5c primary threshold', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.45, 0.47), t0), null)
+  eq('polyus-lag: a 7c Kalshi move is below the 8c primary threshold', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.48, 0.50), t0), null)
   eq('polyus-lag: Polymarket US already moved 1c, so it is not stale', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.49, 0.51, 0.42, 0.44), t0), null)
   eq('polyus-lag: a two-minute gap between observations is not "the previous cycle"', lagTrigger(miss, obs(t0 - 120_000, 0.41, 0.43), obs(t0, 0.49, 0.51), t0), null)
-  eq('polyus-lag: no trigger when the ask already sits at Kalshi\'s new price', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43, 0.48, 0.50), obs(t0, 0.47, 0.51, 0.48, 0.50), t0), null)
+  eq('polyus-lag: no trigger when the ask already sits at Kalshi\'s new price', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43, 0.48, 0.50), obs(t0, 0.48, 0.52, 0.48, 0.50), t0), null)
 }
 
 // ---- event-speed lead-lag shadow (section 159): gaps from two pushed books, opened and closed with a duration ----
@@ -955,6 +956,8 @@ openMeteoTests()
 await leadLagContainmentTests()
 await cancelOrderTests()
 await activityPacingTests()
+await lagFeedTests()
+await polyUsSettlementGateTests()
 consensusTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
@@ -1477,4 +1480,86 @@ function openMeteoTests(): void {
   // Elapsed hours do not count towards coverage: the same 48-hour reply read at the end of
   // the second day has nothing left to forecast.
   eq('open-meteo: an exhausted run is refused', parseOpenMeteoHourly(sample, (t0 + 47 * 3600) * 1000), null)
+}
+
+// ---- Kalshi leads Polymarket US: the in-app feed (section 160) ----
+async function lagFeedTests(): Promise<void> {
+  eq('lag feed: Kalshi top is the best YES bid and 1 - the best NO bid', kalshiTop({ orderbook_fp: { yes_dollars: [['0.4100', '10'], ['0.4000', '5']], no_dollars: [['0.5700', '3'], ['0.5500', '9']] } }), { bid: 0.41, ask: 0.43 })
+  eq('lag feed: a one-sided Kalshi book is no observation', kalshiTop({ orderbook_fp: { yes_dollars: [['0.41', '10']], no_dollars: [] } }), undefined)
+
+  const row = {
+    slug: 'aec-cfb-miss-fl-2026-09-26', gameStartTime: '2026-09-26T19:30:00Z',
+    question: 'Who will win in the upcoming football event Ole Miss vs Florida scheduled for September 26, 2026 at 7:30 PM UTC?',
+    marketSides: [
+      { description: 'Rebels', price: '0.4200', long: true, team: { name: 'Rebels', safeName: 'Ole Miss', abbreviation: 'miss' } },
+      { description: 'Gators', price: '0.5800', long: false, team: { name: 'Gators', safeName: 'Florida', abbreviation: 'fl' } }
+    ]
+  }
+  const kBooks = new Map<string, { bid: number; ask: number }>()
+  let pm: { bid: number; bidSz: number; ask: number; askSz: number } | undefined = { bid: 0.41, bidSz: 50, ask: 0.43, askSz: 40 }
+  const seriesAsked: string[] = []
+  let bookCalls = 0
+  const feed = new PolyUsLagFeed({
+    moneylines: () => [row],
+    kalshiMarkets: async (series) => {
+      seriesAsked.push(series)
+      return series === 'KXNCAAFGAME'
+        ? [
+            { ticker: 'KXNCAAFGAME-26SEP26MISSFLA-MISS', title: 'Ole Miss wins', event_ticker: 'KXNCAAFGAME-26SEP26MISSFLA' },
+            { ticker: 'KXNCAAFGAME-26SEP26MISSFLA-FLA', title: 'Florida wins', event_ticker: 'KXNCAAFGAME-26SEP26MISSFLA' }
+          ]
+        : []
+    },
+    kalshiBooks: async (tickers) => {
+      bookCalls++
+      return new Map(tickers.filter((t) => kBooks.has(t)).map((t) => [t, kBooks.get(t)!]))
+    },
+    pmTop: async () => pm
+  })
+  const t0 = Date.parse('2026-09-26T20:00:00Z')
+  await feed.discover(t0)
+  eq('lag feed: discovery walks only the series the moneylines name, and matches both team markets', [seriesAsked, feed.pairCount], [['KXNCAAFGAME'], 2])
+  eq('lag feed: nothing is observed hours before the start', [await feed.step(Date.parse('2026-09-26T12:00:00Z')), bookCalls], [[], 0])
+  kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-MISS', { bid: 0.41, ask: 0.43 })
+  kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-FLA', { bid: 0.57, ask: 0.59 })
+  eq('lag feed: the first observation has nothing to compare with', (await feed.step(t0)).length, 0)
+  kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-MISS', { bid: 0.49, ask: 0.51 })
+  kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-FLA', { bid: 0.49, ask: 0.51 })
+  const hits = await feed.step(t0 + 60_000)
+  eq('lag feed: Kalshi moves 8c toward Ole Miss, Polymarket US unchanged: both team markets say buy the long side at 0.43',
+    hits.map((h) => [h.pair.ticker.split('-').pop(), h.decision.pmSide, h.decision.price]).sort(), [['FLA', 'long', 0.43], ['MISS', 'long', 0.43]])
+  pm = undefined
+  eq('lag feed: a missing Polymarket US book is no observation', (await feed.step(t0 + 120_000)).length, 0)
+  pm = { bid: 0.41, bidSz: 50, ask: 0.43, askSz: 40 }
+  kBooks.set('KXNCAAFGAME-26SEP26MISSFLA-MISS', { bid: 0.57, ask: 0.59 })
+  eq('lag feed: ...and the next cycle has no previous observation to compare, so a gap never bridges two cycles', (await feed.step(t0 + 180_000)).length, 0)
+}
+
+// ---- Polymarket US settles on RESOLVED only (section 160) ----
+async function polyUsSettlementGateTests(): Promise<void> {
+  const slug = 'aec-epl-che-hul-2026-09-20'
+  const record = (status: string, longPx: string) => ({
+    slug, question: 'Chelsea vs Hull', status, closed: true, endDate: '2026-09-20T16:40:00Z', gameStartTime: '2026-09-20T14:00:00Z',
+    outcomes: '["Yes","No"]', outcomePrices: `["${longPx}","${(1 - Number(longPx)).toFixed(2)}"]`,
+    marketSides: [{ description: 'Yes', price: longPx, long: true }, { description: 'No', price: String((1 - Number(longPx)).toFixed(2)), long: false }]
+  })
+  const settleWith = async (status: string, longPx: string, bookPx: string): Promise<[unknown, unknown, unknown]> => {
+    const a: any = new PolymarketUsAdapter()
+    a.gateway = {
+      get: async (path: string) => {
+        if (path.startsWith('/v1/markets?slug=')) return { markets: [record(status, longPx)] }
+        if (path.endsWith('/book')) return { marketData: { state: 'MARKET_STATE_EXPIRED', stats: { settlementPx: { value: bookPx } } } }
+        throw new Error('404')
+      }
+    }
+    const m = await a.getMarket(slug)
+    return [m.resolved, m.resolution, m.resolutionProbability]
+  }
+  eq('polyus settle: EXPIRED with a provisional 0.07 before RESOLVED books nothing (it booked MKT @ 0.07)', await settleWith('MARKET_STATUS_OPEN', '0.07', '0.0700'), [false, undefined, undefined])
+  eq('polyus settle: RESOLVED but the book still shows the provisional price: wait', await settleWith('MARKET_STATUS_RESOLVED', '0', '0.0700'), [true, undefined, undefined])
+  eq('polyus settle: RESOLVED and both say 0: NO', await settleWith('MARKET_STATUS_RESOLVED', '0', '0.0000'), [true, 'no', undefined])
+  eq('polyus settle: RESOLVED and both say 1: YES', await settleWith('MARKET_STATUS_RESOLVED', '1', '1.0000'), [true, 'yes', undefined])
+  eq('polyus settle: a void price both agree on settles at that price', await settleWith('MARKET_STATUS_RESOLVED', '0.5', '0.5000'), [true, 'MKT', 0.5])
+  eq("ibkr: a re-baselined cohort keeps its arm's hold-to-settlement rule", ['calibration:pre-slopes-20260918', 'calibration', 'momentum', 'momentum:x'].map(ibkrHoldsToSettlement), [true, true, false, false])
+  eq('polyus settle: the side price is read only on a RESOLVED record', [resolvedLongPrice(record('MARKET_STATUS_OPEN', '0.07')), resolvedLongPrice(record('MARKET_STATUS_RESOLVED', '1'))], [undefined, 1])
 }

@@ -1,4 +1,5 @@
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parseUsTempSlug, usWeatherFairValue } from './weatherForecast'
 import { app } from 'electron'
 import { OracleIntelligenceEngine } from '../intelligence/engine'
@@ -10,6 +11,9 @@ import type { AutoOpenTrade, AutoPendingOrder } from '../../shared/ipc'
 import type { OrderResult, VenueId, VenueMarket } from '../../shared/types'
 import { fadeCategoryBlock, underlyingOf } from './classify'
 import { refreshedCloseTime, settlementProbeDue, stuckSettlements } from './ledgerAudit'
+import { PolyUsLagFeed, kalshiTop, type LagHit, type PolyUsMoneyline } from './polyusLag'
+import { HttpClient } from '../util/http'
+import type { VenueAdapter } from '../../shared/venue'
 
 const SETTLE_GRACE_MS = 30 * 60_000
 /** A mini arm owns its entry cost; pooled venue basis can include another arm. */
@@ -25,6 +29,9 @@ export function miniExitPnl(trade: Pick<AutoOpenTrade, 'entryPrice'>, res: Order
 const MICRO_MAKER_BOOK_BUDGET = 120
 /** Past close by this much AND unfetchable = the venue dropped it; stop holding. */
 const STALE_DROP_MS = 12 * 3600_000
+/** docs/PREREGISTERED-polyus-lag.md: at most 10 entries a day. */
+const LAG_MAX_PER_DAY = 10
+const KALSHI_PUBLIC = 'https://api.elections.kalshi.com/trade-api/v2'
 
 /** Bump when adding a config migration below — persist() must write the CURRENT version. */
 const CONFIG_VERSION = 20
@@ -113,6 +120,7 @@ export const MINI_DEFAULTS: MiniAutoConfig = {
   microMakerMinHoursToClose: 1,
   microMakerCancelMinutes: 30,
   bookEnabled: false,
+  lagEnabled: false,
   bookMinRatio: 1.6,
   bookMinDepth: 200,
   bookMinSideDepth: 40,
@@ -129,6 +137,8 @@ interface MiniState {
   /** Resting maker orders awaiting fill (live maker mode, book venues). */
   pendingOrders: AutoPendingOrder[]
   daily: { date: string; count: number }
+  /** Kalshi-leads-Polymarket-US entries today: the registration caps them at LAG_MAX_PER_DAY. */
+  lagDaily?: { date: string; count: number }
   /** Realized P&L for the current UTC day, and whether the loss brake has tripped. */
   dailyPnl?: { date: string; realized: number; tripped: boolean }
   perf: { trades: number; wins: number; losses: number; realizedPnl: number }
@@ -194,6 +204,9 @@ export class MiniAuto {
   private reconciledLive = false
   private onEvent?: (type: string, payload: unknown) => void
   private readonly intelligence = new OracleIntelligenceEngine(app.getPath('userData'))
+  private lagFeed: PolyUsLagFeed | null = null
+  /** Kalshi's public API is shared with the Kalshi trader on this machine: one request per 1.1 s from here. */
+  private readonly lagKalshi = new HttpClient({ baseUrl: KALSHI_PUBLIC, rateLimit: 1, rateLimitWindowMs: 1100, timeoutMs: 20_000 })
 
   /**
    * Boot gate check: one clean positions (+ open orders where supported)
@@ -484,6 +497,9 @@ export class MiniAuto {
 
       const adapter = this.engine.getAdapter(this.venue)
       if (!adapter) throw new Error(`no adapter for ${this.venue}`)
+      // Kalshi leads Polymarket US in play (section 160). Observed before the catalog walk so two observations stay one
+      // poll apart; only while the arm is on. Its games closed to the catalog at kickoff, so they join the queue below.
+      const lagHits = this.venue === 'polymarket-us' && this.strategyOn('lag') && adapter.getOrderBook ? await this.lagStep(adapter, result) : []
       // Bound the fetch to the horizon so venues that paginate by volume (and
       // would otherwise bury short-dated markets) return the right window.
       const now = Date.now()
@@ -653,6 +669,13 @@ export class MiniAuto {
           }
         }
       }
+      for (const h of lagHits) {
+        const long = h.decision.pmSide === 'long'
+        this.logResearch('lag-trigger', { marketId: h.pair.slug, strategy: 'lag', ticker: h.pair.ticker, team: h.pair.team, side: h.decision.pmSide, forKalshiTeam: h.decision.forKalshiTeam, price: h.decision.price, size: h.decision.size, fee: h.decision.fee, kMove: h.decision.kMove, gapCents: h.decision.gapCents, kBid: h.obs.kBid, kAsk: h.obs.kAsk, pmLongBid: h.obs.pmLongBid, pmLongAsk: h.obs.pmLongAsk })
+        const m = await adapter.getMarket(h.pair.slug).catch(() => undefined)
+        if (!m || m.resolved) continue
+        candidates.push({ m, strategy: 'lag', direction: long ? 'YES' : 'NO', reason: `Kalshi ${h.pair.team} ${h.decision.kMove > 0 ? '+' : ''}${h.decision.kMove}c, Polymarket US unchanged, ${h.decision.gapCents}c after fee`, limitYes: long ? h.obs.pmLongAsk : h.obs.pmLongBid })
+      }
       result.candidates = candidates.length
 
       let balance: number | undefined
@@ -720,6 +743,7 @@ export class MiniAuto {
         // One position per market — except the micro-maker's opposite side.
         const sameSide = (x: { marketId: string; outcome?: string; strategy?: string }): boolean =>
           x.marketId === c.m.id && (c.strategy !== 'micro-maker' || x.strategy !== 'micro-maker' || x.outcome === c.direction)
+        if (c.strategy === 'lag' && this.state.lagDaily?.date === nowDate() && this.state.lagDaily.count >= LAG_MAX_PER_DAY) continue
         if (this.state.openTrades.some(sameSide)) continue
         if (this.state.pendingOrders.some(sameSide)) continue
         if (balance !== undefined && stakeOf(c.strategy) > balance) continue
@@ -887,7 +911,17 @@ export class MiniAuto {
               // through to the taker path below.
             }
             if (c.strategy === 'micro-maker' || c.strategy === 'weather-fair') continue
-            if (c.direction === 'YES' && ask !== undefined) limit = Math.min(0.99, ask + 0.01)
+            if (c.strategy === 'lag' && c.limitYes !== undefined) {
+              // The registered order: the price the trigger saw, never more than one tick worse. A book that already
+              // moved further is the measured edge gone, counted for the registration's no-fill rate.
+              const tick = c.m.tickSize && c.m.tickSize > 0 ? c.m.tickSize : 0.01
+              const gone = c.direction === 'YES' ? ask === undefined || ask > c.limitYes + tick + 1e-9 : bid === undefined || bid < c.limitYes - tick - 1e-9
+              if (gone) {
+                this.logResearch('lag-gone', { marketId: c.m.id, strategy: 'lag', outcome: c.direction, seenYes: c.limitYes, bid, ask })
+                continue
+              }
+              limit = c.limitYes
+            } else if (c.direction === 'YES' && ask !== undefined) limit = Math.min(0.99, ask + 0.01)
             else if (c.direction === 'NO' && bid !== undefined) limit = Math.max(0.01, bid - 0.01)
             // Snap to the venue tick grid (Polymarket US has 0.001-tick
             // markets; off-grid limits bounce).
@@ -907,7 +941,12 @@ export class MiniAuto {
           })
           if (res.status === 'open' || res.shares <= 0) {
             await adapter.cancelOrder(res.orderId, c.m.id).catch(() => undefined)
+            if (c.strategy === 'lag') this.logResearch('lag-nofill', { marketId: c.m.id, strategy: 'lag', outcome: c.direction, seenYes: c.limitYes, status: res.status })
             continue
+          }
+          if (c.strategy === 'lag') {
+            this.state.lagDaily = { date: nowDate(), count: (this.state.lagDaily?.date === nowDate() ? this.state.lagDaily.count : 0) + 1 }
+            this.logResearch('lag-fill', { marketId: c.m.id, strategy: 'lag', outcome: c.direction, seenLeg: c.limitYes === undefined ? undefined : c.direction === 'YES' ? c.limitYes : +(1 - c.limitYes).toFixed(4), fillLeg: res.avgPrice, shares: res.shares, fee: res.fee })
           }
           // CLV/markout reference: the market's mid expressed in OUR leg's terms, falling back to the
           // fill when the venue gives us no probability. Without this the mini's fast meter is dead code.
@@ -943,6 +982,8 @@ export class MiniAuto {
           })
         } catch (err) {
           result.errors.push(`execute ${c.m.id}: ${fmtErr(err)}`)
+          // A refused order (the venue's slippage band) is a no-fill too, and the registration counts them.
+          if (c.strategy === 'lag') this.logResearch('lag-nofill', { marketId: c.m.id, strategy: 'lag', outcome: c.direction, seenYes: c.limitYes, error: fmtErr(err).slice(0, 160) })
         }
       }
 
@@ -975,9 +1016,64 @@ export class MiniAuto {
     return result
   }
 
+  /** One observation of every matched game in play; returns the pairs whose registered trigger fired. */
+  private async lagStep(adapter: VenueAdapter, result: MiniScanResult): Promise<LagHit[]> {
+    if (!this.lagFeed) {
+      const moneylinesPath = join(app.getPath('userData'), 'polyus-moneylines.json')
+      this.lagFeed = new PolyUsLagFeed({
+        moneylines: () => {
+          try {
+            const d = JSON.parse(readFileSync(moneylinesPath, 'utf8')) as { at?: number; rows?: PolyUsMoneyline[] }
+            return typeof d.at === 'number' && Date.now() - d.at < 2 * 3600_000 && Array.isArray(d.rows) ? d.rows : undefined
+          } catch {
+            return undefined
+          }
+        },
+        kalshiMarkets: async (series) => {
+          const out: { ticker: string; title?: string; event_ticker?: string }[] = []
+          let cursor: string | undefined
+          for (let page = 0; page < 10; page++) {
+            const d = await this.lagKalshi.get<{ markets?: { ticker: string; title?: string; event_ticker?: string }[]; cursor?: string }>(
+              `/markets?series_ticker=${series}&status=open&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+            )
+            out.push(...(d.markets ?? []))
+            cursor = d.cursor || undefined
+            if (!cursor || (d.markets ?? []).length < 100) break
+          }
+          return out
+        },
+        kalshiBooks: async (tickers) => {
+          const out = new Map<string, { bid: number; ask: number }>()
+          for (let i = 0; i < tickers.length; i += 40) {
+            const q = tickers.slice(i, i + 40).map((t) => `tickers=${encodeURIComponent(t)}`).join('&')
+            const d = await this.lagKalshi.get<{ orderbooks?: ({ ticker?: string } & Parameters<typeof kalshiTop>[0])[] }>(`/markets/orderbooks?${q}&depth=3`)
+            for (const o of d.orderbooks ?? []) {
+              const top = o.ticker ? kalshiTop(o) : undefined
+              if (top && o.ticker) out.set(o.ticker, top)
+            }
+          }
+          return out
+        },
+        pmTop: async (slug) => {
+          const ob = await adapter.getOrderBook!(slug)
+          const b = ob.bids[0]
+          const a = ob.asks[0]
+          return b && a ? { bid: b.price, bidSz: b.size, ask: a.price, askSz: a.size } : undefined
+        },
+        log: (line) => console.log(`[mini ${this.venue}] lag ${line}`)
+      })
+    }
+    try {
+      return await this.lagFeed.step(Date.now())
+    } catch (err) {
+      result.errors.push(`lag feed: ${fmtErr(err)}`)
+      return []
+    }
+  }
+
   /** Is this strategy switched on right now? The ladder flips these flags; unknown strategies count as on. */
   private strategyOn(strategy: string): boolean {
-    const flag: Record<string, keyof MiniAutoConfig> = { 'micro-maker': 'microMakerEnabled', fade: 'fadeEnabled', 'book-imbalance': 'bookEnabled', 'weather-fair': 'weatherFairEnabled' }
+    const flag: Record<string, keyof MiniAutoConfig> = { 'micro-maker': 'microMakerEnabled', fade: 'fadeEnabled', 'book-imbalance': 'bookEnabled', 'weather-fair': 'weatherFairEnabled', lag: 'lagEnabled' }
     const key = flag[strategy]
     return key === undefined ? true : Boolean(this.config[key] ?? true)
   }
@@ -1064,6 +1160,16 @@ export class MiniAuto {
       // orders were resubmitted every minute. Preserve the local record for five
       // minutes; fills are still detected from the activities feed.
       if (!venueOrder && Date.now() - p.createdAt < 5 * 60_000) continue
+      // A lookup miss is not proof the order is gone: cancel before forgetting it (the 09-06 duplicate rests), and keep
+      // the row one more pass so a fill that landed before the cancel is read from the next fills snapshot.
+      if (!venueOrder) {
+        const rec = p as typeof p & { forgetCancelAt?: number }
+        if (!rec.forgetCancelAt) {
+          rec.forgetCancelAt = Date.now()
+          await adapter.cancelOrder(p.orderId, p.marketId).catch(() => undefined)
+          continue
+        }
+      }
       if (venueOrder) {
         total = venueOrder.fillCount
         legPrice = venueOrder.avgYes !== undefined ? legOf(venueOrder.avgYes) : undefined
@@ -1142,7 +1248,7 @@ export class MiniAuto {
 
     for (const t of [...this.state.openTrades]) {
       // Fades hold to settlement unless fadeExitEnabled — see the config note.
-      const isHoldToSettle = (t.strategy === 'fade' && !this.config.fadeExitEnabled) || t.strategy === 'micro-maker' || t.strategy === 'weather-fair'
+      const isHoldToSettle = (t.strategy === 'fade' && !this.config.fadeExitEnabled) || t.strategy === 'micro-maker' || t.strategy === 'weather-fair' || t.strategy === 'lag'
       const quote = await adapter.getPrice(t.marketId, t.outcome).catch(() => undefined)
       // Every trade gets its side mid refreshed each pass - hold-to-settle included - so the ledger carries
       // a pre-settlement freeze for CLV and a 5-minute markout. Same meter the Kalshi trader has had since

@@ -6,7 +6,7 @@ import type {TradingEngine} from '../engine/engine'
 import type {IbkrReader} from '../venues/ibkr'
 import type {IbkrAdapter} from '../venues/ibkrAdapter'
 import {discoverForecastMarkets,loadFinalSettlements} from '../venues/forecastexData'
-import {IBKR_HOLD_MAX_DAYS,IBKR_HOLD_TO_SETTLEMENT,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
+import {IBKR_HOLD_MAX_DAYS,ibkrHoldsToSettlement,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
 import {ibkrWeather} from './ibkrWeather'
 import {IBKR_RULES_SINCE,type IbkrLabConfig,type IbkrLabMarket,type IbkrLabPosition,type IbkrLabState,type IbkrLabStatus,type IbkrLabStrategyRow} from '../../shared/ibkrLab'
 
@@ -33,6 +33,7 @@ export class IbkrLab {
   private busy=false
   private failure?:string
   private cursor=0
+  private activeCursor=0
   private lastSettlementAt=0
   private discoveryFailedAt=0
   private modelBusy=false
@@ -91,7 +92,7 @@ export class IbkrLab {
       // this for the Kalshi arm on 138 trades - "the arm wins exactly as often as its prices say it should, which
       // is the signature of NO edge" - and set the retest at 250 trades or 15 losses. Hold-to-settlement arms here
       // are the same instrument, so they carry the same bar. A zero-width band is never evidence either.
-      const held=IBKR_HOLD_TO_SETTLEMENT.has(def.id)
+      const held=ibkrHoldsToSettlement(def.id)
       const sampled=!held||losses>=IBKR_MIN_LOSSES||trades.length>=IBKR_LOSS_WAIVER_TRADES
       const gateBlockers:string[]=[]
       if(stop)gateBlockers.push(stop)
@@ -152,8 +153,11 @@ export class IbkrLab {
       const all=[...universe.values()].filter(m=>m.closeTime>Date.now())
       const priority=new Set([...s.orders.map(o=>o.marketId),...s.positions.map(p=>p.market.id),...s.live.filter(p=>p.status==='open').map(p=>p.market.id)])
       const active=all.filter(m=>priority.has(m.id)),rotated=all.map((_,i)=>all[(i+this.cursor)%all.length])
-      const batch=[...new Map([...active.slice(this.cursor%Math.max(1,active.length),this.cursor%Math.max(1,active.length)+10),...rotated].map(m=>[m.id,m])).values()].slice(0,30)
-      this.cursor+=20
+      // Ten held/ordered markets a cycle, on their own wrapping cursor. Slicing by the rotation's cursor (+20 a cycle)
+      // never wrapped and, whenever the count was a multiple of 20, revisited the same half forever (section 160).
+      const pri=active.length<=10?active:Array.from({length:10},(_,i)=>active[(this.activeCursor+i)%active.length])
+      const batch=[...new Map([...pri,...rotated].map(m=>[m.id,m])).values()].slice(0,30)
+      this.cursor+=20;this.activeCursor+=10
       const spotByProduct=new Map<string,Awaited<ReturnType<IbkrLabSources['spot']>>>()
       const weatherByMarket=new Map<string,Awaited<ReturnType<IbkrLabSources['weather']>>>()
       await Promise.all([...new Set(batch.map(m=>m.product).filter(p=>/^CF(BTC|ETH|SOL|XRP)$/.test(p)))].map(async product=>{
@@ -196,7 +200,7 @@ export class IbkrLab {
           if(!sig.basket&&(s.positions.some(p=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome!==sig.outcome&&!p.basket)||s.orders.some(o=>o.strategy===sig.strategy&&o.marketId===sig.marketId&&o.outcome!==sig.outcome&&!o.basket)))continue
           const exposure=s.positions.filter(p=>p.strategy===sig.strategy).length+s.orders.filter(o=>o.strategy===sig.strategy).length
           // Held positions occupy slots for days; four slots would stop a settlement arm after its first four entries.
-          const slots=IBKR_HOLD_TO_SETTLEMENT.has(sig.strategy)?Math.max(12,s.config.maxOpenPerStrategy):s.config.maxOpenPerStrategy
+          const slots=ibkrHoldsToSettlement(sig.strategy)?Math.max(12,s.config.maxOpenPerStrategy):s.config.maxOpenPerStrategy
           if(exposure>=slots||this.dailyLoss(sig.strategy,now))continue
           if((s.cash[sig.strategy]??0)<(sig.limit+fee)*s.config.contracts)continue
           s.orders.push({id:randomUUID(),...sig,quantity:s.config.contracts,createdAt:now,expiresAt:now+(sig.maker?60:2)*60000})
@@ -234,7 +238,7 @@ export class IbkrLab {
       const price=o.maker?o.limit:round(q.ask!+slippage)
       if(o.maker?q.ask!>o.limit-.01+1e-8:price>o.limit+1e-8){keep.push(o);continue}
       const opposite=s.quotes[String((o.outcome==='YES'?m.no:m.yes).conId)]
-      const hold=IBKR_HOLD_TO_SETTLEMENT.has(o.strategy)
+      const hold=ibkrHoldsToSettlement(o.strategy)
       if(!o.basket&&!hold&&(!opposite||!freshAsk(opposite,now)||price+opposite.ask!+slippage+2*fee-1>=.08-1e-8)){keep.push(o);continue}
       const quantity=Math.min(o.quantity,Math.floor(available)),cost=(price+fee)*quantity
       if(cost>(s.cash[o.strategy]??0))continue
@@ -263,7 +267,7 @@ export class IbkrLab {
     const s=this.state
     for(const p of [...s.positions]){
       if(p.basket&&(s.positions.some(other=>other!==p&&other.basket===p.basket)||now-p.openedAt<120000))continue
-      if(!p.basket&&IBKR_HOLD_TO_SETTLEMENT.has(p.strategy))continue // settled by the published final value
+      if(!p.basket&&ibkrHoldsToSettlement(p.strategy))continue // settled by the published final value
       const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
       if(p.market.closeTime<=now||!q||!freshAsk(q,now)||(q.askAt??0)<=p.openedAt+1000||q.askSize!<p.quantity)continue
       // The old guard refused the exit whenever the opposing ask left our side worth under a cent, which is
@@ -383,7 +387,7 @@ export class IbkrLab {
         if(p.basket&&(this.state.live.some(other=>other!==p&&other.status==='open'&&other.filled>other.exitFilled+(other.paired??0)&&other.basket===p.basket)||now-p.createdAt<120000))continue
         if(!p.filled||now-p.createdAt<60000||now-(p.lastExitAt??0)<60000||this.engine.getExecutionMode()!=='live')continue
         if(!terminal(p.orderId,p.filled,p.entryRef)||ids.some(id=>!terminal(id,exits.filter(f=>f.orderId===id).reduce((a,f)=>a+f.shares,0),p.exitRefs?.[id])))continue
-        if(!p.basket&&IBKR_HOLD_TO_SETTLEMENT.has(p.strategy))continue
+        if(!p.basket&&ibkrHoldsToSettlement(p.strategy))continue
         const remaining=p.filled-p.exitFilled-(p.paired??0)
         const q=this.state.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
         if(p.market.closeTime<=now||!q||!freshAsk(q,Date.now())||q.askSize!<remaining||q.ask!+slippage>.99)continue

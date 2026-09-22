@@ -68,6 +68,7 @@ export type GenericStrategyId =
   | 'polyus-fade'
   | 'polyus-book-imbalance'
   | 'polyus-weather-fair'
+  | 'polyus-lag'
 export type LadderStrategyId = CoreStrategyId | GenericStrategyId
 
 /**
@@ -147,7 +148,9 @@ export const GENERIC_STRATEGIES: GenericSpec[] = [
   { id: 'kalshi-weather-morning', venue: 'kalshi', key: 'weather-morning', flag: 'weatherMorningEnabled' },
   { id: 'polyus-fade', venue: 'polymarket-us', key: 'fade', flag: 'fadeEnabled' },
   { id: 'polyus-book-imbalance', venue: 'polymarket-us', key: 'book-imbalance', flag: 'bookEnabled' },
-  { id: 'polyus-weather-fair', venue: 'polymarket-us', key: 'weather-fair', flag: 'weatherFairEnabled' }
+  { id: 'polyus-weather-fair', venue: 'polymarket-us', key: 'weather-fair', flag: 'weatherFairEnabled' },
+  // Kalshi leads Polymarket US in play, pre-registered 2026-09-22 (docs/PREREGISTERED-polyus-lag.md, section 160).
+  { id: 'polyus-lag', venue: 'polymarket-us', key: 'lag', flag: 'lagEnabled' }
 ]
 const GENERIC_BY_ID = new Map<string, GenericSpec>(GENERIC_STRATEGIES.map((g) => [g.id, g]))
 

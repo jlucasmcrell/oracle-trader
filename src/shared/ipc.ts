@@ -821,6 +821,8 @@ export interface MiniAutoConfig {
   microMakerTwoSided?: boolean
   /** Polymarket US temperature markets priced from the NWS forecast (maker only). */
   weatherFairEnabled?: boolean
+  /** Kalshi leads Polymarket US in play: buy Polymarket US's stale side (docs/PREREGISTERED-polyus-lag.md). */
+  lagEnabled?: boolean
   /** Minimum |market − forecast fair| in cents to rest an order (default 3). */
   weatherFairMarginCents?: number
   /** Operator override: let book-imbalance spend even though its lab has not met the pass bar ("enable everything", 2026-09-02). */

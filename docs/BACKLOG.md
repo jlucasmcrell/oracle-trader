@@ -2662,6 +2662,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   1.0c after both fees, 98% in play, books fetched a median 2 s apart). A slow venue is where the good era's lead-lag
   trick worked; the question is whether Kalshi's in-game moves predict Polymarket US's next price well enough to buy
   its stale side. Trigger: **when the operator considers lifting the Polymarket US hold**.
+  **Status 2026-09-22 (section 160):** measured - yes, at 8c and one entry per game - and live as the registered
+  `polyus-lag` arm (the other Polymarket US arms keep their hold). Read it under 234.
 - **232. IB Gateway keeps going down (2026-09-22, section 158). OPERATOR.** Standalone install at C:\Jts\ibgateway,
   started by hand: no scheduled task, no Startup entry, no IBC. Any reboot leaves it down, and IBKR forces a full
   re-login weekly whatever the auto-restart setting says. The sentinel now pages within 30 minutes of it going down.
@@ -2672,3 +2674,52 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   --since 2026-09-22T21:48Z` on or after **2026-09-26** with 3+ UTC days of rows; rule in
   `docs/PREREGISTERED-leadlag-fast-shadow.md`. The durations it reports settle the co-location question: under ~100 ms
   and this machine is too slow whatever the code; seconds and it is not.
+
+- **234. Polymarket US lag arm: read it (2026-09-22, section 160).** Rule, read and verdict in
+  `docs/PREREGISTERED-polyus-lag.md`: at 60 settled entries over at least 15 games, or on **2026-10-13**, whichever
+  comes first, from the research log (`lag-fill` and `closed` rows, strategy `lag`, mode live). Also report the
+  `lag-gone` and `lag-nofill` share and the average fill against the price seen.
+- **235. Polymarket US fade: the case for lifting its hold (2026-09-22, section 160). OPERATOR (held in the panel).**
+  The review's only arm with a case: +1.56c/contract on the venue record (62 contracts, 3 losses, 80% band -1.2 to
+  +4.4). If lifted: 1 contract; the favourite leg at 0.923 or higher, where the one-contract taker fee is zero; one
+  position per game (2 of the 3 losses were the same NE-SEA game); the fade category filter back on (it is off in the
+  live config, and weather caused the third loss); a verdict rule registered first - 15 losses or 250 settled, judged
+  on the venue record. Expect break-even: it is a measurement. Needs 236 first if it enters as a maker. Trigger:
+  **the operator lifts the fade hold, or asks what it would take**.
+- **236. Polymarket US resting orders need a stale-order pull (2026-09-22, section 160).** `managePendingOrders`
+  cancels a rest only when its arm is off or it expires; nothing pulls a rest the market has moved through, the way
+  Kalshi's §150 does. Every maker arm is currently off. Trigger: **before any Polymarket US maker arm (fade's maker
+  entry, micro-maker, weather-fair) takes an order again**.
+- **237. Polymarket US history re-graded from the venue record (2026-09-22, section 160).** The app says -$16.25
+  lifetime; the venue says -$20.86 (funded $60.71, balance $39.85). 47 of 177 live closes and 4 of 40 lab
+  settlements were booked at the provisional price (fixed going forward). Re-grade the research log's `closed` rows
+  and the lab ledger from the venue's resolutions so no arm is judged on them. Trigger: **with 235, before any fade
+  decision is put to the operator**, or before the lab's next report.
+- **238. Retired Polymarket US arms: what must be fixed before any comes back (2026-09-22, section 160).**
+  weather-fair: `parseUsTempSlug` (`weatherForecast.ts:235`) reads "gte80lt81" as a 1F bracket; the venue's are 2F
+  ("between 80F and 81F"). book-imbalance: exits read the stored close (`miniAuto.ts` manageExits) while entries read
+  the fresh one, which churned 5 of 40 round trips on tennis starts that slipped; and it has no signal (§48).
+  micro-maker: the rebate rounds to $0.00 on a one-contract fill, so quoting for it cannot be positive at $1.
+  Trigger: **any proposal to re-enable one of the three**.
+- **239. Polymarket US small defects, not on any money path today (2026-09-22, section 160).** `getSettlements`
+  infers the winner from the realized-P&L change (0 in 12 of 182 real resolutions; the record's `side` field matched
+  182/182, and `usLedger.ts` already uses it). `deriveUsCloseTime` assumes a game stops trading at kickoff; games
+  trade to the final whistle (the lag arm runs its own feed and does not depend on it). Trigger: **the next change
+  that makes `getSettlements` feed P&L or reconciliation, or any in-game design that reads the catalog's close**.
+- **240. Polymarket paper lab: re-seat the arms the review kept (2026-09-22, section 160).** reversion to a longer
+  hold (its 15-minute markout is the only one above the control's); join/improve with a passive exit; drop the 2c
+  padding on one-contract taker orders; longshot/favorite re-read now that settlements are final. Each is a cohort
+  boundary. Trigger: **the lab's next re-baseline, or 2026-10-06**, whichever comes first.
+- **241. IBKR lab: the arms the review kept, re-seated (2026-09-22, section 160).** Merge momentum, log-momentum and
+  breakout (18-23 shared entries, almost all Phoenix/LA temperature) into one weather-momentum arm held to settlement,
+  pre-registered before it runs; make the weather model's uncertainty shrink through the day (`ibkrWeather.ts:41`
+  fixes 3F; `weatherForecast.ts:166-169` narrows to 0.9F); report the 1c slippage allowance apart from real costs
+  (the displayed ask is executable: 94,707 of 94,709 pairs). Trigger: **2026-09-29, or the lab's next re-baseline**.
+- **242. IBKR political slope on history, not on one contract (2026-09-22, section 160).** calibration holds one
+  position (G16FL_110326_REP, settles 2026-11-17); proving the 1.15 slope live needs ~900 independent contracts.
+  ForecastEx's public daily price files go back to 2024-09-01 with final results, including the 2024 House, Senate
+  and presidential contracts: fit the slope there. Trigger: **any proposal to put calibration live, or 2026-11-17**.
+- **243. IBKR real fee, confirmed once (2026-09-22, section 160).** The lab charges $0.01 per contract per purchase,
+  matching ForecastEx's published schedule; some IBKR pages say per matched pair. No fill has ever confirmed it. A
+  whatIf preview in the app (`ibkrAdapter.ts:92-99`) or one one-contract fill's commission report settles it - never
+  an ad-hoc order script. Trigger: **before any IBKR arm is proposed for live money**.

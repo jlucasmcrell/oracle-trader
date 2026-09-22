@@ -54,6 +54,10 @@ export function polyPaperQuote(book:OrderBook,at:number):PolyPaperQuote|undefine
  * minutes and the scan phase is set by app launch, so a window-keyed rule would make the rate depend on when the
  * app started. The side comes from the same hash for the same reason.
  */
+/** Admission stopped on their own evidence (review 2026-09-22, section 160): pressure -13.85c/contract [80% -16.8,
+ *  -10.9] over 20, momentum -6.98c [-11.1, -2.9] over 33, and both lose at the 15-minute mark before costs.
+ *  Their open positions and ledgers stay. */
+export const POLY_PAPER_RETIRED:ReadonlySet<string>=new Set(['momentum','pressure'])
 export const BENCH_SAMPLE=24
 export const benchHash=(id:string):number=>{let h=0;for(const c of id)h=(h*31+c.charCodeAt(0))>>>0;return h}
 const sideQuote=(q:PolyPaperQuote,side:'YES'|'NO')=>side==='YES'?{bid:q.bid,ask:q.ask,bidSize:q.bidSize,askSize:q.askSize}:{bid:1-q.ask,ask:1-q.bid,bidSize:q.askSize,askSize:q.bidSize}
@@ -159,6 +163,7 @@ export class PolyPaperLab {
     }
     const history=s.history[m.id]??[]
     if(s.enabled)for(const signal of polyPaperSignals(m,q,history,now)){
+      if(POLY_PAPER_RETIRED.has(signal.strategy))continue
       const owned=[...s.positions,...s.orders].filter(x=>x.strategy===signal.strategy)
       const group=underlyingOf(m.id,m.question)??m.id
       if(owned.filter(x=>(underlyingOf(x.market.id,x.market.question)??x.market.id)===group).length>=2)continue

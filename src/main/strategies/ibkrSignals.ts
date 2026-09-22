@@ -47,9 +47,20 @@ export const IBKR_UNAVAILABLE = [
  * their cash - the evidence that justified the stop stays on the panel. Only new admission is refused.
  */
 export const IBKR_RETIRED:ReadonlyMap<string,string>=new Map([
+  ['political-favorite','Stopped 2026-09-22 (section 160): a duplicate, not an arm. Since round 121 it applies calibration\'s own Elections/Government slope of 1.15, so it fires exactly where calibration fires and on the same side; its one open position duplicates calibration\'s (G16FL_110326_REP) and is still held to settlement.'],
+  ['weather-morning','Stopped 2026-09-22 (section 160): 28 of its 35 entries are weather-forecast\'s own entries, and it won 11 against the 10.1 its prices implied. No edge of its own to measure.'],
+  ['fade-maker','Stopped 2026-09-22 (section 160): it fills only after the ask falls 3c, which selects the losers of fade\'s own signal - 34 won against 36.9 implied, -$3.27, while fade at the ask won every contract that settled.'],
+  ['weather-maker','Stopped 2026-09-22 (section 160): 1 win against 8.9 implied (z -3.6), -$8.04. Passive fills land when the price moves against it, on a weather model that shows no edge at the ask either.'],
+  ['maker','Stopped 2026-09-22 (section 160): 1 fill in 161 signals. It cannot produce the evidence it exists to produce.'],
+  ['mean-reversion','Stopped 2026-09-22 (section 160): it bets against weather moves that carry real information - 5 won against 7.2 implied, and holding every entry to settlement makes it worse (-$2.48), so the timed exit was not the problem.'],
+  ['ladder-value','Stopped 2026-09-22 (section 160): 3 won against 3.3 implied; held or timed, no edge (-$1.34).'],
   ['microprice','Stopped 2026-09-20 (section 143): 47 closed, 18 events, 4 day-clusters, -6.23c/contract, band [-8.57,-3.90]. The lab\'s own promotion bar, met with the sign reversed. The handicap is the taker entry, not the signal: gross was -5.15c crossing out and -5.18c settling.'],
   ['book-imbalance','Stopped 2026-09-20 (section 143): 51 closed, 15 events, 4 day-clusters, -6.18c/contract, band [-9.73,-2.62]. Same bar, same sign, same cause. A passive re-seat is a different hypothesis and needs its own pre-registration.']
 ])
+/** Hold-to-settlement by ARM: a re-baselined cohort keeps its arm's rule. `calibration:pre-slopes-20260918` held
+ *  calibration's seven positions and, absent from the set by name, the timed exit sold all seven on 2026-09-18
+ *  (-$0.63; one was bought back two hours later). Found by the 2026-09-22 review, section 160. */
+export const ibkrHoldsToSettlement=(strategy:string)=>IBKR_HOLD_TO_SETTLEMENT.has(strategy.split(':')[0])
 export const IBKR_HOLD_TO_SETTLEMENT:ReadonlySet<string>=new Set(['fade','favorite','calibration','political-favorite','fade-maker','ladder-value','spot-first','convergence','news','market-conditioned','weather-forecast','weather-morning','weather-maker','benchmark'])
 /** A held position must be able to settle inside the test; the election contracts expire about 47 days out. Also
  *  bounds which contracts the daily model-forecast budget may be spent on (ibkrLab.runForecast). */

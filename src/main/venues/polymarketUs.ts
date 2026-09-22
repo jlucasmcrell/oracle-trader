@@ -374,8 +374,15 @@ export class PolymarketUsAdapter implements VenueAdapter {
     // stalled Kalshi settlement the same way). The book is the primary source:
     // /settlement 404/500'd on 11 of 16 resolved markets and cannot express a
     // fractional (void / last-traded) settlement, which 3.2% of markets have.
-    if (mapped.resolution === undefined && (mapped.resolved || (mapped.closeTime !== undefined && Date.now() > mapped.closeTime))) {
-      const px = await this.fetchSettlementPrice(mapped.id)
+    //
+    // RESOLVED only (review 2026-09-22, section 160). The book says EXPIRED minutes before the venue writes the real
+    // 0/1, and its settlementPx meanwhile holds the last close: 47 of 177 live closes and 4 of 40 lab settlements
+    // were booked at that provisional price (Chelsea-Hull at 0.07, finalized 0). Once RESOLVED, the long side's
+    // own price is final too; the two must agree or we wait for the next pass.
+    if (mapped.resolution === undefined && mapped.resolved) {
+      const book = await this.fetchSettlementPrice(mapped.id)
+      const side = resolvedLongPrice(m)
+      const px = book !== undefined && (side === undefined || Math.abs(book - side) < 0.0005) ? book : undefined
       if (px !== undefined) {
         mapped.resolved = true
         if (px === 1) mapped.resolution = 'yes'
@@ -1028,6 +1035,15 @@ function firstNum(o: Record<string, unknown>, keys: string[]): number {
  * Anything ambiguous returns undefined — a guessed resolution books a
  * fabricated win or loss, which is worse than waiting.
  */
+/** The long side's price on a RESOLVED market (1 or 0, or the void price), or undefined when the record has none. */
+export function resolvedLongPrice(m: { status?: string; marketSides?: { long?: boolean; price?: unknown }[] }): number | undefined {
+  if (m.status !== 'MARKET_STATUS_RESOLVED') return undefined
+  const long = (m.marketSides ?? []).find((s) => s && s.long === true)
+  if (!long || long.price === undefined || long.price === null || long.price === '') return undefined
+  const px = parseFloat(String(long.price))
+  return Number.isFinite(px) && px >= 0 && px <= 1 ? px : undefined
+}
+
 export function parseUsSettlement(value: unknown): 'yes' | 'no' | undefined {
   if (typeof value === 'number') {
     if (value === 1) return 'yes'

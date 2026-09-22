@@ -458,8 +458,9 @@ async function main(): Promise<void> {
     await ladder.run()
     // The count is a drift alarm: a new arm must arrive with its GENERIC_STRATEGIES entry,
     // its config flag and this number, or it is not on the ladder at all.
-    // 20 since 2026-09-14 (kalshi-consensus, build-queue item 13).
-    eq('G: all twenty strategies are tracked', ladder.status().strategies.length, 20)
+    // 20 since 2026-09-14 (kalshi-consensus, build-queue item 13); 21 since 2026-09-22 (polyus-lag, section 160).
+    eq('G: all twenty-one strategies are tracked', ladder.status().strategies.length, 21)
+    eq('G: the Polymarket US lag arm is one of them', ladder.status().strategies.some((s) => s.id === 'polyus-lag'), true)
     eq('G: the consensus arm is one of them', ladder.status().strategies.some((s) => s.id === 'kalshi-consensus'), true)
     // park the four core strategies so the signal strategies get the promotions
     cfg.convergenceLiveEnabled = false
@@ -491,7 +492,7 @@ async function main(): Promise<void> {
     // contractsPerNotch: 2 (round 76) - lead-lag sizes at 2 contracts per notch, so tiny-live (notch 1) is 2
 // and its first scale-up is 4. It was pinned at the shared MAX_NOTCH ceiling while carrying the account.
 eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.leadLagLiveEnabled, n: cfg.leadLagMaxContractsPerOrder, stage: st('kalshi-leadlag').stage }, { live: true, n: 1, stage: 'tiny-live' })
-    eq('G: Polymarket US fade and book on at multiplier 1', { fade: mcfg.fadeEnabled, book: mcfg.bookEnabled, mult: mcfg.strategySizeMult }, { fade: true, book: true, mult: { fade: 1, 'book-imbalance': 1, 'weather-fair': 1 } })
+    eq('G: Polymarket US fade and book on at multiplier 1', { fade: mcfg.fadeEnabled, book: mcfg.bookEnabled, mult: mcfg.strategySizeMult }, { fade: true, book: true, mult: { fade: 1, 'book-imbalance': 1, 'weather-fair': 1, lag: 1 } })
     eq('G: fade still in its cool-down', st('kalshi-fade').stage, 'disabled')
     // Polymarket US fade: 20 closes at +$0.10 in the research log -> x2
     // 16 x +$0.35 and 4 x -$0.50: +$3.60 net, $0.18 mean, two-sided, and wide enough for the 95% band (2026-09-19).

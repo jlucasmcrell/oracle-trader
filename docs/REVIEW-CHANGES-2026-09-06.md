@@ -6118,3 +6118,97 @@ spread, the last minute, a window leaving, the NO side reading the Kalshi bid. G
 at 21:48:45Z (yes-leg, 0/10 flip votes, the same as the shared client) and the first gap was recorded at 21:48:47Z
 (HYPE YES: Polymarket 0.92/0.96 on a 6 ms-old top against a Kalshi ask of 0.913 for 2 contracts, 2.14c net).
 Read on or after 2026-09-26: gaps per hour, how long they last, and whether buying them pays.
+
+## §160 - 2026-09-22 22:16Z: complete reviews of Polymarket US and the IBKR lab. Polymarket US is back on through one registered arm; a settlement bug had mis-booked 27% of its closes
+
+Operator: "Get Poly back up, it hasn't been doing great in paper, but again, maybe it needs a complete review. Same
+for IBKR." Two independent read-only reviews (source, state files, the venue's own history on disk, public GETs
+only; nothing placed, cancelled or edited), then the fixes below.
+
+### Polymarket US - what the review found
+
+- **Settlements were booked at a provisional price.** `fetchSettlementPrice` took the book's `settlementPx` as soon as
+  the book said EXPIRED. For a few minutes the venue shows the previous close there before it writes the real 0/1
+  (Chelsea-Hull booked at 0.07, finalized 0; a lab favourite booked flat at 0.96 that lost). **47 of 177 live closes
+  (27%) and 4 of 40 lab settlements** were booked that way, and the ladder graded arms on them. The venue's own
+  history reconciles to the cent: $60.71 funded, $39.85 balance, **-$20.86 lifetime**, not the app's -$16.25.
+- **The arms, on the venue record:** book-imbalance 35 markets, 0 winners, -$11.87 (fees $6.70, spread $5.17;
+  no signal, and 5 of 40 round trips were exit-then-re-entry 4-6 s apart on tennis matches whose start slipped);
+  weather-fair 2 trades, -$5.36, a bracket bug (`parseUsTempSlug` reads "gte80lt81" as 1F; the venue's brackets are
+  2F, which halves every between-bracket's fair value); micro-maker -$4.72, of which -$5.88 is inventory from ~55
+  unlogged rests on 09-06 (the read-lag duplicate bug, since fixed) and a rebate that pays $0.00 on every
+  one-contract fill; **fade +$0.96 on 62 contracts, 3 losses, +1.56c/contract, 80% band [-1.2, +4.4]** - a small,
+  unproven edge, no side bug (all 92 fills were NO at YES <= 0.12).
+- **Paper lab:** every timer arm loses to execution (taker at ask+1c, exit at bid-1c after 15 minutes: ~5.5c a round
+  trip, 2c of it padding a one-contract order would not pay). pressure -13.85c [-16.8, -10.9], momentum -6.98c
+  [-11.1, -2.9].
+- **Also:** resting orders are free options (no stale-order pull like Kalshi's §150); a pending row was dropped
+  without a cancel when order lookups kept failing; `getSettlements` infers the winner from the realized-P&L change
+  (0 in 12 of 182 resolutions; not used for P&L); `deriveUsCloseTime` assumes games halt at kickoff (they trade to
+  the final whistle). Checked and correct: price units, side mapping, the NO-price conversion, the taker fee
+  (0.06 then 0.0695 x C x P(1-P) to the cent, exact on 85 of 86 fills).
+
+### Polymarket US - what changed
+
+- **Settle on RESOLVED only** (`polymarketUs.ts` getMarket): the market's status must be MARKET_STATUS_RESOLVED, and
+  the book's settlement price must agree with the long side's own price on the resolved record, or the position waits
+  for the next pass. Checked on a resolved record by public GET (status RESOLVED, long side "1", book 1.0000, settled
+  5 s after endDate). The paper lab settles through the same call, so it is fixed too.
+- **Cancel before forget** (`miniAuto.ts` managePendingOrders): a pending order the venue cannot find after five
+  minutes is cancelled, kept one more pass for a fill that landed before the cancel, then dropped.
+- **Lab:** pressure and momentum stop taking entries (`POLY_PAPER_RETIRED`); their positions and ledgers stay.
+- **Not changed:** book-imbalance, weather-fair and micro-maker stay off - they are held in the panel and the review
+  retires them. **fade is also held in the panel** (operator hold); the review's case for it is backlog 235, and
+  lifting the hold is the operator's click.
+
+### Polymarket US is back on: Kalshi leads Polymarket US in play (`polyus-lag`)
+
+Registered in `docs/PREREGISTERED-polyus-lag.md` before the first order. The trader now runs the recorder's feed
+itself (`PolyUsLagFeed`, `polyusLag.ts`): discovery every 30 minutes from the app's moneyline index and Kalshi's game
+series, then each 60 s poll one batched Kalshi orderbook call and one Polymarket US book per game in play. When
+Kalshi's mid for a team moves >= 8c between two polls and Polymarket US's price for it has not moved 1c, it buys
+Polymarket US's stale side with a taker order at the price it saw (refused when a fresh book is already more than one
+tick worse), $1, one entry per Polymarket US market per game, at most 10 a day, held to settlement. Every trigger,
+refusal, no-fill and fill goes to the research log (`lag-trigger`, `lag-gone`, `lag-nofill`, `lag-fill`). New ladder
+arm `polyus-lag` (flag `lagEnabled`, default off; the ladder's trade-small rule arms it like any new arm).
+
+**The threshold moved from 5c to 8c before any order**, and the registration says why. The trader can hold one
+position per market to settlement, and the venue nets opposite buys, so a game gives one entry. Re-running the
+measurement that way: at 5c every trigger earns +10.3c [95% +3.5, +17.1] over 307, but **the first trigger per game
+earns +4.0c [-7.1, +14.8]** - the edge came from re-entering the same game four or five times. At 8c: every trigger
++12.9c [+2.9, +23.2] over 113, first per game **+14.9c [+0.1, +28.9] over 38 games**. The rule was picked after
+comparing sixteen entry rules on the same five days, so those numbers flatter it; the live read is the verdict
+(60 settled entries over >= 15 games, or 2026-10-13).
+
+### IBKR lab - what the review found
+
+- **No edge overall:** 392 trades with a known outcome won 210 against the 216 their prices implied (z -0.8).
+  Holding everything to settlement would have turned -$43.74 into about -$19.0; the rest is the fee, the 1c slippage
+  allowance and arms that lose even when held.
+- **A migration bug forced seven exits.** The round-121 re-baseline renamed calibration's open positions to
+  `calibration:pre-slopes-20260918`, a name not on the hold-to-settlement list, so the timed exit sold all seven
+  (-$0.63; one was bought back two hours later).
+- **The re-quote priority skipped half the held markets** whenever their count was a multiple of 20 (the slice used
+  the rotation's cursor, +20 a cycle, and never wrapped).
+- **About ten independent bets, not eighteen:** political-favorite fires exactly where calibration does; 28 of
+  weather-morning's entries are weather-forecast's; the momentum group shares 18-23 entries.
+- The 1c slippage allowance is not a venue cost (the displayed ask equals 1 minus the opposing bid on 94,707 of
+  94,709 quote pairs), and the weather model's uncertainty is fixed at 3F all day. Settlement grading: 187 checked
+  against the exchange's final values, 0 mismatches. Paper fills are conservative, not optimistic.
+- **Nothing is close to the $100 live step.** fade has 15 closed and 0 losses; the gate needs 15 losses or 250 closes.
+
+### IBKR lab - what changed
+
+- `ibkrHoldsToSettlement` (`ibkrSignals.ts`): hold-to-settlement by arm, so a cohort suffix keeps its arm's rule.
+  All five call sites in `ibkrLab.ts` use it.
+- Re-quote priority: ten held or ordered markets a cycle on their own wrapping cursor.
+- **Stopped on their evidence** (`IBKR_RETIRED`, ledgers kept, admission refused): political-favorite, weather-morning,
+  fade-maker, weather-maker, maker, mean-reversion, ladder-value. microprice and book-imbalance stay stopped.
+
+### Verification
+
+`npm test` 22/22 suites; review-fixes 589/0 with 15 new assertions (the feed: series walk, no observation before the
+window, first observation, both team markets on an 8c move, a missing book, no bridging across a gap; the settlement
+gate: provisional price refused, RESOLVED-but-disagreeing waits, 0, 1 and a void price; the cohort hold rule; the
+8c threshold). The adversarial ladder test now counts 21 arms and expects `lag` at multiplier 1. Built 22:16:22Z;
+the app restarted 22:16:32Z.
