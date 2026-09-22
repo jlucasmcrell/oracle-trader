@@ -5982,3 +5982,50 @@ single-pair misses in that half hour and nothing on the order path. Downloads st
 
 Tests: ladder 173/0, review-fixes 550/0, typecheck clean. Restart verified (bundle 18:01:36Z, electron 18:01:53Z);
 13 shadow rows in the first minute.
+
+## §157 - 2026-09-22 20:40Z: looking for improvements instead of stops - five tests, no new edge, one instrument fixed
+
+The operator: "And besides everything you disabled or didn't touch - did you try to improve anything or test anything new
+we might have done wrong before?" The honest answer to the question as asked was no: section 156 found why lead-lag won,
+stopped an arm from being re-armed on a clock, switched news off and set up one shadow. Nothing in it tried to make
+anything earn more. This round did, with data already on disk.
+
+1. **The good era's lead-lag mechanism, early read** (`leadlag_list_mechanism.py`, 571 shadow rows, 18:02-19:57Z,
+   49 settled windows). The old rule would have fired 217 IOCs at the delayed list price; **8 would have filled (4%)** -
+   in 96% of cases the live book had already moved past the list. The 8 fills: +3.1 +/- 29.8c, which decides nothing.
+   At roughly four fills an hour the read needs two to three days, so backlog 227's 2026-09-25 date stands. The list
+   is still very stale: |list mid - book mid| median 3.5c, p90 11c, and 56% of rows differ by 3c or more.
+2. **Spot-first, overdue since 2026-09-21** (`node scripts/spot-shadow-gate.mjs --verdict`): the fast, spot-led version
+   of lead-lag - a lognormal fair value from Coinbase ticks against the window's strike, Kalshi polled every two
+   seconds. **FAIL: -2.49c/contract, 80% band [-3.15, -1.84], n = 3,768 decisions over 7 day-clusters, every coin
+   negative.** Edges by the model last a median of 2 s (p90 10 s).
+   *Was it our model's fault?* Kalshi settles on CF Benchmarks' index, not Coinbase, so a steady basis would bias the
+   model near the strike. `scripts/backtests/spot_basis_regrade.py` measured it at every boundary (Coinbase 60 s
+   average minus the index value the venue printed): **-0.5 to -1.9 bp** by coin - a few dollars on BTC. A fair value
+   corrected with the basis known at each window's open changes nothing: -2.61c on 3,866 decisions. On all 958,284
+   polls the model's Brier is 0.147 against Kalshi's mid at 0.142: a sound model, slightly worse than the market.
+   The FAIL is real.
+   *Instrument fixed:* the grader's accuracy line read "fv 0.2600 vs mid 0.1565" - worse than guessing 50%, which is
+   what sent this investigation looking for a broken model. 18,955 of its 52,229 minute-samples carried a Coinbase
+   tick older than the 3 s its own decision rule allows. Filtered the same way, it reads **fv 0.1587 vs mid 0.1539**.
+   `scripts/spot-shadow-gate.mjs` now applies `MAX_SPOT_AGE_MS` to that line; selftest 16/0, verdict unchanged.
+3. **Near-expiry favourites.** crypto15 (15-minute crypto momentum): 4,399 windows over 11 days, **-0.81c
+   [-2.07, +0.45]**, every coin at or below zero; its gate needs 20 day-clusters and has 11, so no verdict. ladder15
+   (15-minute copper, gold, natgas, silver, WTI favourites near close; it has no grader, backlog 176): 1,305
+   qualifying windows over 10 days, **+0.02c [-1.30, +1.33]**, every series straddling zero. Descriptive only.
+4. **Kalshi liquidity incentives** were already read and correctly closed (item 78): 300-1,000 contracts resting on
+   both sides, over $300 of collateral in one market. Not reopened.
+5. **Where fade makes and loses money** (`scripts/backtests/fade_by_family.py`: 120 fade markets settled in the
+   09-20 dump; the episode logs record 189 fade entries against 314 ledger trades, so coverage is partial and the
+   09-21 crypto cluster is after the dump). Commodities **-$3.93 on 26 markets (81% won)** and weather **-$3.35 on 2**
+   are the losses; everything else won small, including politics with six or more hours left, the cell where the
+   historical favourite-longshot edge was measured (**+$0.64 on 7, all won**), and crypto dailies (+$2.84 on 28, all
+   won - before four lost together on 09-21). This was sliced after looking, on a small sample: a hypothesis to
+   pre-register before any re-arm (backlog 228), not a reason to restart fade.
+
+**Across all five: Kalshi's short-horizon markets are priced right by every structural test we can run** - cheap sides,
+favourites near expiry, momentum, a spot model at two seconds. The only edge in this app's history was a speed edge,
+and whether any of it is left at our speed is backlog 227's question.
+
+Scripts added: `scripts/backtests/spot_basis_regrade.py`, `scripts/backtests/fade_by_family.py`. Script changed:
+`scripts/spot-shadow-gate.mjs` (one filter on a descriptive line). Nothing in the app changed; no restart.

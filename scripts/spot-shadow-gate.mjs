@@ -151,10 +151,15 @@ function verdict(rows, now = new Date()) {
     if (thr === PRIMARY_THR) pass = band.n >= MIN_N && band.D >= MIN_DAYS && band.lo > 0
   }
   // Does the fair value carry information the Kalshi mid does not? Brier on one row per (coin, window, minute).
+  // Same freshness rule as the decisions above: a fair value priced off a spot tick older than MAX_SPOT_AGE_MS is
+  // not the model, it is a stale input. Without this filter 18,955 of 52,229 samples (2026-09-22) carried a stale
+  // spot and the line read fv 0.2600 vs mid 0.1565 - worse than guessing 50% - when the model on fresh ticks scores
+  // 0.1587 vs 0.1539. The verdict was never affected; the line alone suggested a broken model (section 157).
   const res = new Map(settles.map((s) => [s.t, s.result]))
   const seen = new Set(); let bf = 0, bm = 0, n = 0
   for (const r of k) {
     if (r.fv === null || r.fv === undefined || r.bid === null || r.ask === null || !(r.tauS >= MIN_TAU_S)) continue
+    if (!(r.spotAge <= MAX_SPOT_AGE_MS)) continue
     const key = `${r.coin}|${r.win}|${String(r.ts).slice(0, 16)}`
     if (seen.has(key) || !res.has(r.t)) continue
     seen.add(key)

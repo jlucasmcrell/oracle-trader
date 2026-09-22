@@ -2635,6 +2635,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   separately. The 09-21 cluster and 09-18 together are the entire negative sample that stopped fade. Before fade is ever re-armed, cap concurrent fade
   exposure per asset class and close hour. Trigger: **any proposal to re-arm fade**, and no later than **2026-10-03**
   (the stop/take-profit re-read, backlog 177).
+  **Evidence 2026-09-22 (section 157):** on the 120 fade markets in the 09-20 dump, commodities lost $3.93 on 26 (81%
+  won) and weather $3.35 on 2; politics with >= 6 h left won all 7 (+$0.64), crypto dailies all 28 (+$2.84) before the
+  09-21 cluster. Post-hoc and small: the re-arm proposal must pre-register the category exclusions and the correlation
+  cap together, and be judged on data that did not choose them.
 - **229. news is off pending a direction fix (2026-09-22, section 156).** `newsSignals` maps headline polarity straight
   to YES/NO. Re-enable only with the market's framing applied (`strikeOf` for scalar markets; skip event markets whose
   framing cannot be parsed) and a test on an "above" and a "below" market. Trigger: **2026-10-09**, or whenever the
