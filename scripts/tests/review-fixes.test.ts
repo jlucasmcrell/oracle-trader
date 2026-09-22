@@ -6,6 +6,7 @@ import { bracketState, inBlackout, inBlackoutLocal, printFills, stationLocalHour
 import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, parseOpenMeteoHourly, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
+import { kalshiGameEvents, lagTrigger, matchPolyUsGames, polyUsTakerFee } from '../../src/main/strategies/polyusLag'
 import { fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
@@ -543,6 +544,49 @@ eq('brake: trips past the limit', dailyBrakeBlock(10, { date: DAY, realized: -12
 eq('brake: yesterday does not bind today', dailyBrakeBlock(10, { date: '2026-09-08', realized: -40, tripped: true }, DAY), null)
 eq('brake: no ledger yet', dailyBrakeBlock(10, undefined, DAY), null)
 eq('brake: a NaN ledger never halts', dailyBrakeBlock(10, { date: DAY, realized: NaN, tripped: false }, DAY), null)
+
+// ---- Kalshi leads Polymarket US in play (section 160): the matcher and the trigger ----
+{
+  // A real Polymarket US moneyline shape (trimmed), and the two Kalshi team markets of the same game.
+  const pm = [{
+    slug: 'aec-cfb-miss-fl-2026-09-26', gameStartTime: '2026-09-26T19:30:00Z',
+    question: 'Who will win in the upcoming football event Ole Miss vs Florida scheduled for September 26, 2026 at 7:30 PM UTC?',
+    marketSides: [
+      { description: 'Rebels', price: '0.4200', long: true, team: { name: 'Rebels', safeName: 'Ole Miss', abbreviation: 'miss' } },
+      { description: 'Gators', price: '0.5800', long: false, team: { name: 'Gators', safeName: 'Florida', abbreviation: 'fl' } }
+    ]
+  }]
+  const events = kalshiGameEvents('KXNCAAFGAME', [
+    { ticker: 'KXNCAAFGAME-26SEP26MISSFLA-MISS', title: 'Ole Miss wins', event_ticker: 'KXNCAAFGAME-26SEP26MISSFLA' },
+    { ticker: 'KXNCAAFGAME-26SEP26MISSFLA-FLA', title: 'Florida wins', event_ticker: 'KXNCAAFGAME-26SEP26MISSFLA' },
+    { ticker: 'KXNCAAFGAME-26SEP26MISSFLA-TIE', title: 'Tie', event_ticker: 'KXNCAAFGAME-26SEP26MISSFLA' }
+  ])
+  const pairs = matchPolyUsGames(pm, events)
+  eq('polyus-lag: both Kalshi team markets match the moneyline, each with the right Polymarket US side',
+    pairs.map((p) => [p.ticker.split('-').pop(), p.kalshiTeamIsLong]).sort(), [['FLA', false], ['MISS', true]])
+  eq('polyus-lag: the fee is 0.0695 P(1-P) to the nearest cent', [polyUsTakerFee(0.5), polyUsTakerFee(0.9), polyUsTakerFee(0.2)], [0.02, 0.01, 0.01])
+
+  const miss = pairs.find((p) => p.ticker.endsWith('-MISS'))!
+  const fla = pairs.find((p) => p.ticker.endsWith('-FLA'))!
+  const t0 = Date.parse('2026-09-26T20:00:00Z') // in play
+  // Polymarket US long side (Ole Miss) 0.41/0.43 both cycles; Kalshi Ole Miss moves.
+  const obs = (at: number, kBid: number, kAsk: number, pb = 0.41, pa = 0.43) => ({ at, kBid, kAsk, pmLongBid: pb, pmLongAsk: pa, pmLongBidSz: 50, pmLongAskSz: 40 })
+  const up = lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.49, 0.51), t0)
+  eq('polyus-lag: Kalshi up on the long team buys the LONG side at its ask', up && [up.pmSide, up.forKalshiTeam, up.price, up.size], ['long', true, 0.43, 40])
+  eq('polyus-lag: the gap is Kalshi\'s new price minus the ask minus the fee', up?.gapCents, +((0.50 - 0.43 - polyUsTakerFee(0.43)) * 100).toFixed(2))
+  const down = lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.33, 0.35), t0)
+  eq('polyus-lag: Kalshi down on the long team buys the SHORT side at 1 - long bid', down && [down.pmSide, down.forKalshiTeam, down.price, down.size], ['short', false, 0.59, 50])
+  // Florida is Polymarket US's SHORT side: Florida's implied price is 1 - long mid = 0.58.
+  const flaUp = lagTrigger(fla, obs(t0 - 60_000, 0.57, 0.59), obs(t0, 0.65, 0.67), t0)
+  eq('polyus-lag: Kalshi up on the short team buys the SHORT side', flaUp && [flaUp.pmSide, flaUp.forKalshiTeam, flaUp.price], ['short', true, 0.59])
+  const flaDown = lagTrigger(fla, obs(t0 - 60_000, 0.57, 0.59), obs(t0, 0.49, 0.51), t0)
+  eq('polyus-lag: Kalshi down on the short team buys the LONG side', flaDown && [flaDown.pmSide, flaDown.forKalshiTeam, flaDown.price], ['long', false, 0.43])
+  eq('polyus-lag: never before the game starts', lagTrigger(miss, obs(t0 - 60_000 - 86_400_000, 0.41, 0.43), obs(t0 - 86_400_000, 0.49, 0.51), t0 - 86_400_000), null)
+  eq('polyus-lag: a 4c Kalshi move is below the 5c primary threshold', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.45, 0.47), t0), null)
+  eq('polyus-lag: Polymarket US already moved 1c, so it is not stale', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43), obs(t0, 0.49, 0.51, 0.42, 0.44), t0), null)
+  eq('polyus-lag: a two-minute gap between observations is not "the previous cycle"', lagTrigger(miss, obs(t0 - 120_000, 0.41, 0.43), obs(t0, 0.49, 0.51), t0), null)
+  eq('polyus-lag: no trigger when the ask already sits at Kalshi\'s new price', lagTrigger(miss, obs(t0 - 60_000, 0.41, 0.43, 0.48, 0.50), obs(t0, 0.47, 0.51, 0.48, 0.50), t0), null)
+}
 
 // ---- event-speed lead-lag shadow (section 159): gaps from two pushed books, opened and closed with a duration ----
 {

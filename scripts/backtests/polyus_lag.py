@@ -160,10 +160,6 @@ for t, rows in series.items():
             agree += 1
 print(f"cross-check (terminal vs settlement-dump, where both exist): {agree}/{both} agree")
 
-if False:
-    json.dump({"n_resolved": len(resolution), "n_series": len(series), "n_terminal": n_term,
-               "n_dump": n_dump, "crosscheck_both": both, "crosscheck_agree": agree}, f, indent=2)
-
 # ---------- trigger detection ----------
 def forward_walk(rows, i, max_k=5):
     res = {}
@@ -195,10 +191,13 @@ for t, rows in series.items():
         n_pairs_considered += 1
         delta_k = rows[i]['k_mid'] - rows[i - 1]['k_mid']
         delta_pm = rows[i]['pm_yes_mid'] - rows[i - 1]['pm_yes_mid']
-        if abs(delta_pm) >= 0.01:
+        # Compared in rounded cents: Kalshi mids move in half-cent steps, and 0.44 - 0.41 is 0.0299999... in floating
+        # point, so a raw comparison dropped some exact-threshold moves at random. The app's lagTrigger uses the same
+        # rounding, and with it the two agree trigger for trigger on the recorded data (641 here, 639 with depth >= 1).
+        if round(abs(delta_pm) * 100, 6) >= 1:
             excluded_pm_moved += 1
             continue
-        abs_delta_k_cents = abs(delta_k) * 100
+        abs_delta_k_cents = round(abs(delta_k) * 100, 6)
         if abs_delta_k_cents < M_LIST_CENTS[0]:
             continue
         side = 'yes' if delta_k > 0 else 'no'
@@ -212,7 +211,7 @@ for t, rows in series.items():
             continue
         fe = fee(ask_price)
         eff_cost = ask_price + fe
-        gap_cents = (kalshi_target - eff_cost) * 100
+        gap_cents = round((kalshi_target - eff_cost) * 100, 6)
         if gap_cents < F_CENTS:
             continue
 
