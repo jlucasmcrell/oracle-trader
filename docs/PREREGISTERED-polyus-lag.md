@@ -59,3 +59,6 @@ rules apply. Worst single trade: the stake.
 - Otherwise: continue to 150 entries.
 - Also reported, from the research log (`lag-trigger`, `lag-gone`, `lag-nofill`, `lag-fill`): how often an order found
   the price already gone, which measures how stale "stale" was.
+- Also reported: results by league. The evidence covered NFL, NCAAF, MLB and WNBA; the rule takes every league the
+  matcher maps (NHL, MLS and the European football leagues included), so a league outside the evidence is read
+  separately before it counts toward scaling.
