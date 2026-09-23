@@ -268,6 +268,20 @@ async function main(){
     assert.match(ls.notes._discovery,/not listed on IBKR, not requested again for a day: FES 2026-09/)
     now+=18*3600000;await lab.scan();assert.deepEqual(asked.slice(3),['TEST 2026-09','FES 2026-09'],'a day later it is asked again: a listing can appear')
    }finally{globalThis.fetch=originalFetch;now=clock}}
+  // BACKLOG 197: every crypto contract closing inside six minutes is quoted every cycle, after the ten held markets and
+  // before the rotation. One closing in seven minutes waits for the rotation; more than twenty rotate through twenty slots.
+  {const ids=(ms:IbkrLabMarket[])=>ms.flatMap(m=>[m.yes.conId,m.no.conId]),cf=(strike:number,minutes:number)=>({...market(`CFBTC_091626_${strike}`,strike),product:'CFBTC',closeTime:now+minutes*60000,expiresAt:now+minutes*60000})
+   const far=Array.from({length:40},(_,i)=>market(`TEST_091626_${1000+i}`,1000+i))
+   const run=async(markets:IbkrLabMarket[])=>{const x=setup(),asked:number[][]=[];x.s.markets=markets;x.s.discoveryAt=now;x.s.config.enabled=false
+    for(let i=0;i<12;i++)addPosition(x,{id:`held${i}`,strategy:'fade',market:far[i]})
+    ;(x.reader as any).quotes=async(conIds:number[])=>{asked.push(conIds);return conIds.map(id=>quote(id,.5))}
+    await x.lab.scan();now+=30000;await x.lab.scan();return asked}
+   const soon=[2000,2001,2002].map(k=>cf(k,4)),later=cf(3000,7),asked=await run([...far,...soon,later])
+   assert.deepEqual(asked.map(a=>a.slice(0,26)),[[...ids(far.slice(0,10)),...ids(soon)],[...ids([...far.slice(10,12),...far.slice(0,8)]),...ids(soon)]],'the held ten lead, then every contract inside the window, every cycle')
+   assert.ok(asked.every(a=>a.length===60&&!a.includes(later.yes.conId)),'a full batch; seven minutes out waits for the rotation')
+   const many=Array.from({length:24},(_,i)=>cf(4000+i,5)),crowded=await run([...far,...many])
+   assert.ok(crowded.every(a=>a.length===60&&a.slice(0,20).every(id=>ids(far.slice(0,12)).includes(id))),'twenty-four closing together still leave the held ten')
+   assert.ok(many.every(m=>crowded.some(a=>a.includes(m.yes.conId))),'and rotate through twenty slots, none starved')}
   class Api extends EventEmitter{
    connect(){queueMicrotask(()=>this.emit(EventName.nextValidId,1));return this}disconnect(){this.emit(EventName.disconnected);return this}
    reqMktData(id:number,c:any){if(c.conId===2){this.emit(EventName.error,Error('Unavailable contract'),200,id);return}this.emit(EventName.marketDataType,id,c.conId===3?3:1);this.emit(EventName.tickPrice,id,2,.42);this.emit(EventName.tickSize,id,3,7);this.emit(EventName.tickSnapshotEnd,id)}

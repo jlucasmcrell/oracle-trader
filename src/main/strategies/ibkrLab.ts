@@ -166,7 +166,13 @@ export class IbkrLab {
       // Ten held/ordered markets a cycle, on their own wrapping cursor. Slicing by the rotation's cursor (+20 a cycle)
       // never wrapped and, whenever the count was a multiple of 20, revisited the same half forever (section 160).
       const pri=active.length<=10?active:Array.from({length:10},(_,i)=>active[(this.activeCursor+i)%active.length])
-      const batch=[...new Map([...pri,...rotated].map(m=>[m.id,m])).values()].slice(0,30)
+      // convergence trades a crypto contract's final 2-6 minutes and the rotation revisits a contract every ~7.4 minutes
+      // (BACKLOG 197), so every crypto contract closing inside six minutes is quoted every cycle, down to the close so the
+      // window's orders can fill. Up to 20 of the 30, after the held ten (the largest group closing together is 20 today);
+      // a larger group rotates through those 20 slots rather than starving its tail.
+      const closing=all.filter(m=>m.closeTime-Date.now()<=6*60000&&/^CF(BTC|ETH|SOL|XRP)$/.test(m.product))
+      const soon=closing.length<=20?closing:Array.from({length:20},(_,i)=>closing[(this.cursor+i)%closing.length])
+      const batch=[...new Map([...pri,...soon,...rotated].map(m=>[m.id,m])).values()].slice(0,30)
       this.cursor+=20;this.activeCursor+=10
       const spotByProduct=new Map<string,Awaited<ReturnType<IbkrLabSources['spot']>>>()
       const weatherByMarket=new Map<string,Awaited<ReturnType<IbkrLabSources['weather']>>>()
