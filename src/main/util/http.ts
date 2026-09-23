@@ -114,7 +114,9 @@ export class HttpClient {
           continue
         }
         const bodyText = await res.text().catch(() => '')
-        throw new HttpError(res.status, `${method} ${path} -> ${res.status}: ${bodyText.slice(0, 300)}`)
+        // An HTML error page (a CDN's 429 or 5xx) is 300 characters of markup in the log, not a message (backlog 52a).
+        const detail = /^\s*</.test(bodyText) ? `<html error page, ${bodyText.length} bytes>` : bodyText.slice(0, 300)
+        throw new HttpError(res.status, `${method} ${path} -> ${res.status}: ${detail}`)
       }
       if (res.status === 204) return undefined as T
       return (await res.json()) as T

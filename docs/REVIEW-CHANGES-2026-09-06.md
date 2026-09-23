@@ -6326,3 +6326,34 @@ What would read real prices, if a Polymarket US strategy ever needs them in play
 (public, 2-6 s fresh), the authenticated markets WebSocket (`wss://api.polymarket.us/v1/ws/markets`, untested), and
 the daily Time & Sales CSV for grading. Nothing live reads in-play Polymarket prices now; the paper lab's in-play
 fills are flagged unreliable for its first read.
+
+## §165 - 2026-09-23 08:50Z: working the fixable list
+
+From the 2026-09-23 triage (section 163): the items that touch live trading or evidence, done in the main tree; two
+helpers work disjoint files (sentinel and report scripts; the IBKR paper lab) in their own worktrees.
+
+- **A file another process holds no longer blocks every order (223).** `store/append.ts` `appendDurably` rides out a
+  sharing violation (EBUSY/EPERM/EACCES: an antivirus scan, a backup copy, a log opened by hand) - five tries, 50 ms
+  apart. The order journal and the fill archive latched a PERMANENT failure on the first one ("submissions blocked"
+  until a restart); now a violation that outlasts the retries fails that one submission or run, and only a real write
+  failure latches. A journal row that never reached disk is forgotten instead of blocking its market as an unresolved
+  submission. The cf-reference recorder queues the line (no sleeping in its socket handler) instead of logging it as a
+  rejected observation. Tested against a read-only file on this machine (Windows answers EPERM).
+- **A crash-defaulted config is not an operator hold (224).** `JsonStore.quarantinedAt` and `configDefaulted()` on
+  both traders: after a power loss zero-fills the config, the ladder no longer records every arm as switched off by
+  hand. The store now logs which file it set aside.
+- **Lead-lag counts cycles with a failed Kalshi leg per UTC day (170)**, 30 days kept, for read 164 on 09-26.
+- **The markout veto band is day-clustered (183)** once an arm has >= 30 markouts over >= 3 days.
+- **The ladder names the stop an arm is held to (23)** - lead-lag's entry reason said $5 while $10 is enforced - and a
+  transition keeps the baseline it replaces in its history row (81a).
+- Grades cluster on the day the market closed, not the day it was booked (209); an HTML error page is logged as one
+  line, not 300 characters of markup (52a); the log's first lines name the build (46).
+- **67b, overdue since 09-21:** `momentum-candidates-gate.mjs --verdict` is INCONCLUSIVE by its own rule (2 settlement
+  days of the 5 it needs), and no variant has a positive lower band: the live flat 3c rule is -2.33c/contract (80%
+  [-4.71, 0.06]) and every log-odds threshold is negative. Momentum stays declined; closed.
+- **210a:** the "stuck" KXBTCPRICE-85000-26SEP18 is unresolved at Kalshi itself (status closed, no result, expiration
+  2026-10-19); the trader retries it every pass. Nothing to change; closed.
+- `docs/BACKLOG.md` now opens with **Open now**: what needs the operator, what code is left, and every entry the
+  triage closed, with the reason.
+
+Tests: review-fixes 624/0, ladder 177/0, adversarial 96/0; `npm test` 22/22.

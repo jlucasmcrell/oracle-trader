@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync, readFileSync, renameSync } from 'node:fs'
+import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
@@ -394,6 +394,12 @@ function registerIpc(): void {
 app.whenReady().then(async () => {
   if (!singleInstance) return
   installSafeLogging()
+  // Which build is running, in the log's first lines: a restart is verified by this, not by process start times (backlog 46).
+  try {
+    console.log(`[app] start: pid ${process.pid}, main bundle built ${statSync(__filename).mtime.toISOString()}`)
+  } catch {
+    console.log(`[app] start: pid ${process.pid}`)
+  }
   config = new ConfigStore()
   // The venue adapter records what the anti-flood cap discards, but must not import electron itself — it is
   // pulled into the test suite. Hand it the directory here; unset means inert.

@@ -1,5 +1,51 @@
 # Oracle Trader backlog: deferred on purpose, with the reason and the trigger
 
+# Open now (kept current; the numbered history below is the record)
+
+Triaged 2026-09-23 (section 165): 294 entries, 113 closed, 181 open. Everything waiting on data or a date is in
+`docs/reads.json`, which the app (`registeredReads.ts`) and the daily maintenance session work through by themselves -
+nobody has to remember a date. What is left below is either the operator's, or code still to write.
+
+## Needs the operator (each is his decision or his credentials)
+- **235** Polymarket US fade: lift its panel hold or not. The review's only arm with a case (+1.56c/contract, unproven).
+- **216/217** Lead-lag size above one contract. Recommendation: keep 1 until reads 227 and 158 (both 2026-09-25).
+- **232** IB Gateway logins: set up IBC with the IBKR login, or keep logging in by hand after reboots and weekly.
+- **185** Whether the nightly review may keep auto-applying to live arms. Moot for registered parameters, which it can
+  no longer touch (section 163).
+- **50b** A total-dollar exposure cap on Kalshi (today only counts: 80 positions, $10 a bet).
+- **52b** The hour daily loss limits reset (00:00 UTC splits the US evening).
+- **82c** Whether to hold more than $250 on Kalshi to earn interest.
+- An off-machine backup destination (no entry had one).
+- **243** IBKR's real fee: needs the API's read-only switch off for one what-if preview; only matters before any IBKR
+  arm goes live, and none is close.
+
+## Code still to write (none blocks trading today)
+- **24** Polymarket US trader guards (stop-entry, ledger drift): before any Polymarket arm trades again (fade, 235).
+- **237** Re-grade Polymarket US history from the venue record: the maintenance session does it before the 09-24 lab read.
+- **172/215** Contract-weighted ladder evidence missing for mean-reversion, cross-venue and dutch baselines.
+- **214** Capacity raises should carry the evidence key they were based on.
+- **218** The nightly review should see its own past changes and be able to propose a revert.
+- **80b** Adversarial test F is nondeterministic.
+- **38** Veto grading ignores the fee and day clusters (feeds the nightly packet only).
+- **59b** The long-horizon slot cap counts a stopped arm's position (the consensus NCAA 2027 one).
+- **212** Resting-order fill rate on the arm rows. **60a** hunch collector page budget. **176** ladder15 grader or
+  retire its recorder. **179** mention live-tracking recorder. **180** same-index twins scan. **182** reconcile one
+  buy-sell-settle example. **1** encode the amended critic rule in `critic-skill.py`.
+- Paper labs: **193/199** settlement control, **197**, **206**, **115** (IBKR, in progress 2026-09-23); **240**, **241**.
+
+## Closed by the 2026-09-23 triage (reason in section 165)
+Retired arms or dead lines: 4, 5, 6, 7, 8, 15, 37, 21, 27, 28, 47, 61a, 63a, 73b, 78b, 79b, 144b, 145a, 204, 211, 213,
+230, 238 (re-entry conditions kept in 238). Superseded: 31, 33, 34, 35, 36, 39, 85a, 86a, 61b, 62b, 105, 123, 128, 137,
+151, 154, 169, 184. Not needed: 32, 72a, 75a, 90, 136a, 147a, 208. Done in code before today: 22, 41, 48b, 49a, 69b,
+81b/94, 114, 120, 134a, 195, 196, 219, 226, 228. Done 2026-09-23: 23, 26/220, 57a (convergence retired), 58a
+(consensus shadow retired), 67b (momentum log-odds: no variant with a
+positive lower band; momentum stays declined), 81a, 84b (spot-first recorder retired), 133a (cross-venue retired),
+168, 170, 183, 203 (measured: 0 of 584 sweeps held the guard over 10 s), 209, 210a (the stuck KXBTCPRICE row is
+unresolved at Kalshi, which expires it 10-19), 223, 224, 229 (the paid calls are the critic's shadow for read 1, not
+the news arm), 231, 234, 236, 239, 244, 46, 52a, 51b (cross-venue retired), 156a (measured: 1-8 portfolio 429s a
+day, all absorbed).
+
+
 Maintained by the maintenance session (see the scheduled task prompt). Older idea lists live in
 `docs/autotrade-ideas.md` (§3.7-3.14) and `docs/broker-gaps.md`; anything from them that is still
 open is folded in here with its reason. Done items are removed, not ticked.

@@ -4902,7 +4902,9 @@ export class AutoTrader {
     if (trade && !(trade as { graded?: boolean }).graded && pnl !== undefined && Number.isFinite(pnl) && gradeOver !== undefined && gradeOver > 0) {
       // Only a FULL close marks the trade graded; a partial must leave the remainder gradeable.
       if (gradedShares === undefined) Object.assign(trade, { graded: true })
-      this.gradeEntry(strategy, trade.modeledWinProb, pnl > 0, (pnl / gradeOver) * 100, trade.eventTicker ?? trade.marketId, clusterDayOf(Date.now()), gradeOver)
+      // Clustered on the day the market closed, not the day we booked it: a settlement booked late (or a sweep of a
+      // backlog) put one day's outcomes on another day's clock (backlog 209).
+      this.gradeEntry(strategy, trade.modeledWinProb, pnl > 0, (pnl / gradeOver) * 100, trade.eventTicker ?? trade.marketId, clusterDayOf(trade.closeTime && trade.closeTime <= Date.now() ? trade.closeTime : Date.now()), gradeOver)
     }
   }
 
