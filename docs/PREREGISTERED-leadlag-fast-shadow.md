@@ -40,3 +40,15 @@ order path.
 - **Reported whatever the verdict**: gaps per hour and their durations (median, p90, share under 1 s and 5 s). If the
   gaps that pay last under ~100 ms, being faster than this machine's 60 ms order path would be required, and the
   honest answer to "do we need to co-locate" becomes yes; if they last seconds, it is no.
+
+## Amendment 2026-09-23 (sections 161, 163) - the read runs itself and acts
+
+Operator, before the read: "I will not remember to flip switches on the 26th. If anything requires me remembering to
+do something, it will never happen, things should be automatic." So the rule above is now code
+(`src/main/ladder/registeredReads.ts`, `fastLeadLagRead`), run by the app once a UTC day from 2026-09-26: the same
+statistic as the grader (first settled gap per market and side at 6c net, bought at the opening price plus Kalshi's
+one-contract fee, day-clustered 80% band), the same thresholds (3 UTC days of rows; PASS at n >= 150 and a lower bound
+above zero; FAIL at an upper bound below zero; otherwise read again the next day until 2026-10-03). **A PASS switches
+`leadLagFastLive` on by itself** (one contract per first gap, under the lead-lag arm's ladder stage and caps); a FAIL or
+a still-open result on 2026-10-03 leaves it off. Every decided verdict is pushed to the alert webhook. The rule itself
+is unchanged; only who carries it out.

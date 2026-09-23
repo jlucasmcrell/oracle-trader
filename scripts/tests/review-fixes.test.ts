@@ -7,6 +7,7 @@ import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, par
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
+import { fastReadStats, fastReadVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
@@ -960,6 +961,7 @@ await lagFeedTests()
 await polyUsSettlementGateTests()
 await fastLiveTests()
 await polyUsTakerLimitTests()
+await registeredReadTests()
 consensusTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
@@ -1634,4 +1636,62 @@ async function polyUsTakerLimitTests(): Promise<void> {
   eq('polyus taker limit: nothing at the limit is no fill, never a guess', [sent[1].intent, sent[1].quantity, none.shares, none.status], ['ORDER_INTENT_BUY_LONG', 2, 0, 'open'])
   await a.placeOrder({ venue: 'polymarket-us', marketId: 'm', outcome: 'YES', amount: 1, limitPrice: 0.44 })
   eq('polyus taker limit: without immediate-or-cancel the old market order is unchanged', [sent[2].type, 'cashOrderQty' in sent[2]], ['ORDER_TYPE_MARKET', true])
+}
+
+// ---- pre-registered reads run themselves (section 163) ----
+async function registeredReadTests(): Promise<void> {
+  const res = new Map<string, 'yes' | 'no'>([['KXBTC15M-A', 'yes'], ['KXBTC15M-B', 'no'], ['KXETH15M-C', 'yes']])
+  const opens = [
+    { ts: '2026-09-23T01:00:00Z', t: 'KXBTC15M-A', side: 'YES' as const, net: 6.5, px: 0.4 },
+    { ts: '2026-09-23T01:00:05Z', t: 'KXBTC15M-A', side: 'YES' as const, net: 7, px: 0.41 }, // same market and side: not a new decision
+    { ts: '2026-09-24T02:00:00Z', t: 'KXBTC15M-B', side: 'YES' as const, net: 6, px: 0.5 },
+    { ts: '2026-09-24T02:00:00Z', t: 'KXBTC15M-B', side: 'NO' as const, net: 5.9, px: 0.5 }, // below the floor
+    { ts: '2026-09-25T03:00:00Z', t: 'KXETH15M-C', side: 'NO' as const, net: 8, px: 0.3 },
+    { ts: '2026-09-25T03:00:00Z', t: 'KXETH15M-D', side: 'YES' as const, net: 8, px: 0.3 } // not settled
+  ]
+  const s = fastReadStats(opens, res, 6, 4)!
+  const fee = (p: number) => Math.ceil(Math.round(0.07 * p * (1 - p) * 10000 * 1e6) / 1e6) / 100
+  eq("reads: the grader's unit - first settled gap per market and side at 6c net, at the opening price plus the fee",
+    [s.n, s.days, +s.meanCents.toFixed(3)], [3, 3, +(((100 * 0.6 - fee(0.4)) + (-50 - fee(0.5)) + (-30 - fee(0.3))) / 3).toFixed(3)])
+  const mk = (n: number, lo80: number, hi80: number) => ({ n, days: 4, rowDays: 4, meanCents: (lo80 + hi80) / 2, lo80, hi80 })
+  eq('reads: the fast rule - 3 UTC days of rows first',
+    [fastReadVerdict(mk(200, 1, 5), 2).verdict, fastReadVerdict(mk(149, 1, 5), 4).verdict, fastReadVerdict(mk(150, 0.01, 5), 4).verdict, fastReadVerdict(mk(40, -5, -0.1), 4).verdict, fastReadVerdict(mk(300, -1, 2), 4).verdict],
+    ['WAIT', 'CONTINUE', 'PASS', 'FAIL', 'CONTINUE'])
+
+  const dir = mkdtempSync(joinPath(tmpdir(), 'reads-'))
+  const path = joinPath(dir, 'reads.json')
+  const verdicts = ['CONTINUE', 'PASS'] as const
+  let evals = 0
+  let throwNext = false
+  const applied: string[] = []
+  const notes: string[] = []
+  const read: RegisteredRead = {
+    id: 'demo', doc: 'docs/x.md', from: Date.parse('2026-09-26T00:00:00Z'),
+    evaluate: async () => {
+      if (throwNext) { throwNext = false; throw new Error('Kalshi down') }
+      return { verdict: verdicts[Math.min(evals++, 1)], summary: 's' }
+    },
+    apply: async (v) => { applied.push(v); return 'switched' }
+  }
+  const run = new ReadRunner(path, [read], (t) => notes.push(t), () => undefined)
+  await run.tick(Date.parse('2026-09-25T12:00:00Z'))
+  eq('reads: nothing before the registered date', evals, 0)
+  await run.tick(Date.parse('2026-09-26T01:00:00Z'))
+  await run.tick(Date.parse('2026-09-26T02:00:00Z'))
+  eq('reads: once per UTC day', [evals, applied.length, notes.length], [1, 0, 0])
+  throwNext = true
+  await run.tick(Date.parse('2026-09-27T01:00:00Z'))
+  eq('reads: a failed evaluation is retried the next hour, not the next day', evals, 1)
+  await run.tick(Date.parse('2026-09-27T02:00:00Z'))
+  eq('reads: PASS applies the registered action once and pushes it', [evals, applied, notes.length], [2, ['PASS'], 1])
+  const again = new ReadRunner(path, [read], (t) => notes.push(t), () => undefined)
+  await again.tick(Date.parse('2026-09-28T01:00:00Z'))
+  eq('reads: a decided read is never re-applied, across a restart', [evals, applied.length, again.status().demo.action], [2, 1, 'switched'])
+  let finalApplied = ''
+  const finalRead: RegisteredRead = { id: 'final', doc: 'd', from: 0, finalAt: Date.parse('2026-10-03T00:00:00Z'), evaluate: async () => ({ verdict: 'CONTINUE', summary: 's' }), apply: async (v) => { finalApplied = v; return 'default' } }
+  const fr = new ReadRunner(joinPath(dir, 'f.json'), [finalRead], () => undefined, () => undefined)
+  await fr.tick(Date.parse('2026-10-02T01:00:00Z'))
+  await fr.tick(Date.parse('2026-10-03T01:00:00Z'))
+  eq('reads: still open at the final date is a final verdict with the registered default', finalApplied, 'INCONCLUSIVE')
+  rmSync(dir, { recursive: true, force: true })
 }

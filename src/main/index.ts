@@ -26,6 +26,9 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
+import { fastLeadLagRead, ReadRunner } from './ladder/registeredReads'
+import { HttpClient } from './util/http'
+import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
 import { IPC } from '../shared/ipc'
 import type { AutoTraderConfig, BacktestParams, KalshiConnection, MiniAutoConfig, RiskLimits, SettingsView } from '../shared/ipc'
@@ -495,6 +498,38 @@ app.whenReady().then(async () => {
   setTimeout(() => void ladder.levelShards(), 90_000)
   setTimeout(() => void ladder.run(), 2 * 60_000)
   setInterval(() => void ladder.run(), 60 * 60_000)
+
+  // Pre-registered reads run themselves (section 163): each from its date, once a UTC day, applying the registered
+  // action on PASS or FAIL and pushing the verdict. Nobody has to remember a date or flip a switch.
+  const kalshiPublic = new HttpClient({ baseUrl: 'https://api.elections.kalshi.com/trade-api/v2', rateLimit: 1, rateLimitWindowMs: 1100, timeoutMs: 20_000 })
+  const reads = new ReadRunner(
+    join(app.getPath('userData'), 'registered-reads.json'),
+    [
+      fastLeadLagRead({
+        shadowPath: join(app.getPath('userData'), 'leadlag-fast-shadow.jsonl'),
+        kalshiSettled: async (series, minCloseTs) => {
+          const out: { ticker: string; result?: string }[] = []
+          let cursor = ''
+          for (let page = 0; page < 20; page++) {
+            const d = await kalshiPublic.get<{ markets?: { ticker: string; result?: string }[]; cursor?: string }>(
+              `/markets?series_ticker=${series}&status=settled&limit=1000&min_close_ts=${minCloseTs}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+            )
+            out.push(...(d.markets ?? []))
+            cursor = d.cursor ?? ''
+            if (!cursor || !(d.markets ?? []).length) break
+          }
+          return out
+        },
+        setFastLive: (on) => void autoTrader.setConfig({ leadLagFastLive: on })
+      })
+    ],
+    (title, message) => {
+      const url = autoTrader.getConfig().alertWebhookUrl
+      if (url) void sendAlert(url, title, message)
+    }
+  )
+  setTimeout(() => void reads.tick(Date.now()), 5 * 60_000)
+  setInterval(() => void reads.tick(Date.now()), 60 * 60_000)
 
   // Nightly LLM strategy review: checked hourly, runs once per UTC day after
   // the configured hour; files under userData/reviews; applies only bounded
