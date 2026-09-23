@@ -6,7 +6,7 @@ import type {TradingEngine} from '../engine/engine'
 import type {IbkrReader} from '../venues/ibkr'
 import type {IbkrAdapter} from '../venues/ibkrAdapter'
 import {discoverForecastMarkets,loadFinalSettlements} from '../venues/forecastexData'
-import {IBKR_HOLD_MAX_DAYS,ibkrHoldsToSettlement,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
+import {IBKR_HOLD_MAX_DAYS,ibkrHoldsToSettlement,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,exitAsk,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
 import {ibkrWeather} from './ibkrWeather'
 import {IBKR_RULES_SINCE,type IbkrLabConfig,type IbkrLabMarket,type IbkrLabPosition,type IbkrLabState,type IbkrLabStatus,type IbkrLabStrategyRow} from '../../shared/ibkrLab'
 
@@ -80,7 +80,8 @@ export class IbkrLab {
       const G=groups.length,critical=G<=2?12.706:G===3?4.303:G<=5?3.182:G<=10?2.776:G<=30?2.262:1.96
       const confidenceLow=Number.isFinite(se)?mean-critical*se:undefined
       let unrealized=0,unpriced=0
-      for(const p of positions){const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)];if(q&&freshAsk(q,now))unrealized+=(1-q.ask!-slippage-fee-p.entry)*p.quantity-p.entryFee;else unpriced++}
+      // Valued exactly as closePositions would exit it, so `unpriced` counts the positions no exit can be priced for.
+      for(const p of positions){const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)];if(q&&exitAsk(q,now))unrealized+=(Math.max(0,1-q.ask!-slippage)-fee-p.entry)*p.quantity-p.entryFee;else unpriced++}
       const events=new Set(trades.map(t=>t.marketId.split('_').slice(0,-1).join('_'))).size
       const cappedDays=(s.cappedDays?.[def.id]??[]).filter(d=>days.has(d)).length
       const pending=s.orders.filter(o=>o.strategy===def.id).length
@@ -278,15 +279,17 @@ export class IbkrLab {
       if(p.basket&&(s.positions.some(other=>other!==p&&other.basket===p.basket)||now-p.openedAt<120000))continue
       if(!p.basket&&ibkrHoldsToSettlement(p.strategy))continue // settled by the published final value
       const q=s.quotes[String((p.outcome==='YES'?p.market.no:p.market.yes).conId)]
-      if(p.market.closeTime<=now||!q||!freshAsk(q,now)||(q.askAt??0)<=p.openedAt+1000||q.askSize!<p.quantity)continue
+      if(p.market.closeTime<=now||!q||!exitAsk(q,now)||(q.askAt??0)<=p.openedAt+1000||q.askSize!<p.quantity)continue
       // The old guard refused the exit whenever the opposing ask left our side worth under a cent, which is
       // exactly a near-total LOSS. Those positions never closed, so they never entered `realized` - the only
       // number the promotion gate reads - while every winner did: a one-sided censor on the statistic that
       // promotes an arm to real money (audit B-196, section 143). The guard existed to avoid a negative exit
       // price; clamping at zero says the same thing truthfully, because a contract whose other side is offered at
-      // 99c is worth nothing. This un-censors 98c < ask <= 99c only: above that `freshAsk` refuses the quote
-      // outright (ask <= .99), which is a WIDER censor on the same tail and is shared with the entry path, so it
-      // needs its own decision (BACKLOG 206). Paper ledger only - the live path never comes through here.
+      // 99c is worth nothing. The quote is judged by `exitAsk`, not the entry filter `freshAsk`, so an opposing
+      // offer up to $1.00 prices the exit too (BACKLOG 206). No opposing offer at all is still no exit: it stays
+      // in `unpriced`. (The batch reader stores any price >= 1 as no ask, and no logged quote with a missing ask
+      // has had size, so today that is the whole remaining tail.) Paper ledger only - the live path never comes
+      // through here.
       const exit=Math.max(0,1-q.ask!-slippage),net=(exit-p.entry)*p.quantity-p.entryFee-fee*p.quantity
       // One exit policy, paper and live: price exits measure movement from the first fresh valuation at or after the
       // fill. Without one there is nothing to measure from; take it now (movement zero) rather than switch to the

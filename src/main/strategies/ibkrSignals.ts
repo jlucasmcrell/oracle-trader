@@ -77,7 +77,12 @@ const logit=(p:number)=>Math.log(p/(1-p)),clamp=(p:number)=>Math.max(.001,Math.m
  */
 export const CALIBRATION_SLOPE:Record<string,number>={Elections:1.15,Government:1.15}
 export const calibrationSlope=(category:string)=>CALIBRATION_SLOPE[category]??1
-export const freshAsk=(q:IbkrQuote,now:number)=>q.dataType==='live'&&!q.error&&q.ask!==undefined&&q.ask>=.01&&q.ask<=.99&&Number.isFinite(q.askSize)&&q.askSize!>=1&&now-(q.askAt??0)<=30000&&now-(q.askAt??0)>=0
+const liveAsk=(q:IbkrQuote,now:number,max:number)=>q.dataType==='live'&&!q.error&&q.ask!==undefined&&q.ask>=.01&&q.ask<=max&&Number.isFinite(q.askSize)&&q.askSize!>=1&&now-(q.askAt??0)<=30000&&now-(q.askAt??0)>=0
+/** ENTRY filter: an executable outcome offered at 1-99c. */
+export const freshAsk=(q:IbkrQuote,now:number)=>liveAsk(q,now,.99)
+/** EXIT pricing through the opposing ask (BACKLOG 206). An opposing offer up to $1.00 prices the exit, clamped at zero:
+ *  freshAsk's 99c bound is an entry rule, and applied to exits it refuses the one quote that says a position is worthless. */
+export const exitAsk=(q:IbkrQuote,now:number)=>liveAsk(q,now,1)
 export function frameMid(f:LabFrame):number {return (f.yes.ask!+1-f.no.ask!)/2}
 export function cryptoFair(spot:number,strike:number,annualVol:number,years:number):number {
   if(!(spot>0&&strike>0&&annualVol>0&&years>0))return NaN

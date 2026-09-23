@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
 import {IbkrLab} from '../../src/main/strategies/ibkrLab'
-import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
+import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,exitAsk,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
 import {forecastTime,finalSettlements,csvRows} from '../../src/main/venues/forecastexData'
 import {IbkrReader} from '../../src/main/venues/ibkr'
 import {ibkrWeather} from '../../src/main/strategies/ibkrWeather'
@@ -40,6 +40,8 @@ async function main(){
   assert.deepEqual([...finalSettlements(csv,'2026-09-15',now)],[['A',1]])
   assert.throws(()=>finalSettlements('wrong,columns','2026-09-15',now),/schema/)
   for(const patch of [{askAt:now-31000},{askAt:now+1},{dataType:'delayed'},{dataType:'frozen'},{askSize:0},{askSize:undefined},{ask:undefined},{ask:NaN},{error:'Unavailable'}])assert.equal(freshAsk({...quote(1,.4),...patch},now),false)
+  // The exit predicate differs from the entry filter only in its price bound (BACKLOG 206).
+  for(const patch of [{askAt:now-31000},{askAt:now+1},{dataType:'delayed'},{askSize:0},{ask:undefined},{ask:1.01},{error:'Unavailable'}])assert.equal(exitAsk({...quote(1,.4),...patch},now),false)
   assert.ok(cryptoFair(110,100,.4,1/365)>.99)
   assert.ok(cryptoFair(90,100,.4,1/365)<.01)
   // Every declared arm must be reachable from an explicit, valid input scenario.
@@ -126,6 +128,16 @@ async function main(){
    assert.equal(pinned.s.positions.length,0,'a position whose other side is offered at 99c closes at zero')
    assert.ok(pinned.s.trades[0].net<0,'and it books the loss instead of hiding it')
    assert.equal(pos.strategy,'momentum')}
+  // BACKLOG 206: exits are priced by their own predicate. An opposing offer at $1.00 exits at zero and the loss enters
+  // `realized`; the ENTRY filter still refuses that quote; no opposing offer at all stays unpriced, not an invented zero.
+  {const tail=setup();addPosition(tail,{strategy:'momentum',entry:.3,openedAt:now-2*3600000,entryMark:-.3,entryMarkAt:now-2*3600000});tail.s.quotes['201']=quote(201,1)
+   assert.deepEqual([freshAsk(quote(201,1),now),exitAsk(quote(201,1),now),ibkrSignals([{...frame(.2),no:quote(201,1)}],now).length],[false,true,0],'the entry filter is unchanged')
+   let row=tail.lab.status().strategies.find(r=>r.id==='momentum')!
+   assert.deepEqual([row.unpriced,row.unrealized],[0,-.32],'valued as the exit would book it: zero, less both fees')
+   ;(tail.lab as any).closePositions(now);assert.deepEqual([tail.s.positions.length,tail.s.trades[0].exit,tail.s.trades[0].net],[0,0,-.32],'the near-total loss closes at zero and enters realized')
+   addPosition(tail,{id:'no-offer',strategy:'momentum',entry:.3,openedAt:now-2*3600000});tail.s.quotes['201']={...quote(201,.5),ask:undefined,askSize:0}
+   ;(tail.lab as any).closePositions(now);row=tail.lab.status().strategies.find(r=>r.id==='momentum')!
+   assert.deepEqual([tail.s.positions.length,row.unpriced],[1,1],'no opposing offer is still unpriced, not a zero')}
   const corrupt=setup();writeFileSync(corrupt.path,'{truncated');const broken=new IbkrLab(corrupt.path,corrupt.reader as any,corrupt.engine as any,corrupt.venue as any,corrupt.sources)
   await broken.scan();assert.match(broken.status().lastError!,/unreadable/);assert.equal(readFileSync(corrupt.path,'utf8'),'{truncated')
   // Qualification is based on net results across independent events and days, never win rate alone.
