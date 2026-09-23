@@ -89,3 +89,15 @@ seen. PASS leaves the arm to the ladder; a FAIL retires it (`Ladder.retire`: off
 and not an operator hold). The registration left two cases open; fixed now, before any entry under the IOC order:
 - on 2026-10-13 with fewer than 15 settled entries, the displayed price is not tradable often enough to test: FAIL;
 - at 150 entries still inconclusive: INCONCLUSIVE, and the arm stops.
+
+## Closed 2026-09-23 (section 164): FAIL - the prices were a data artefact
+
+The registration's own FAIL condition ("fills far from the price seen: the edge would be a recording artefact") is
+met, and the cause is now known. Polymarket US's public REST prices (`/book`, `/bbo`, `/v1/markets`) are served with a
+30-second CDN cache, and during games the server's snapshot itself freezes for minutes while trading continues
+underneath (measured live on 2026-09-23: e.g. 13,944 contracts traded while the book sat at 0.21/0.24; the venue's own
+`/v1/price-history` kept updating). In the recorded data 83% of triggers fired on byte-identical snapshots; at the
+venue's price-history prices the median trigger had -1.5c left after the fee, 5% at 1c or more. Across the 22 live
+triggers the price seen was a median 11.2c from the real book, and the one fill (0.42) was the real book. There is no
+Kalshi lead to trade at a 60-second look. The arm is retired by the app (`Ladder.retire`), the cohort never had an
+entry under the IOC order, and nothing here is re-registered.

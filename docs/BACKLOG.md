@@ -2499,6 +2499,7 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   -$5.14 stop and went on to 3 wins in 19 trades. The new lifetime floor (section 152) bounds the damage but does
   not fix the re-arm. Honour `ladderMaxDemotionsBeforeGate`, and require evidence rather than a clock. Trigger:
   **2026-09-24**.
+  **Status 2026-09-23 (section 163): done** - the demotion cap is honoured; only a gate or the operator re-arms.
 
 - **86 READ 2026-09-21 (section 153): no gate.** Weekly lead-lag basis reading. 4,648 windows settled on both
   venues with a result over seven days; **61 disagreed (1.31%)**, every one within 3.6 bp of the strike. Our money
@@ -2664,6 +2665,7 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   its stale side. Trigger: **when the operator considers lifting the Polymarket US hold**.
   **Status 2026-09-22 (section 160):** measured - yes, at 8c and one entry per game - and live as the registered
   `polyus-lag` arm (the other Polymarket US arms keep their hold). Read it under 234.
+  **Status 2026-09-23 (section 164): closed** - the slowness was stale public data; the lag arm is retired.
 - **232. IB Gateway keeps going down (2026-09-22, section 158). OPERATOR.** Standalone install at C:\Jts\ibgateway,
   started by hand: no scheduled task, no Startup entry, no IBC. Any reboot leaves it down, and IBKR forces a full
   re-login weekly whatever the auto-restart setting says. The sentinel now pages within 30 minutes of it going down.
@@ -2676,11 +2678,13 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   and this machine is too slow whatever the code; seconds and it is not.
   **Status 2026-09-23 (section 161):** the trading path is built and off (`leadLagFastLive`). On a PASS, propose
   switching it on to the operator, with the numbers; on a FAIL, leave it off and say so.
+  **Status 2026-09-23 (section 163):** automated - the app reads it from 09-26 and switches it on by itself on a PASS.
 
 - **234. Polymarket US lag arm: read it (2026-09-22, section 160).** Rule, read and verdict in
   `docs/PREREGISTERED-polyus-lag.md`: at 60 settled entries over at least 15 games, or on **2026-10-13**, whichever
   comes first, from the research log (`lag-fill` and `closed` rows, strategy `lag`, mode live). Also report the
   `lag-gone` and `lag-nofill` share and the average fill against the price seen.
+  **Status 2026-09-23 (section 164): closed FAIL** - retired by the app.
 - **235. Polymarket US fade: the case for lifting its hold (2026-09-22, section 160). OPERATOR (held in the panel).**
   The review's only arm with a case: +1.56c/contract on the venue record (62 contracts, 3 losses, 80% band -1.2 to
   +4.4). If lifted: 1 contract; the favourite leg at 0.923 or higher, where the one-contract taker fee is zero; one
@@ -2738,3 +2742,4 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   Polymarket US taker arm other than lag is switched on (move it to the IOC limit first), and at the 234 read**.
   **Status 2026-09-23 (section 163):** (a) done - every Polymarket US taker order from the mini is now an
   immediate-or-cancel LIMIT at its bound. (b) open, being researched now.
+  (b) answered in section 164: the REST book is cached 30 s and freezes in play; nothing live reads it now.

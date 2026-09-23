@@ -6265,3 +6265,64 @@ from here the arm fills at the price seen or not at all. Expected: few or no fil
 
 Tests: review-fixes 602/0 with 4 new (the short buy as a LIMIT at the long-side price with no market-order fields, a
 fill at 0.83 costing the short side 0.17, nothing at the limit is no fill, no IOC keeps the market order).
+
+## §163 - 2026-09-23 08:23Z: nothing waits on anyone remembering; the backlog triaged; the things it named, done
+
+Operator: "I will not remember to flip switches on the 26th. If anything requires me remembering to do something, it
+will never happen, things should be automatic." And: "there are instances where you are telling me a thing is wrong
+or that something has to be done, but then not fixing the thing ... Do we have a list?" He is right on both.
+
+**Reads run themselves.** `src/main/ladder/registeredReads.ts`: a `ReadRunner` in the app evaluates each registered
+read once a UTC day from its date with the registration's own rule, applies a PASS or FAIL once, persists it
+(`registered-reads.json`) and pushes it to the alert webhook (config first, then the sentinel's saved copy).
+`fastLeadLagRead` (2026-09-26) switches `leadLagFastLive` on by itself on a PASS; `decidedRead` carries out verdicts
+already reached. Every other pending read is in `docs/reads.json` (41 entries: due date, command, rule, action);
+`scripts/due-triggers.mjs` now reads that list instead of backlog prose - which missed 40 wrapped headings, every
+timestamped date and every read without the word "Trigger", and dropped anything two days overdue for good (backlog
+168) - and keeps an entry DUE until it is marked done. The daily maintenance session performs every DUE entry.
+
+**The inventory** (backlog triage, 294 entries): 113 closed, 181 open - 69 fixable now, 57 waiting on data (now all
+in `docs/reads.json` or the app), 8 needing the operator, 47 obsolete.
+
+**Done in this round, from that list and this session's own findings:**
+- The nightly review raised fade v3's registered 1.5c edge floor to 2.5c at 06:21Z (the third raise in four days;
+  section 152 reverted two). `REGISTRATION_FIXED` in nightlyReview.ts: a registration-fixed parameter is proposed but
+  never applied, whatever `reviewAutoApplyLive` says. The config is back at 1.5 (edited with the app stopped, backup
+  `kalshi-auto.json.bak_fadeedge_*`).
+- An arm stopped `ladderMaxDemotionsBeforeGate` times is no longer re-armed by its cool-down (`void maxDemotions` since
+  the first commit, backlog 220); volume-spike was due back on 2026-10-05. Its verdict says why.
+- `Ladder.retire`: off now, never re-armed by the clock, not an operator hold; switching it on in the panel brings it
+  back. The app retired **convergence** (its registered gate FAILED: 379 events, event-clustered lower bound -2.36c
+  against the +1c required, "fail on any one, and this rule is not built"), **cross-venue** (its matcher refuses
+  nearly every pair; the read due 09-18 never ran; backlog 133a) and **polyus-lag** (section 164).
+- The spot-first recorder (FAIL, section 157; it still wrote ~100 MB a day and polled Kalshi's shared public endpoint
+  every 2 s) and the consensus shadow (arm stopped by its hard stop in section 152; its state file torn since the
+  09-21 power loss, re-appending ~12.5k trades an hour into a 1.1 GB file) are disabled and out of the sentinel's
+  watch list. Their data stays.
+- Every Polymarket US taker order is an immediate-or-cancel LIMIT (section 162); resting Polymarket orders the book has
+  moved more than 2c through are pulled (backlog 236, Kalshi's section 150 rule); `getSettlements` reads the winner
+  from the record (239).
+
+Tests: review-fixes 618/0, ladder 174/0, adversarial 93/0, task-watch updated; `npm test` 22/22.
+
+## §164 - 2026-09-23 08:23Z: Polymarket US's in-play prices were never real - the lag arm is closed
+
+Operator: "So how do we get the prices Polymarket is showing? Why are we settling for it not working?" A read-only
+research pass (docs, rulebook, 906 polls at 1.6 s, 193 price-history reads, one Time & Sales file; no keys, no orders)
+found the answer. **Nobody can trade those prices.** Polymarket US's public REST prices (`/book`, `/bbo`,
+`/v1/markets`) carry `Cache-Control: public, max-age=30`, and during games the server's own snapshot freezes for
+minutes while trading continues: live today, 13,944 contracts traded in one table-tennis match while the book sat at
+0.21/0.24 and the last trade printed 0.15; `/v1/price-history` kept updating through every freeze. There is no
+documented in-play delay or indicative book; the matching is ordinary.
+
+In the recorded games 83% of lag triggers fired on byte-identical snapshots; frozen stretches lasted a median 4
+minutes (up to 27) and ended with a median 9c jump to within 0.75c of Kalshi. The 2026-09-20 Time & Sales prints fell
+inside a frozen snapshot's bid/ask 10.4% of the time and inside price history's 92.1%. At price-history prices the
+median trigger had -1.5c after the fee. Live, the price seen was a median 11.2c from the real book, and the one fill
+(0.42) was the real book, not a bad fill. So the "slow venue" of sections 158 and 160 and the +14.9c backtest are the
+freeze. The registration closed on its own FAIL condition and the app retired the arm.
+
+What would read real prices, if a Polymarket US strategy ever needs them in play: `/v1/price-history?symbol=<slug>`
+(public, 2-6 s fresh), the authenticated markets WebSocket (`wss://api.polymarket.us/v1/ws/markets`, untested), and
+the daily Time & Sales CSV for grading. Nothing live reads in-play Polymarket prices now; the paper lab's in-play
+fills are flagged unreliable for its first read.

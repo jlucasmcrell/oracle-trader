@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync, renameSync } from 'node:fs'
+import { createWriteStream, mkdirSync, readFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
@@ -26,7 +26,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { decidedRead, fastLeadLagRead, polyusLagRead, ReadRunner } from './ladder/registeredReads'
+import { decidedRead, fastLeadLagRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -522,10 +522,14 @@ app.whenReady().then(async () => {
         },
         setFastLive: (on) => void autoTrader.setConfig({ leadLagFastLive: on })
       }),
-      polyusLagRead({
-        researchPath: join(app.getPath('userData'), 'mini-auto-polymarket-us.json-research.jsonl'),
-        retire: (reason) => ladder.retire('polyus-lag', reason)
-      }),
+      // The Polymarket US lag registration closed on its own FAIL condition (section 164): the in-play prices it traded
+      // on were a stale public snapshot (a 30 s CDN cache plus minutes-long server freezes), not the exchange's book.
+      decidedRead('polyus-lag', 'docs/PREREGISTERED-polyus-lag.md (section 164)', 'FAIL',
+        'the displayed in-play book was stale data: 83% of recorded triggers fired on byte-identical snapshots, and at the price-history prices the venue itself publishes the median trigger had -1.5c after the fee; 0 of 17 live orders found the displayed price',
+        async () => {
+          await ladder.retire('polyus-lag', 'PREREGISTERED-polyus-lag FAIL: the prices were a data artefact')
+          return 'polyus-lag retired: off, and not re-armed by the ladder'
+        }),
       decidedRead('convergence-gate', 'docs/PREREGISTERED-btc-convergence.md (backlog 57a)', 'FAIL',
         'btc-gate.mjs 2026-09-23: 379 events (bar 200), event-clustered lower bound -2.36c against the +1c the registration requires, mean -0.16c/contract; "fail on any one, and this rule is not built"',
         async () => {
@@ -540,7 +544,15 @@ app.whenReady().then(async () => {
         })
     ],
     (title, message) => {
-      const url = autoTrader.getConfig().alertWebhookUrl
+      // The config first, then the sentinel's saved copy: a wiped config must not silence a verdict (backlog 168).
+      let url: string | undefined = autoTrader.getConfig().alertWebhookUrl
+      if (!url) {
+        try {
+          url = (JSON.parse(readFileSync(join(app.getPath('userData'), 'alert-webhook.json'), 'utf8')) as { url?: string }).url
+        } catch {
+          url = undefined
+        }
+      }
       if (url) void sendAlert(url, title, message)
     }
   )
