@@ -170,9 +170,9 @@ function startTask(name) {
   if (DRY) return 'dry'
   return ps(`Start-ScheduledTask -TaskName '${name}'; 'started'`).trim()
 }
-function taskLastResults() {
+function taskLastResults(names = ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
   const out = {}
-  for (const name of ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
+  for (const name of names) {
     try {
       const csv = execFileSync('schtasks', ['/Query', '/TN', name, '/FO', 'CSV', '/V'], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'ignore'] })
       const lines = csv.split(/\r?\n/).filter(Boolean)
@@ -204,17 +204,30 @@ const collector = mtime(path.join(REPO, 'data/btc-collector', `${today}.jsonl`))
 if ((collector === undefined && new Date(now).getUTCHours() >= 1) || (collector !== undefined && now - collector > 15 * MIN)) {
   add('collector-stale', 'repair', 'BTC collector not writing', collector === undefined ? `data/btc-collector/${today}.jsonl missing` : `last write ${ageMin(collector)} min ago`)
 }
+// Judged against the task's OWN next trigger, not the wall clock (backlog 101). Every watched task fires on a sentinel
+// tick's minute: a start at 06:20 raced a :35 trigger, and the 06:35 tick, 41 s before that run wrote, filed "still stale".
+// So a task due within a tick is left to its trigger, and after a start no finding opens until the trigger that was next
+// at the start has come and gone (+10 min puts that at the tick after the trigger's own). schtasks prints Next Run Time
+// in local time, which Date.parse reads as such; N/A or a failed query is NaN and falls back to the wall-clock rule.
+const reviveDue = state.reviveDue ?? (state.reviveDue = {})
 for (const [key, file, task, staleMs] of TASK_WATCH) {
   const t = mtime(path.join(REPO, file))
   if (isStale(t, now, staleMs)) {
     const last = state.revived[key] ?? 0
+    const due = Date.parse(taskLastResults([task])[task]?.nextRun ?? '')
     if (now - last > 3 * H) {
+      if (due > now && due - now <= 15 * MIN) {
+        add(key, 'notify', `${task} stale (${ageMin(t)} min); its own run is due ${iso(due)}, not starting it`, `${file} last written ${iso(t)}`)
+        continue
+      }
       state.revived[key] = now
+      if (due > now) reviveDue[key] = due
+      else delete reviveDue[key]
       add(key, 'revive-task', `${task} stale (${ageMin(t)} min); starting it`, `${file} last written ${iso(t)}`)
       const r = startTask(task)
       findings[findings.length - 1].evidence += ` | start: ${r}`
-    } else {
-      add(key, 'repair', `${task} still stale after a restart`, `${file} last written ${iso(t)}; task started at ${iso(last)} without effect`)
+    } else if (now >= (reviveDue[key] ?? last) + 10 * MIN) {
+      add(key, 'repair', `${task} still stale after a restart`, `${file} last written ${iso(t)}; task started at ${iso(last)} without effect${reviveDue[key] ? `, and its own run at ${iso(reviveDue[key])} did not write it either` : ''}`)
     }
   }
 }
