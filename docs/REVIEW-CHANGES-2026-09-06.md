@@ -6214,3 +6214,31 @@ gate: provisional price refused, RESOLVED-but-disagreeing waits, 0, 1 and a void
 the app restarted 22:16:32Z; the ladder armed `polyus-lag` at tiny-live on its first run, and the feed's first
 discovery matched 350 sides across 176 games (the recorder: 352 across 177). A dead feed would look like a quiet night,
 so it now reports its first in-play cycle and then once an hour; redeployed 22:21:24Z.
+
+## §161 - 2026-09-23 07:15Z: the event-speed lead-lag path can trade - built, tested, and OFF until the 2026-09-26 read
+
+Operator, on "we only check prices once a minute": "I didn't catch if you fixed this or not." It was not fixed: the
+live arm still looks once a minute, and §159's event-speed shadow only records.
+
+**What the shadow shows after its first 9.3 hours (interim, not the read):** 6,468 gaps at 2c net or more, 693 an
+hour; they last a median 0.5 s (p90 2.8 s; 70% under 1 s, 96% under 5 s). A once-a-minute look catches almost none
+of them, and the 60 ms order path is fast enough for most - so speed is the fix, and co-location is not needed (the
+registration's own test: gaps lasting seconds, not under ~100 ms). Whether they pay, buying one contract at the price
+when the gap opened, first gap per market and side, held to settlement: 2c net -1.61c (80% [-2.02, -1.20], n=426);
+4c -0.64c; **6c, the registered primary, +4.03c (80% [+0.34, +7.73], n=172)** - over two partial days, so nothing is
+decided on it. The read stays on or after 2026-09-26 with 3 UTC days.
+
+**Built so a pass is one switch, not a build:** `leadLagFastLive` (default off). On each 250 ms pass, an 'open' gap
+at 6c net or more (`FAST_LIVE_MIN_NET_CENTS`, the registered floor, measured at the moment it opens - exactly the
+grader's rule) goes through `fastDislocation` and the minute scan's own `sweep`: the same size, IOC at a cent
+through, capital cap, per-ticker window room, direction seats and reservation discipline. One attempt per market and
+side per window (the registered decision unit). The trader's gates - live mode, armed, no kill, exchange not paused -
+are read at the moment of each order through `FastLive`, never copied from the last scan, so a kill stops the very
+next order. Fills are ledgered as executed rows tagged `path: 'fast'` and `kalshiSource: 'ws'`, so the ladder counts
+them as the arm's and a read can separate the two paths.
+
+Tests: review-fixes 598/0 with 8 new (the 6c floor, NO priced at 1 - bid, switch off, gate closed, one IOC at ask +
+1c, never twice on one market and side, the other side independent, the ledger tag); two mutations - dropping the
+switch check and dropping the once-per-side guard - each fail the suite. `npm test` 22/22. Deployed 07:15:16Z with the
+switch off. Turning it on is the operator's decision after the read (the registration: a pass earns a proposal,
+nothing automatic).

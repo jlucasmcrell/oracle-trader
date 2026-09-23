@@ -8,7 +8,7 @@ import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, obser
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
-import { fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
+import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
@@ -958,6 +958,7 @@ await cancelOrderTests()
 await activityPacingTests()
 await lagFeedTests()
 await polyUsSettlementGateTests()
+await fastLiveTests()
 consensusTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
@@ -1565,4 +1566,50 @@ async function polyUsSettlementGateTests(): Promise<void> {
   eq('polyus settle: a void price both agree on settles at that price', await settleWith('MARKET_STATUS_RESOLVED', '0.5', '0.5000'), [true, 'MKT', 0.5])
   eq("ibkr: a re-baselined cohort keeps its arm's hold-to-settlement rule", ['calibration:pre-slopes-20260918', 'calibration', 'momentum', 'momentum:x'].map(ibkrHoldsToSettlement), [true, true, false, false])
   eq('polyus settle: the side price is read only on a RESOLVED record', [resolvedLongPrice(record('MARKET_STATUS_OPEN', '0.07')), resolvedLongPrice(record('MARKET_STATUS_RESOLVED', '1'))], [undefined, 1])
+}
+
+// ---- lead-lag event-speed LIVE path (section 161): off by default, one attempt per market and side ----
+async function fastLiveTests(): Promise<void> {
+  eq('fast live: a 5.9c-net open is below the registered 6c floor', fastDislocation({ ev: 'open', c: 'BTC', t: 'KXBTC15M-X', side: 'YES', pm: 0.5, kb: 0.4, ka: 0.42, net: 5.9 }, 'pm', { leadLagMaxContractsPerOrder: 1, leadLagProvenCoins: ['BTC'], leadLagNewCoinContracts: 1 }, 0), null)
+  const noPlan = fastDislocation({ ev: 'open', c: 'BTC', t: 'KXBTC15M-X', side: 'NO', pm: 0.34, kb: 0.42, ka: 0.44, net: 6.29 }, 'pm', { leadLagMaxContractsPerOrder: 1, leadLagProvenCoins: ['BTC'], leadLagNewCoinContracts: 1 }, 0)
+  eq('fast live: a NO gap crosses the Kalshi YES bid and is priced at 1 - bid, as the grader prices it',
+    noPlan && [noPlan.side, noPlan.yesRef, noPlan.d.dislocationCents, noPlan.d.path, noPlan.d.kalshiSource], ['NO', 0.42, 8, 'fast', 'ws'])
+
+  const dir = mkdtempSync(joinPath(tmpdir(), 'fastlive-'))
+  const ll: any = new LeadLagEngine(joinPath(dir, 'state.json'), () => undefined)
+  let top = { bid: 0.49, ask: 0.51, at: Date.now(), changes: 1 }
+  ll.polyWs = { top: () => ({ ...top, at: Date.now() }) }
+  let kBook = { venue: 'kalshi', marketId: 'T', bids: [{ price: 0.40, size: 5 }], asks: [{ price: 0.42, size: 5 }] }
+  const books = { getBook: () => kBook, start: () => undefined, stop: () => undefined, compare: () => undefined }
+  const orders: { marketId: string; outcome: string; contracts: number; limitPrice: number; timeInForce: string }[] = []
+  const adapter = { placeOrder: async (o: any) => { orders.push(o); return { shares: 1, avgPrice: o.outcome === 'YES' ? 0.42 : 0.58 } } } as unknown as VenueAdapter
+  let fastOn = false
+  let allowed = true
+  const cfg = () => ({ leadLagEnabled: true, leadLagLiveEnabled: true, leadLagMinDislocationCents: 6, leadLagMaxSpreadCents: 5, leadLagMaxContractsPerOrder: 1, leadLagMaxCapitalSpend: 40, leadLagMaxContractsPerWindow: 3, leadLagMaxSpendPerWindow: 15, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2, leadLagMaxCoinsPerDirectionPerWindow: 2, pollIntervalMs: 60_000, leadLagFastLive: fastOn })
+  ll.attachFastShadow(books, 2, { allowed: () => allowed, adapter: () => adapter, cfg })
+  clearInterval(ll.fast.timer) // the test drives fastTick itself
+  const ticker = 'KXBTC15M-26SEP230730-30'
+  ll.fastPairs.set('BTC', { ticker, upToken: 'tok', end: Date.now() + 10 * 60_000, marketId: 'pm-btc' })
+  const settle = () => new Promise((r) => setTimeout(r, 30))
+  const tick = async () => { ll.fast.open.clear(); ll.fastTick(Date.now()); await settle() }
+
+  await tick()
+  eq('fast live: with the switch off the gap is recorded and nothing is ordered', orders.length, 0)
+  fastOn = true
+  allowed = false
+  await tick()
+  eq('fast live: the trader\'s gates are read at the order - a kill or disarm stops the very next one', orders.length, 0)
+  allowed = true
+  await tick()
+  eq('fast live: switch on and gates open - one IOC for one contract at the ask plus a cent, like the minute scan',
+    orders.map((o) => [o.marketId, o.outcome, o.contracts, o.limitPrice, o.timeInForce]), [[ticker, 'YES', 1, 0.43, 'immediate_or_cancel']])
+  await tick()
+  eq('fast live: the same market and side is never tried twice - the registered unit is the first gap', orders.length, 1)
+  top = { bid: 0.33, ask: 0.35, at: Date.now(), changes: 2 }
+  kBook = { venue: 'kalshi', marketId: 'T', bids: [{ price: 0.42, size: 5 }], asks: [{ price: 0.44, size: 5 }] }
+  await tick()
+  eq('fast live: the other side of the same market is its own decision', orders.slice(1).map((o) => [o.outcome, o.limitPrice]), [['NO', 0.41]])
+  const rows = readFileSync(joinPath(dir, 'state-dislocations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  eq('fast live: fills are ledgered as executed rows tagged path fast, so the read can tell the paths apart', rows.map((r) => [r.executed, r.path, r.suggestedAction]), [[true, 'fast', 'BUY_KALSHI_YES'], [true, 'fast', 'BUY_KALSHI_NO']])
+  rmSync(dir, { recursive: true, force: true })
 }

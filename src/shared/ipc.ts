@@ -270,6 +270,8 @@ export interface AutoTraderConfig {
   fadeMaxCryptoPerCloseHour?: number
   /** Event-speed lead-lag shadow (section 159): records gaps from pushed books every 250 ms. Never trades. Default on. */
   leadLagFastShadow?: boolean
+  /** Trade the event-speed lead-lag gaps (section 161). Off until the operator approves the 2026-09-26 read. */
+  leadLagFastLive?: boolean
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
   /** Allow settlement-convergence to execute with REAL money (it is a paper experiment until proven). */

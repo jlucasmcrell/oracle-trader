@@ -731,6 +731,8 @@ export class AutoTrader {
   /** Live WS book cache — shadow-graded against REST before it may be trusted. */
   private ws?: KalshiWsClient
   private leadLagFastAttached = false
+  /** The minute scan's last read of the exchange pause, for the fast path's gate (a pause also rejects orders). */
+  private leadLagPaused = false
   private sportsAnchor = new SportsAnchor()
   private sportsGameOddsAnchor = new SportsGameOddsAnchor()
   /** Latest sharp-anchor observation per Kalshi market (from the shadow polls). */
@@ -4462,6 +4464,7 @@ export class AutoTrader {
     const base = this.engine.getAdapter(VENUE)
     if (!base) return
     const paused = await this.exchangePausedNow(base)
+    this.leadLagPaused = paused
     // Refresh the position-cap count now, while the poll fetches quotes, so a sweep never waits on account reads.
     this.engine.warmOpenPositionCount(VENUE)
     // Event-speed lead-lag shadow (section 159): a second pushed Kalshi book for the 15-minute windows, which roll too
@@ -4470,7 +4473,13 @@ export class AutoTrader {
       const kAdapter = this.engine.getAdapter(VENUE)
       if (kAdapter instanceof KalshiAdapter) {
         const url = kAdapter.wsUrl()
-        this.leadLagEngine.attachFastShadow(new KalshiWsClient(url, () => kAdapter.wsHeaders(url), (t, m) => console.warn(`[leadlag-fast] ${t}: ${m}`)))
+        // The live gates are read at the moment of each fast order, never copied from the last minute scan: a kill or a
+        // disarm must stop the next order, not the one after the next scan. Trading also needs leadLagFastLive (off).
+        this.leadLagEngine.attachFastShadow(new KalshiWsClient(url, () => kAdapter.wsHeaders(url), (t, m) => console.warn(`[leadlag-fast] ${t}: ${m}`)), 2, {
+          allowed: () => this.engine.getExecutionMode() === 'live' && this.config.liveArmed && !this.subEngineKilled() && !this.leadLagPaused,
+          adapter: () => this.engine.routedAdapter(VENUE, 'leadlag'),
+          cfg: () => this.leadLagCfg()
+        })
         this.leadLagFastAttached = true
       }
     }
@@ -4598,7 +4607,8 @@ export class AutoTrader {
       leadLagCoins: this.config.leadLagCoins ?? LEADLAG_COINS,
       leadLagNewCoinContracts: Math.max(1, Math.min(4, this.config.leadLagNewCoinContracts ?? 2)),
       leadLagMaxCoinsPerDirectionPerWindow: Math.max(1, Math.min(7, this.config.leadLagMaxCoinsPerDirectionPerWindow ?? 2)),
-      pollIntervalMs: Math.max(5_000, this.config.leadLagPollIntervalMs ?? 10_000)
+      pollIntervalMs: Math.max(5_000, this.config.leadLagPollIntervalMs ?? 10_000),
+      leadLagFastLive: this.config.leadLagFastLive ?? false
     }
   }
 

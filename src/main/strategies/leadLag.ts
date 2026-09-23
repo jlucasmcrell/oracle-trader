@@ -69,6 +69,12 @@ export interface LeadLagConfig {
    */
   leadLagMaxCoinsPerDirectionPerWindow: number
   pollIntervalMs: number // default 5000ms
+  /**
+   * Trade the event-speed gaps (section 161). Off until the operator approves it after the pre-registered read
+   * (docs/PREREGISTERED-leadlag-fast-shadow.md, on or after 2026-09-26): the first gap per market and side that opens
+   * at FAST_LIVE_MIN_NET_CENTS or more, through the same sweep, sizes and window caps as the minute scan.
+   */
+  leadLagFastLive?: boolean
 }
 
 export interface LeadLagDislocation {
@@ -85,7 +91,9 @@ export interface LeadLagDislocation {
   /** Where the Polymarket price came from ('clob-book' is the live one). */
   polySource?: string
   /** 'orderbook' from 2026-09-17; rows without it priced Kalshi from the cached markets list (stale by up to ~30 s). */
-  kalshiSource?: 'orderbook'
+  kalshiSource?: 'orderbook' | 'ws'
+  /** 'fast': placed by the event-speed path from both pushed books (section 161); absent: the minute scan. */
+  path?: 'fast'
   polyBid?: number
   polyAsk?: number
   /** Kalshi taker fee at the executable price, cents per contract. */
@@ -161,7 +169,62 @@ export interface FastBookSource {
   stop(): void
   compare(ticker: string, rest: OrderBook): void
 }
-export interface FastPair { ticker: string; upToken: string; end: number }
+export interface FastPair { ticker: string; upToken: string; end: number; marketId?: string }
+
+/** The registered primary threshold of the fast read: net of Kalshi's one-contract fee, at the moment the gap opens. */
+export const FAST_LIVE_MIN_NET_CENTS = 6
+
+/** What the fast path needs from the trader, read at the moment of each order - never a snapshot from the last scan. */
+export interface FastLive {
+  /** Every gate the minute scan applies: live mode, armed, no kill, exchange open. */
+  allowed(): boolean
+  adapter(): VenueAdapter
+  cfg(): LeadLagConfig
+}
+
+/**
+ * The sweep a fast 'open' row asks for, priced exactly as the grader prices it (the Kalshi ask for YES, 1 - the bid
+ * for NO, at the instant the gap opened), or null when the row is below the registered threshold or malformed.
+ */
+export function fastDislocation(
+  r: Record<string, unknown>,
+  marketId: string,
+  cfg: Pick<LeadLagConfig, 'leadLagMaxContractsPerOrder' | 'leadLagProvenCoins' | 'leadLagNewCoinContracts'>,
+  now: number
+): { d: LeadLagDislocation; side: 'YES' | 'NO'; yesRef: number } | null {
+  const side = r.side === 'YES' || r.side === 'NO' ? r.side : null
+  const pm = Number(r.pm)
+  const kb = Number(r.kb)
+  const ka = Number(r.ka)
+  const coin = String(r.c ?? '')
+  if (r.ev !== 'open' || !side || !coin || typeof r.t !== 'string' || ![pm, kb, ka].every((x) => x > 0 && x < 1)) return null
+  if (!(Number(r.net) >= FAST_LIVE_MIN_NET_CENTS)) return null
+  const yesRef = side === 'YES' ? ka : kb
+  const px = side === 'YES' ? ka : +(1 - kb).toFixed(4)
+  const feeCents = kalshiTakerFeeCentsFor(px, sweepSizeFor(coin, cfg))
+  const gapCents = +(100 * (side === 'YES' ? pm - ka : kb - pm)).toFixed(1)
+  const d: LeadLagDislocation = {
+    ts: new Date(now).toISOString(),
+    underlying: coin,
+    polyMarketId: marketId,
+    kalshiTicker: r.t,
+    polyPrice: pm,
+    kalshiPrice: yesRef,
+    dislocationCents: gapCents,
+    suggestedAction: side === 'YES' ? 'BUY_KALSHI_YES' : 'BUY_KALSHI_NO',
+    clearsFees: gapCents - feeCents > 0,
+    executed: false,
+    polySource: 'clob-ws',
+    kalshiSource: 'ws',
+    polyBid: Number(r.pb),
+    polyAsk: Number(r.pa),
+    feeCents,
+    netCents: +(gapCents - feeCents).toFixed(1),
+    polyAt: now - (Number(r.pAgeMs) || 0),
+    path: 'fast'
+  }
+  return { d, side, yesRef }
+}
 export interface FastOpen { at: number; net: number; peak: number }
 
 /**
@@ -585,24 +648,55 @@ export class LeadLagEngine {
   /** Event-speed shadow: each coin's current window, the second Kalshi book client, and the gaps now open (section 159). */
   private fastPairs = new Map<string, FastPair>()
   private fast: { books: FastBookSource; timer: ReturnType<typeof setInterval>; open: Map<string, FastOpen>; minNet: number } | null = null
+  /** Set only when the trader hands the fast path its live gates; trading still needs `leadLagFastLive`. */
+  private fastLive: FastLive | null = null
+  private fastShard = new Map<string, number | undefined>()
+  /** `ticker|side` already attempted: the registered decision unit is the first gap per market and side. */
+  private fastTried = new Set<string>()
 
   /**
    * Start the event-speed shadow. Needs the Polymarket socket (this engine's own) and a pushed Kalshi book client.
    * Records to `<state>-fast-shadow.jsonl`; never trades. `minNetCents` is deliberately below the live 6c floor so the
    * read can choose a threshold from the data.
    */
-  attachFastShadow(books: FastBookSource, minNetCents = 2): void {
+  attachFastShadow(books: FastBookSource, minNetCents = 2, live?: FastLive): void {
     if (this.fast || !this.polyWs) return
     const open = new Map<string, FastOpen>()
-    const timer = setInterval(() => {
-      const f = this.fast
-      if (!f || !this.polyWs) return
-      const rows = fastGaps(this.fastPairs, (tk) => this.polyWs?.top(tk), (t) => f.books.getBook(t), f.open, Date.now(), f.minNet)
-      for (const r of rows) this.appendFastRow(r)
-    }, 250)
+    this.fastLive = live ?? null
+    const timer = setInterval(() => this.fastTick(Date.now()), 250)
     timer.unref?.()
     this.fast = { books, timer, open, minNet: minNetCents }
     this.log(`[leadlag] event-speed shadow on: both books in memory, checked every 250 ms, gaps from ${minNetCents}c net`)
+  }
+
+  /** One pass of the event-speed path: record every gap row, and trade a qualifying 'open' when the switch is on. */
+  fastTick(now: number): void {
+    const f = this.fast
+    if (!f || !this.polyWs) return
+    const rows = fastGaps(this.fastPairs, (tk) => this.polyWs?.top(tk), (t) => f.books.getBook(t), f.open, now, f.minNet)
+    for (const r of rows) {
+      this.appendFastRow(r)
+      if (this.fastLive && r.ev === 'open' && Number(r.net) >= FAST_LIVE_MIN_NET_CENTS) void this.fastTrade(r, now)
+    }
+  }
+
+  private async fastTrade(r: Record<string, unknown>, now: number): Promise<void> {
+    const live = this.fastLive
+    if (!live) return
+    try {
+      const cfg = live.cfg()
+      if (!cfg.leadLagFastLive || !cfg.leadLagLiveEnabled || !cfg.leadLagEnabled || this.windowBlocked) return
+      const key = `${r.t}|${r.side}`
+      if (this.fastTried.has(key) || !live.allowed()) return
+      const pair = [...this.fastPairs.values()].find((p) => p.ticker === r.t)
+      if (!pair || pair.end - now < 60_000) return
+      const plan = fastDislocation(r, pair.marketId ?? '', cfg, now)
+      if (!plan || !plan.d.clearsFees) return
+      this.fastTried.add(key)
+      await this.sweep(live.adapter(), plan.d, plan.side, plan.yesRef, cfg, this.fastShard.get(pair.ticker))
+    } catch (e) {
+      this.log(`[leadlag] fast trade error on ${String(r.t)}: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   private appendFastRow(row: Record<string, unknown>): void {
@@ -799,7 +893,8 @@ export class LeadLagEngine {
         pairsObserved++
         // Event-speed shadow: remember this coin's window, and let the second book client check itself against the
         // REST top it would otherwise never see (it cannot read its books until the price convention is settled).
-        this.fastPairs.set(pair.coin, { ticker, upToken: poly.upToken, end: windowEndMs })
+        this.fastPairs.set(pair.coin, { ticker, upToken: poly.upToken, end: windowEndMs, marketId: poly.marketId })
+        this.fastShard.set(ticker, shardOf(kalshiMarket))
         this.fast?.books.compare(ticker, { venue: 'kalshi', marketId: ticker, bids: [{ price: kYesBid, size: 0 }], asks: [{ price: kYesAsk, size: 0 }] })
 
         // Lead/lag evidence: which venue moved since the previous look at this window.
@@ -908,6 +1003,9 @@ export class LeadLagEngine {
       }
       // Event-speed shadow: drop past windows and point the second Kalshi book client at this window's tickers.
       for (const [c, p] of this.fastPairs) if (p.end <= now) this.fastPairs.delete(c)
+      const liveTickers = new Set([...this.fastPairs.values()].map((p) => p.ticker))
+      for (const t of this.fastShard.keys()) if (!liveTickers.has(t)) this.fastShard.delete(t)
+      for (const k of this.fastTried) if (!liveTickers.has(k.split('|')[0])) this.fastTried.delete(k)
       if (this.fast) {
         const tickers = [...this.fastPairs.values()].map((p) => p.ticker)
         if (tickers.length) this.fast.books.start(tickers)
