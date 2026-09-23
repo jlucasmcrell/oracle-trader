@@ -13,6 +13,9 @@
  * Usage:  npm test            (all suites)
  *         node scripts/tests/run-all.cjs --list
  *
+ * Each suite's full output is written to tmp/testout/<suite>.txt before the next suite starts, so a
+ * failure (or a flake) is on disk even when nothing else captured it (backlog 77/74).
+ *
  * Every suite sets a non-zero exit code on failure (verified 2026-09-18), so the
  * exit code here is meaningful rather than decorative.
  */
@@ -46,6 +49,9 @@ function lastLine(text, max = 110) {
   return l.length > max ? l.slice(0, max - 1) + '\u2026' : l;
 }
 
+const OUT_DIR = path.join(ROOT, 'tmp', 'testout');
+fs.mkdirSync(OUT_DIR, { recursive: true });
+
 const results = [];
 const t0 = Date.now();
 
@@ -53,6 +59,10 @@ for (const s of suites) {
   const started = Date.now();
   const r = spawnSync(s.cmd, { shell: true, cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const ok = r.status === 0;
+  fs.writeFileSync(
+    path.join(OUT_DIR, s.key.slice('test:'.length) + '.txt'),
+    `$ ${s.cmd}\nexit ${r.status}${r.error ? ` (${r.error.message})` : ''}\n\n--- stdout ---\n${r.stdout ?? ''}\n--- stderr ---\n${r.stderr ?? ''}`
+  );
   results.push({
     key: s.key,
     ok,
@@ -74,6 +84,7 @@ if (failed.length) {
     console.log(`  ${f.key.padEnd(width)} exit=${f.status}  ${f.summary}`);
   }
 }
+console.log(`full output per suite: ${path.relative(ROOT, OUT_DIR)}${path.sep}<suite>.txt`);
 console.log('='.repeat(78));
 
 process.exit(failed.length ? 1 : 0);
