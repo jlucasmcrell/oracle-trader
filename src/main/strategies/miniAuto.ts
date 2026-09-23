@@ -920,7 +920,8 @@ export class MiniAuto {
                 this.logResearch('lag-gone', { marketId: c.m.id, strategy: 'lag', outcome: c.direction, seenYes: c.limitYes, bid, ask })
                 continue
               }
-              limit = c.limitYes
+              // One tick through the price seen, as an immediate-or-cancel LIMIT (below): never worse than that.
+              limit = c.direction === 'YES' ? Math.min(0.99, c.limitYes + tick) : Math.max(0.01, c.limitYes - tick)
             } else if (c.direction === 'YES' && ask !== undefined) limit = Math.min(0.99, ask + 0.01)
             else if (c.direction === 'NO' && bid !== undefined) limit = Math.max(0.01, bid - 0.01)
             // Snap to the venue tick grid (Polymarket US has 0.001-tick
@@ -935,6 +936,8 @@ export class MiniAuto {
             outcome: c.direction,
             amount: stakeOf(c.strategy),
             limitPrice: limit,
+            // The lag arm's registered order is a taker at the price it saw: a LIMIT, immediate-or-cancel (section 162).
+            ...(c.strategy === 'lag' ? { timeInForce: 'immediate_or_cancel' as const } : {}),
             feeRate: c.m.feeRate,
             ref: `mini:${c.strategy}:${c.m.id}`,
             marketQuestion: c.m.question

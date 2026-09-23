@@ -685,6 +685,27 @@ export class PolymarketUsAdapter implements VenueAdapter {
           ? { tif: 'TIME_IN_FORCE_GOOD_TILL_DATE', goodTillTime: new Date(order.expirationTs * 1000).toISOString() }
           : { tif: 'TIME_IN_FORCE_GOOD_TILL_CANCEL' })
       }
+    } else if (order.timeInForce === 'immediate_or_cancel' && order.limitPrice !== undefined) {
+      // Taker LIMIT, immediate-or-cancel: it cannot trade worse than the limit, which is the long side's price for
+      // both intents (the docs: "price.value always represents the long side's price"). The market order's slippage
+      // band below does not bound a BUY_SHORT: on 2026-09-23 a lag order sent with a 0.83 long bid as its reference
+      // bought the short side at an average 0.42 - 25c worse than the 0.17 it was sent for (section 162).
+      const yesPrice = order.limitPrice
+      if (!(yesPrice > 0 && yesPrice < 1)) throw new Error('Taker limit out of range')
+      const legCost = order.outcome === 'YES' ? yesPrice : 1 - yesPrice
+      body = {
+        marketSlug: order.marketId,
+        type: 'ORDER_TYPE_LIMIT',
+        price: { value: yesPrice.toFixed(3), currency: 'USD' },
+        quantity: order.contracts !== undefined
+          ? Math.max(1, Math.floor(order.contracts))
+          : Math.max(1, Math.floor(order.amount / Math.max(legCost, 0.01))),
+        tif: 'TIME_IN_FORCE_IMMEDIATE_OR_CANCEL',
+        intent: order.outcome === 'YES' ? 'ORDER_INTENT_BUY_LONG' : 'ORDER_INTENT_BUY_SHORT',
+        manualOrderIndicator: 'MANUAL_ORDER_INDICATOR_AUTOMATIC',
+        synchronousExecution: true,
+        maxBlockTime: '10'
+      }
     } else {
       body = {
         marketSlug: order.marketId,

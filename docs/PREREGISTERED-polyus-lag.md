@@ -62,3 +62,20 @@ rules apply. Worst single trade: the stake.
 - Also reported: results by league. The evidence covered NFL, NCAAF, MLB and WNBA; the rule takes every league the
   matcher maps (NHL, MLS and the European football leagues included), so a league outside the evidence is read
   separately before it counts toward scaling.
+
+## Amendment 2026-09-23 (section 162) - the first entry was not the registered order
+
+The rule is a taker order at the price the trigger saw, one tick of slippage at most. The build that went live sent a
+Polymarket US MARKET order with a slippage band, and the band did not bound a short-side buy: the first entry
+(GSV-POR, 2026-09-23 03:49Z, short side seen at 0.17, gap 21.5c) bought 2.38 contracts at an average 0.42 and won
+(+$1.34). It was 25c worse than the price seen, so it is **excluded from the cohort**, which now starts at the first
+order sent as an immediate-or-cancel LIMIT one tick through the price seen (the build deployed 2026-09-23 07:21Z). That order
+cannot fill worse than a tick; it fills at the price seen or not at all.
+
+What the first night showed, reported here because it bears on the FAIL condition: 22 triggers (13 MLB, 9 WNBA), 17
+orders, **none filled at the displayed price** - 7 found the book already moved more than a tick when re-read 5 s
+later, 9 sent and filled nothing, 1 filled 25c worse (above); the other 5 were the same game while the position was
+held. In the GSV-POR case the displayed book did not move from 0.83 x 25,216 / 0.84 x 37,725 between 03:47 and
+03:52Z while Kalshi went 0.75 to 0.54, and the order executed near Kalshi's price. If the in-play book this endpoint
+shows is mostly not what can be traded, the measured edge is an artefact of the recording - the registration's own
+FAIL condition - and the IOC limit now measures exactly that: fills at the price seen, or none.

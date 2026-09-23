@@ -2725,3 +2725,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   matching ForecastEx's published schedule; some IBKR pages say per matched pair. No fill has ever confirmed it. A
   whatIf preview in the app (`ibkrAdapter.ts:92-99`) or one one-contract fill's commission report settles it - never
   an ad-hoc order script. Trigger: **before any IBKR arm is proposed for live money**.
+- **244. Polymarket US taker orders and the in-play book (2026-09-23, section 162).** (a) The MARKET order's slippage
+  band does not bound a short-side buy (a lag order sent at 0.17 filled at 0.42). Only the lag arm uses the new
+  immediate-or-cancel LIMIT; every other taker path still sends the market order. (b) The `/v1/markets/{slug}/book`
+  endpoint served an unchanged in-play book (0.83 x 25,216 / 0.84 x 37,725 for five minutes) while the execution came
+  25c away, and none of 17 lag orders found the displayed price. Check that endpoint against the venue's own trade
+  prints before anything else is built on "Polymarket US is slow" (sections 158, 160). Trigger: **before any
+  Polymarket US taker arm other than lag is switched on (move it to the IOC limit first), and at the 234 read**.

@@ -6242,3 +6242,26 @@ Tests: review-fixes 598/0 with 8 new (the 6c floor, NO priced at 1 - bid, switch
 switch check and dropping the once-per-side guard - each fail the suite. `npm test` 22/22. Deployed 07:15:16Z with the
 switch off. Turning it on is the operator's decision after the read (the registration: a pass earns a proposal,
 nothing automatic).
+
+## §162 - 2026-09-23 07:21Z: the Polymarket US lag arm's first night - its one fill was 25c worse than it saw, and none of its 17 orders found the displayed price
+
+**The defect.** The lag arm's orders went out as Polymarket US MARKET orders with a slippage band around a reference
+price. The band did not bound a short-side buy (the docs say `price.value` is always the long side's price, but say
+nothing about `slippageTolerance.currentPrice`, and the fill shows it was not read that way): the one entry, GSV-POR
+at 03:49Z, was sent for the short side at 0.17 with a 0.83 long bid as its reference and bought 2.38 contracts at an
+average 0.42. It won (+$1.34); the price was 25c worse than the rule allows. **Fixed:** an order with
+`timeInForce: 'immediate_or_cancel'` and a limit is now an `ORDER_TYPE_LIMIT`, IOC, at the long-side price, sized in
+contracts (`polymarketUs.ts`); the lag arm sends exactly that, one tick through the price it saw (`miniAuto.ts`). It
+cannot fill worse. Every other caller keeps the old market order - all of those arms are off (backlog 244).
+
+**The finding.** 22 triggers (13 MLB, 9 WNBA), 17 orders: 7 found the book moved more than a tick when re-read 5 s
+later, 9 were sent and filled nothing, 1 filled 25c worse; none at the displayed price. In the one that filled, the
+book endpoint showed 0.83 x 25,216 / 0.84 x 37,725 unchanged from 03:47 to 03:52Z while Kalshi went 0.75 to 0.54, and
+the execution came near Kalshi's price. So the in-play book this endpoint serves is, at least often, not what can be
+traded - and it is the endpoint the recorder, the §160 measurement and the review's "the venue is slow" (top of book
+unchanged in 92-97% of minutes) all rest on. The registration's FAIL condition is exactly this (fills far from the
+price seen = a recording artefact); the first entry is excluded as a defect, the cohort restarts at the IOC limit, and
+from here the arm fills at the price seen or not at all. Expected: few or no fills, and a FAIL at the read.
+
+Tests: review-fixes 602/0 with 4 new (the short buy as a LIMIT at the long-side price with no market-order fields, a
+fill at 0.83 costing the short side 0.17, nothing at the limit is no fill, no IOC keeps the market order).

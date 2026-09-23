@@ -959,6 +959,7 @@ await activityPacingTests()
 await lagFeedTests()
 await polyUsSettlementGateTests()
 await fastLiveTests()
+await polyUsTakerLimitTests()
 consensusTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
@@ -1612,4 +1613,25 @@ async function fastLiveTests(): Promise<void> {
   const rows = readFileSync(joinPath(dir, 'state-dislocations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   eq('fast live: fills are ledgered as executed rows tagged path fast, so the read can tell the paths apart', rows.map((r) => [r.executed, r.path, r.suggestedAction]), [[true, 'fast', 'BUY_KALSHI_YES'], [true, 'fast', 'BUY_KALSHI_NO']])
   rmSync(dir, { recursive: true, force: true })
+}
+
+// ---- Polymarket US taker orders as immediate-or-cancel LIMITs (section 162) ----
+async function polyUsTakerLimitTests(): Promise<void> {
+  const a: any = new PolymarketUsAdapter()
+  a.requireAuth = () => {}
+  const sent: any[] = []
+  let executions: any[] = []
+  a.authPost = async (_path: string, body: any) => { sent.push(body); return { id: 'o1', executions } }
+  executions = [{ lastShares: '5', lastPx: { value: '0.83' } }]
+  const r = await a.placeOrder({ venue: 'polymarket-us', marketId: 'aec-wnba-gsv-por-2026-09-22', outcome: 'NO', amount: 1, limitPrice: 0.82, timeInForce: 'immediate_or_cancel' })
+  const b = sent[0]
+  eq('polyus taker limit: a short buy is a LIMIT at the long-side price, immediate-or-cancel, sized in contracts, with no market-order fields',
+    [b.type, b.price?.value, b.tif, b.intent, b.quantity, 'cashOrderQty' in b, 'slippageTolerance' in b, 'participateDontInitiate' in b],
+    ['ORDER_TYPE_LIMIT', '0.820', 'TIME_IN_FORCE_IMMEDIATE_OR_CANCEL', 'ORDER_INTENT_BUY_SHORT', 5, false, false, false])
+  eq('polyus taker limit: a fill at the long price 0.83 costs the short side 0.17', [r.shares, +r.avgPrice.toFixed(4), r.status], [5, 0.17, 'filled'])
+  executions = []
+  const none = await a.placeOrder({ venue: 'polymarket-us', marketId: 'm', outcome: 'YES', amount: 1, limitPrice: 0.43, timeInForce: 'immediate_or_cancel' })
+  eq('polyus taker limit: nothing at the limit is no fill, never a guess', [sent[1].intent, sent[1].quantity, none.shares, none.status], ['ORDER_INTENT_BUY_LONG', 2, 0, 'open'])
+  await a.placeOrder({ venue: 'polymarket-us', marketId: 'm', outcome: 'YES', amount: 1, limitPrice: 0.44 })
+  eq('polyus taker limit: without immediate-or-cancel the old market order is unchanged', [sent[2].type, 'cashOrderQty' in sent[2]], ['ORDER_TYPE_MARKET', true])
 }
