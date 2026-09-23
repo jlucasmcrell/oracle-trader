@@ -434,6 +434,9 @@ function normalize(line) {
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>')
     .replace(/\bot-\d+-\w+/g, '<coid>')
     .replace(/\bKX[A-Z]+(?:-[A-Z0-9.]+)+/g, (m) => m.split('-')[0] + '-*')
+    // Polymarket US order ids (CEKRHN8VMTMY) are 12 Crockford base-32 characters - no I, L, O or U, which keeps English
+    // words out; KX excludes a Kalshi series name that happens to fit. Kept, one stopped arm's 21 cancels were 21 incidents (backlog 59).
+    .replace(/\b(?!KX)[0-9A-HJKMNP-TV-Z]{12}\b/g, '<oid>')
     .replace(/\b[a-z]{2,6}-[a-z0-9-]+-20\d\d-\d\d-\d\d[a-z0-9-]*/g, '<slug>')
     .replace(/\d+(\.\d+)?/g, 'N')
     .replace(/\s+/g, ' ')
