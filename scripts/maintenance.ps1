@@ -13,13 +13,17 @@ Set-Location $repo
 # primary run and an 11:30 catch-up. An LLM weekly quota resets at 11am, so while the
 # quota is exhausted the 07:00 run can only ever fail - that is exactly the incident
 # data/sentinel/incidents/2026-09-18T12-05-maintenance-failed.md. The catch-up exists so
-# the day's work happens LATE instead of not at all. If today's log already shows a
-# successful run, there is nothing to do and we must not re-run the agent.
-if (Test-Path $log) {
-  if (Select-String -Path $log -Pattern '\] exit 0' -Quiet) {
-    "[$(Get-Date -Format o)] skip: today's maintenance already completed (exit 0 in log)" | Tee-Object -FilePath $log -Append
-    exit 0
-  }
+# the day's work happens LATE instead of not at all. If today's report already exists,
+# there is nothing to do and we must not re-run the agent. The report is the completion
+# token, not "exit 0": on 2026-09-19 the 07:00 run exited 0 after deciding to wait for a
+# background job, the exit-0 guard skipped the catch-up, and the day had no report (backlog
+# 205). The skip writes an exit line of its own because the sentinel reads the log's last
+# "] exit N" as the day's result.
+$report = Join-Path $repo "docs\reports\$stamp.md"
+if (Test-Path $report) {
+  "[$(Get-Date -Format o)] skip: today's maintenance already completed (docs\reports\$stamp.md exists)" | Tee-Object -FilePath $log -Append
+  "[$(Get-Date -Format o)] exit 0" | Tee-Object -FilePath $log -Append
+  exit 0
 }
 # One Claude session at a time: repair sessions (scripts/repair.ps1) hold the same lock.
 $lock = Join-Path $repo 'data/sentinel/agent.lock'
