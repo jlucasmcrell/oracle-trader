@@ -6365,3 +6365,19 @@ every cycle beside the held ten) and 193/199 (`settle-control`: the hold arms' a
 contracts settling within two days, never live-eligible); and the scripts helper's 59a, 100, 101, 205, 77a/74b, 171,
 222, 102b, 93, 113, 89 and handbook rules 21-25. Also: the amended critic rule encoded in `critic-skill.py` (1), and
 the IBKR panel shows `settle-control` as control-only. `npm test` 22/22; task-watch and venue-pnl pass.
+
+## §166 - 2026-09-23 09:15Z: the Polymarket US fade re-armed on the operator's yes; the money questions decided
+
+Operator, asked whether to lift the fade's panel hold: "Yes, that's fine, please do." Done at 09:15Z with the app
+stopped (backup `mini-auto-polymarket-us.json.bak_fadearm_*`) on the review's terms (backlog 235): favourite at 92.3c or
+more (`fadeMaxPrice` 0.1 -> 0.077), the category filter on (weather caused one of the three losses), one position per
+game (`maxPerUnderlying` 4 -> 1), 10 open (48 -> 10), a $3 daily brake (10 -> 3), one contract, maker entry, held to
+settlement; resting orders already cancel 33 minutes before a game starts, so none are exposed to the stale in-play
+book (section 164). Switching the flag on is the panel switch the ladder reads, so the operator hold clears. The
+verdict is registered (`docs/PREREGISTERED-polyus-fade.md`) and carried out by the app (`polyusFadeRead`): read at 15
+losses or 250 settled; FAIL, or no edge by 30 losses / 500 settled / 2026-12-31, retires it.
+
+On the money questions: "I'm not putting $250 in the account until we are showing it moving in a positive direction" -
+no deposit, and the interest question (82c) is closed. The rest decided here: no separate dollar-exposure cap at a
+$67 balance and a dollar a bet (50b; revisit past $250); daily limits stay on UTC days, like every report and ledger
+(52b); state backups stay on this machine because the files carry encrypted keys, and the code is on GitHub.
