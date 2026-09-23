@@ -7,8 +7,8 @@
 //   2. defects: new error signatures in main.log since the last tick, a failed nightly
 //      review, stopped-strategy rests whose cancel keeps failing, a venue error that
 //      persists in a mini-trader, long-horizon positions in the short-horizon traders,
-//      a destroyed or defaulted kalshi-auto.json (lib/config-watch.mjs),
-//      scheduled-task failures, OpenRouter credit, Ollama, disk;
+//      a destroyed or defaulted kalshi-auto.json (lib/config-watch.mjs), an app that is up with a
+//      live arm but has journaled no order for a day, scheduled-task failures, OpenRouter credit, Ollama, disk;
 //   3. action: a dead app or a stale hourly task is revived directly (Start-ScheduledTask);
 //      a defect becomes an incident file under data/sentinel/incidents and, within the
 //      rate limits below, a headless repair session (scripts/repair.ps1 -> claude -p with
@@ -30,6 +30,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import net from 'node:net'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
 import { WATCHED_KEYS, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from './lib/config-watch.mjs'
+import { killState } from './lib/kill-state.mjs'
 import { recorderPids } from './recorder-lock.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
@@ -537,6 +538,44 @@ for (const venue of ['polymarket-us']) {
   if (dp?.tripped) add(`mini-daily-brake:${venue}:${dp.date}`, 'notify', `${venue} daily loss brake tripped (${dp.realized?.toFixed?.(2) ?? dp.realized})`, `New entries are halted until 00:00Z. config.maxDailyLossDollars=${m.config?.maxDailyLossDollars}`)
   for (const t of m.state?.openTrades ?? []) {
     if (t.closeTime && t.closeTime - now > 15 * 86400_000) add(`horizon-${venue}:${t.marketId}`, 'notify', `${venue} short-horizon trader holds a position ${Math.round((t.closeTime - now) / 86400_000)} days from close`, `${t.marketId} ${t.strategy} ${t.outcome} $${t.amount}`)
+  }
+}
+// Up but placing nothing (backlog 100). Every check above asks whether something is ALIVE: on 2026-09-15 the app was up,
+// scanning and logging for two hours behind a tripped kill switch and the venue saw no order. Silence with an arm at a
+// live ladder stage is the finding; silence with a halt on record is a note naming it. A day, not N minutes: orders
+// cluster 11Z-20Z and 04Z-10Z is legitimately quiet, and a check that cries wolf every night gets suppressed.
+{
+  let lastOrderAt = 0
+  try {
+    for (const line of fs.readFileSync(path.join(UD, 'order-journal.jsonl'), 'utf8').split('\n')) {
+      try {
+        lastOrderAt = Math.max(lastOrderAt, JSON.parse(line).requestedAt || 0)
+      } catch {
+        // blank or torn line
+      }
+    }
+  } catch {
+    // no journal yet: nothing to judge
+  }
+  if (electronCount > 0 && !findings.some((f) => f.key === 'app-down') && ladder.strategies && lastOrderAt && now - lastOrderAt > 24 * H) {
+    const cfg = auto.config ?? {}
+    const halts = []
+    if (killState(auto.state, today).tripped) halts.push('kill switch tripped')
+    if (cfg.stopEntry === true) halts.push('stop-entry on')
+    if (cfg.dryRun === true) halts.push('dry run on')
+    if (cfg.enabled === false || cfg.liveArmed === false) halts.push(`auto-trader ${cfg.enabled === false ? 'off' : 'disarmed'}`)
+    try {
+      const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/exchange/status', { signal: AbortSignal.timeout(10_000) })
+      if (r.ok && (await r.json()).trading_active === false) halts.push('Kalshi exchange paused')
+    } catch {
+      // public GET; unreachable is not evidence
+    }
+    const live = Object.values(ladder.strategies).filter((s) => (s.stage === 'tiny-live' || s.stage === 'live') && !s.operatorHold).map((s) => s.id)
+    if (!live.length) halts.push('no arm at a live ladder stage')
+    const silence = `no order journaled for ${Math.round((now - lastOrderAt) / H)} h`
+    const evidence = `order-journal.jsonl newest requestedAt ${iso(lastOrderAt)} | live arms: ${live.join(', ') || 'none'}`
+    if (halts.length) add('trading-halted', 'notify', `App up, ${silence}; halted: ${halts.join(', ')}`, evidence)
+    else add('trading-silent', 'repair', `App up with ${live.length} live arm(s), ${silence}, and nothing on record explains it`, `${evidence} | kill switch clear, stop-entry and dry run off, armed, exchange not reported paused`)
   }
 }
 
