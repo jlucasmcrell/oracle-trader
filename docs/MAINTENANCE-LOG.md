@@ -4566,3 +4566,222 @@ This is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. 
    metaculus-stale. 38 new assertions, npm test 22/22, tsc and build clean, no restart needed.
 9. Sharp anchor rebuilt from its jsonl: gradedN 1,056, Brier 0.1248, ruleN 517, ruleNet +20.61c, 0 new rows in 24 h.
 10. Open for the operator: the config restore, IB Gateway (down since the crash), OpenRouter credit at $11.75.
+
+## 2026-09-23 (daily maintenance, headless 12:00-12:30Z)
+
+Full detail, with every number and its provenance, is REVIEW-CHANGES **§167**.
+
+### The one thing that needs the operator
+
+**Nothing.** The board is armed and trading again after yesterday's wipe: `liveArmed` true, five arms on the
+ladder at tiny-live, eight Kalshi trades today, and the Polymarket US fade you re-armed this morning is live with
+its registered verdict due 09-24. Two things to be aware of, neither blocking:
+
+- **OpenRouter credit is $10.88.** Not failed - the nightly review ran on `deepseek-v4-flash` this morning - but
+  below it the review and the hunch path fall back to Ollama.
+- **Today's nightly review file says "Parameter changes applied: kalshi.fadeMinEdgeCents 1.5 -> 2.5". It was
+  not.** The review ran at 06:22Z under the pre-§163 build, which was the last process that could touch a
+  registered parameter; the config reads **1.5**, which is what `docs/PREREGISTERED-fade-v3.md` specifies, and the
+  build you are running now refuses that write by name. If you read the review file, ignore that line.
+
+### 1. Liveness: one hourly task had been switched off
+
+App up (4 electron processes, since the 09:15Z restart), `main.log` current to the second, ladder tick 35 min old,
+BTC collector up, today's nightly review present (06:22Z), sentinel `at` 11:50:02Z (inside its 30 min),
+`repairSessionsToday` 0. All five background recorders alive (sports-books, weather-books, inplay-books,
+ladder15, crypto15). **Zero open sentinel incidents**: all 18 on disk read CLOSED.
+
+**`OracleTrader-PolyConsensus` was found Disabled**, `LastTaskResult` 267014, **4 missed runs**, its last pass
+07:58Z - four hours dead. Re-enabled and started at 12:01Z; it ran clean. Nothing in this repo disables a
+scheduled task (`Disable-ScheduledTask` and `schtasks /change /DISABLE` appear nowhere in `scripts/` or `src/`)
+and the TaskScheduler operational log is not enabled on this box, so the cause is not recoverable from here.
+It went unnoticed because `scripts/sentinel.mjs:174` watches **six** of the sixteen `OracleTrader-*` tasks and
+that is not one of them - backlog **245**, with `Disabled` as the signature to add, because unlike a stale task a
+disabled one never recovers on its own.
+
+Four suppressions. The `[ibkr-lab] Gateway API` one **expires tomorrow and should be allowed to lapse**: its own
+text says the lab has been collecting nothing if the gateway is still down, and it is not - the last
+gateway-unavailable warning was 2026-09-22T20:31Z, `ibkr-lab.json` `lastScanAt` is current, `scans` 11,731,
+`lastError` null, 573 trades and 93 positions. The gateway came back with you yesterday evening.
+
+### 2. Venue-true, last 24 h
+
+**Kalshi -$4.03** after $1.02 fees over 64 settlements. **Polymarket US +$1.38** on 1 resolution. Kalshi cash
+$62.50 across four shards (0: $14.57, 1: $5.00, 2: $23.27, 3: $19.66 - weather's shard 0 is funded) plus 9 open
+positions at $9.02 cost = **$71.52** ($70.75 at market), 3 resting orders. Polymarket US balance **$41.51**,
+buying power $36.51, 5 open and 6 resting.
+
+By arm on the Kalshi ledger: leadlag -$3.56 over 46 settlements, mean-reversion -$0.33 over 7, fade -$0.13 over
+11. The day's drag is the 15-minute coin books (SOL -$2.46, ETH -$1.28, HYPE -$0.82) against BTC15M +$2.41.
+
+**Ladder, last 24 h:** three arms retired by their own registrations at 08:27Z - `convergence` (the BTC gate
+FAILED at 379 events), `kalshi-cross-venue` (backlog 133a, the matcher refuses nearly every pair) and
+`polyus-lag` (the in-play prices were a data artefact). Two arms armed by the panel: `kalshi-fade` at 09-22
+20:44Z and `polyus-fade` at 09:17Z today. No promotions, no stops, no scale-ups. Live now, all at notch 1:
+
+| arm | stage | since | evidence |
+|---|---|---|---|
+| kalshi-leadlag | tiny-live | 09-18 19:53Z | 66 settled, net +$3.82, checkpoint at 80 |
+| kalshi-fade | tiny-live | 09-22 20:44Z | 5 settled, net +$0.46, checkpoint at 20 |
+| kalshi-mean-reversion | tiny-live | 09-18 19:05Z | 9 settled, net -$0.75, checkpoint at 20 |
+| kalshi-dutch | tiny-live | 09-06 21:59Z | 0 settled |
+| polyus-fade | tiny-live | 09-23 09:17Z | 0 settled, verdict read due 09-24 |
+
+**Sharp anchor:** `gradedN` **1,103**, `gradedBrier` 0.1249 (137.76 summed), `ruleN` 545, `ruleNet` **+22.30c**
+(+0.04c/contract). `anchor-grades.jsonl` gained **44 rows** in 24 h - the arm is grading again now that the Odds
+API key is back. Odds API spend today **346 of 645**.
+
+**Quoter** reads `disabled: 15 candidates, would quote 0 (4 gated) - shadow meter on`, which is the disabled
+format and not a silent quoter: the shadow meter is advancing (4,213 quotes, fills 1,400 -> 1,401 inside three
+minutes), and `would quote` was last non-zero at 06:53Z today, so the standing 0 is a candidate-side condition,
+not a stuck counter. The arm is on an operator hold and its shadow gate has not got the sample yet.
+
+### 3. The due read: backlog 146b, the lead-lag 6c gap floor - INCONCLUSIVE, nothing changed
+
+New `scripts/backtests/leadlag_gap_floor_read.py` loads `scripts/venue-pnl.py` by path so the ledger formula is
+the same one `--by-arm` uses, attributes every Kalshi fill by its order-journal ref, marks it to its market's
+published result and clusters by settlement day. The stop rule is stated at 95%, so this draws the two-sided 95%
+band, not the 80% band the ladder's scripts draw.
+
+On the 08:01Z read-only dump: **221 contracts over 6 day-clusters since the 2026-09-18 19:50Z registration, net
+$5.07, +2.29c/contract, day-clustered 95% [-9.65c, +14.24c]**. The sample rule (>= 60 contracts, >= 5 clusters) is
+MET, so the 2026-10-02 starvation clause does not apply. The 09-19 amendment is satisfied by construction: all
+**618** dislocation rows since the registration carry `kalshiSource == 'orderbook'`.
+
+**Upper bound is not below zero, so no revert to 4c; lower bound is not above zero, so nothing is proved.**
+`leadLagMinDislocationCents` stays **6** and no config was touched. The band is wide because one cluster carries
+the mean: 09-19 is +10.56c on 99 contracts against -4.17c / +2.49c / -8.98c / -5.22c on the four days since.
+Re-read 2026-10-02 (`docs/reads.json`).
+
+One thing for the next reader: the ladder's own row reads **66 settled** against this read's 221 contracts, and
+that is not a discrepancy. `leadLagEvidence` counts only the proven coins (BTC/ETH, backlog 91); the venue ledger
+counts all eight. Both are positive. The consequence worth watching is that the ladder's checkpoint at 80 is
+paced by the BTC/ETH subset, not by what the arm actually trades.
+
+### 4. What was built: backlog 237, Polymarket US re-graded from the venue record
+
+Tomorrow's registered lab read (125/181/190/198) says to do this first. Section 160 found that until 2026-09-22
+`fetchSettlementPrice` booked a close at the book's `settlementPx` the moment the book said EXPIRED, and the
+venue shows the previous close there for a few minutes before writing the real 0/1: 47 of 177 live closes and 4
+of 40 lab settlements. The settle path was fixed that day; the history was not.
+
+New `scripts/polyus-regrade.py` (read-only, `selftest` mode with 16 assertions) sorts every matched close into
+**agrees**, **regraded** or **unjudgeable** against the venue's own resolution records, writes
+`data/polyus-regrade/regraded.json`, and `scripts/trade-quality.mjs` now prints that per-arm line under the app's
+own rows, carrying the re-grade's timestamp so a stale file is visible rather than silently authoritative.
+Neither ledger is written to.
+
+Over 183 resolved markets (72 agree, 31 re-graded, 15 unjudgeable, 55 with no resolution in the dump):
+
+| arm | judged closes | app | venue | re-graded | unjudgeable |
+|---|---|---|---|---|---|
+| fade | 60 | +$0.08 | **+$0.88** | 22 | 7 |
+| micro-maker | 42 | -$1.69 | **-$3.87** | 8 | 10 |
+| lag | 1 | +$1.34 | +$1.38 | 1 | 0 |
+| weather-fair | 0 | - | - | 0 | 2 |
+
+**The mis-booking understated fade and flattered micro-maker** - the direction that matters for the arm you
+re-armed this morning. The four provisional paper-lab settlements are all `opened < POLY_PAPER_RULES_SINCE`, so
+`lab-review.py` already excludes them as legacy and tomorrow's lab read is not judged on them; neither market is
+in our venue record, so their true 0/1 is not recoverable offline and they are excluded rather than invented.
+
+The trap, and it was a defect in the first run: Polymarket US has one book per market, so buying NO is recorded
+as **selling YES**. Treating `qtySold > 0` as an exit made all 67 of fade's held-to-settlement markets
+unjudgeable - the one arm the read exists to serve, with nothing to say. What an exit leaves is a MATCHED pair,
+`min(qtyBought, qtySold)`, which the venue pays at netting time and the resolution delta therefore excludes; the
+same netting term as Kalshi's formula in `venue-pnl.py`. A selftest assertion now pins it.
+
+`npx tsc --noEmit` clean, `npx electron-vite build` clean, **`npm test` 22/22 suites**, backup
+`oracle-trader-MAINT-2026-09-23-20260923-081133.zip` (1,989 files, 837 MB). **No restart**: nothing in `src/`
+changed, and the app has already been restarted today at 09:15Z by the §166 session.
+
+### 5. The trigger sweep
+
+`node scripts/due-triggers.mjs` now reads **nothing due today**; 146b is recorded and re-dated to 2026-10-02.
+Build-queue triggers checked, in order:
+
+1. **Critic skill - trigger MET, rule declines, nothing changed.** 2,173 decisions; settled 522 ABSTAIN / 308
+   VETO / 65 ERROR / 24 ALLOW_UNCHANGED. VETO -$0.043/contract against the rest's +$0.037, so conditions (i) and
+   (ii) pass, but the amended rule's condition (iii) fails at **1 of 2 shared enabled strategies**. The verdict is
+   now computed by `critic-skill.py` itself (§165), so the script's own line and the rule agree for the first time.
+2. **WebSocket book - NOT MET, streak 2 of 7.** Honest per-UTC-day pairs: 09-19 48,446/48,699 = **0.9948 PASS**;
+   09-20 52,772/53,332 = **0.9895 FAIL**; 09-21 33,000/33,282 = **0.9915 PASS**; 09-22 60,300/60,469 =
+   **0.9972 PASS**; 09-23 to 12:05Z 55,290/55,711 = 0.9924 (partial, counted tomorrow).
+3. HRRR - DONE 09-21; the shadow keeps running (below).
+4, 5, 7. Quoter fill channel / Avellaneda-Stoikov / player props - NOT MET: the quoter is at notch 1 on an
+   operator hold with no positive checkpoint, and the anchor is disabled at -$7.31.
+6. Sports anchor on Polymarket US - NOT MET: the Kalshi anchor's checkpoint is negative.
+8(c). Market-maker rest patterns - still gated on mean-reversion v3 showing fills and a positive checkpoint; it
+   is at 9 settled, -$0.75, checkpoint at 20.
+10. Metaculus - NOT MET: 149 pairs on file, **no graded pairs yet**.
+11. Forecaster v2 - NOT MET (the hunch gate has not reached 200 graded).
+12. Mention base rates - count met, evidence against (below); its own 09-25 date binds.
+13. Consensus - a daily reading, below.
+
+**Taken today: backlog 237**, because it carries tomorrow's date. Backlog **245** (the sentinel's task watch
+list) is the first untriggered build and is queued for the next run with no dated read.
+
+### 6. Shadows and gates
+
+- **HRRR vs NBM, day 7:** HRRR still ahead on **432** paired daily-high forecasts - MAE **1.94** vs 2.24, bias
+  -0.31 vs -1.23, closer on 232 against 187 with 13 ties. The 09-21 verdict holds; the source is already live in
+  `fetchHourlyForecast`.
+- **Mention base-rate shadow:** 119 graded (count met, its 09-25 date not). The evidence is **against** the
+  premise - base-rate Brier **0.2390** against the market's **0.1447**, counterfactual 15c-gap taker
+  **-4.74c/contract** over 42 trades, and both sub-corpora agree (fed 0.1716 vs 0.0959, trump-period 0.2846 vs
+  0.1776). A base rate worse than the price is not a signal.
+- **Polymarket consensus shadow:** 15,393 signals, **311,555 graded**, hit 0.72 at a mean price of 0.71, Brier
+  0.0907, **+4.63c** at the Kalshi ask net of fee over 1,436 matched. Still concentrated in `btc` (+0.87c on
+  92,475) and `highest`; mlb, wta and atp negative. Trigger unchanged, not met. This is the shadow whose task was
+  found disabled.
+- **BTC convergence gate: FAIL / NOT YET** - 382 events, 1,045 graded, **-0.13c/contract**, Bonferroni lower
+  bound -2.31c against a +1c bar, day-clustered [-1.36, +1.10]. The arm was retired on this read at 08:27Z.
+- **Quoter shadow gate:** insufficient sample for the ALLOWED cohort (51 settled proxy fills over **27** events,
+  needs 30/40). ALLOWED +3.90c, BLOCKED **-4.38c** over 1,242 with band [-6.86, -1.91] - the gates are still
+  refusing quotes that would have lost.
+- **Metaculus shadow:** 149 pairs on file and growing, **no graded pairs yet**; nothing to report until one
+  resolves.
+
+### 7. Errors in the last 24 h
+
+Nothing new. 926 `[ibkr-lab] Gateway API not available yet` warns, **all of them before 2026-09-22T20:31Z** and
+none in the last three hours - the gateway came back and the lab resumed (suppressed signature, expiring
+tomorrow, and the check that matters says it is healthy). 50 `IBKR 200: No security definition` on the FES
+contract, which is a ForecastEx listing gap, not our code. 1,417 `[poly-paper] scan` lines are a log level, not
+errors. No new signatures, no wedged scans, no order-path errors.
+
+### 8. Open questions for the operator (not blocking)
+
+- OpenRouter credit **$10.88**. Below it the review and the hunches fall back to Ollama.
+- The `[ibkr-lab] Gateway API` suppression lapses tomorrow. It should be allowed to: the gateway is up and the
+  lab is scanning. If it goes down again the signature will be visible, which is the point.
+- Backlog **216/217** (lead-lag above one contract) still recommends holding at 1 until reads 227 and 158 on
+  09-25. Today's 146b read does not change that recommendation - it widens the band, it does not narrow it.
+- The router still NXDOMAINs `api.open-meteo.com`; the HRRR shadow works around it in-process.
+
+### 9. Delivery
+
+This is the HEADLESS runner, which has no `SendUserFile` or `PushNotification`. The report is written to
+`docs/reports/2026-09-23.md` for the 08:30 desktop task to deliver.
+
+### Ten-line summary
+
+1. Nothing was down except one hourly task: `OracleTrader-PolyConsensus` was found **Disabled** with 4 missed
+   runs and was re-enabled and started; the sentinel does not watch it, which is backlog 245.
+2. Venue-true 24 h: **Kalshi -$4.03** over 64 settlements, **Polymarket US +$1.38**; $71.52 and $41.51 on account.
+3. Due read **146b performed: INCONCLUSIVE.** 221 contracts, 6 day-clusters, +2.29c, 95% band [-9.65, +14.24];
+   the 6c gap floor stays and no config was touched.
+4. Built **237**: Polymarket US history re-graded from the venue's own resolutions - **fade $0.08 -> $0.88**,
+   micro-maker $-1.69 -> $-3.87; the mis-booking understated the arm you just re-armed.
+5. The re-grade's first run was wrong in a way worth remembering: on this venue buying NO is recorded as selling
+   YES, so an exit is a matched PAIR, not a sale.
+6. Ladder: three arms retired by their own registrations at 08:27Z (convergence, cross-venue, polyus-lag); fade
+   and polyus-fade armed from the panel; no promotions, stops or scale-ups.
+7. Sharp anchor grading again: gradedN 1,103, Brier 0.1249, ruleN 545, ruleNet +22.30c, **44 new rows**; Odds API
+   346 of 645.
+8. Critic-skill trigger met and declined again (1 of 2 shared enabled strategies); WebSocket streak 2 of 7;
+   every other build trigger unmet.
+9. Shadows: HRRR still beats NBM on 432 station-days; the mention base rate is worse than the price and the
+   evidence is against it; consensus +4.63c on 311,555 graded but still concentrated in btc.
+10. tsc, build and **22/22 suites** clean; backup MAINT-2026-09-23 taken; no restart needed; nothing needs the
+    operator beyond an OpenRouter top-up.

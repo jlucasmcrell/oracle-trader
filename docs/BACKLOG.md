@@ -17,7 +17,6 @@ nobody has to remember a date. What is left below is either the operator's, or c
 ## Code still to write (none blocks trading today)
 - **24** Polymarket US trader guards (stop-entry, ledger drift): the fade now trades again at one contract, so this is
   next.
-- **237** Re-grade Polymarket US history from the venue record: the maintenance session does it before the 09-24 lab read.
 - **172/215** Contract-weighted ladder evidence missing for mean-reversion, cross-venue and dutch baselines.
 - **214** Capacity raises should carry the evidence key they were based on.
 - **218** The nightly review should see its own past changes and be able to propose a revert.
@@ -141,6 +140,14 @@ open is folded in here with its reason. Done items are removed, not ticked.
   Anthropic key, his call, do not re-raise. Kalshi deposit +$50 on 2026-09-07 ~10:20Z, equity $106.84 after it.)
 
 ## Recently done (so nobody re-does them)
+
+2026-09-23 (daily maintenance, section 167): **146b READ (inconclusive, the 6c floor stays), 237 BUILT.**
+The lead-lag gap floor now has 221 venue-ledger contracts over 6 day-clusters behind it at +2.29c, band
+[-9.65c, +14.24c] - enough sample to judge, not enough separation to decide, so nothing changed. Polymarket US's
+history is re-graded from the venue's own resolution records by `scripts/polyus-regrade.py`, and the correction
+moved fade UP (app $0.08 -> venue $0.88 over 60 judged closes) and micro-maker DOWN ($-1.69 -> $-3.87). Liveness:
+the hourly `OracleTrader-PolyConsensus` task was found **Disabled** with 4 missed runs and was re-enabled and
+started; nothing in this repo disables a task, and the sentinel does not watch that one - backlog **245**.
 
 2026-09-22 (daily maintenance, §154): **155 READ and retired.** The round-121 per-category slopes were built on
 09-18; today's registered read of the re-baselined `calibration` and `political-favorite` found there is nothing to
@@ -2073,6 +2080,19 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   full-event books first (the modal bracket is the untested case), and never infer tail direction from a
   temperature threshold - use `strike_type`. Script: `scripts/backtests/weather_hrrr_vs_market.py`.
 - **146 first check passed early (20:20Z):** all sweeps since the floor are >= 6c; sweep rate ~1 per 25 min.
+- **146b READ 2026-09-23 on the venue ledger: INCONCLUSIVE, the floor stays at 6c.**
+  `scripts/backtests/leadlag_gap_floor_read.py` on the 08:01Z read-only dump, attributing every Kalshi fill by its
+  order-journal ref and marking it to its market's published result (the same formula as `venue-pnl.py`):
+  **221 contracts over 6 day-clusters since the 09-18 19:50Z registration, net $5.07, +2.29c/contract,** day-clustered
+  95% band **[-9.65c, +14.24c]**. The sample rule (>= 60 contracts, >= 5 clusters) is MET, so the 2026-10-02
+  starvation clause does not apply. The 09-19 amendment (orderbook-quoted rows only) is satisfied by construction:
+  all **618** dislocation rows since the registration carry `kalshiSource == 'orderbook'`. Upper bound is not below
+  zero, so no revert to 4c; lower bound is not above zero, so nothing is proved. `leadLagMinDislocationCents` stays
+  **6** and no config was touched. The band is wide because one cluster carries the mean: 09-19 is +10.56c on 99
+  contracts against -4.17c / +2.49c / -8.98c / -5.22c on the four days since. Re-read 2026-10-02 (`docs/reads.json`).
+  Note for the next reader: the ladder's own row reads *66 settled* against this read's 221 contracts, and that is
+  not a discrepancy - `leadLagEvidence` counts only the proven coins (BTC/ETH, backlog 91), while the venue ledger
+  counts all eight. Both are positive; do not re-diagnose it.
 - **147 note:** shadow rows in the orderbook era already reconfirm the floor's losing bucket at 95%
   (gap < 6c, >= 3 min left: -3.15c [-4.34, -1.96], n=253); the exception itself is unsupported at n=53. Keep 09-25.
 
@@ -2754,6 +2774,19 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   settlements were booked at the provisional price (fixed going forward). Re-grade the research log's `closed` rows
   and the lab ledger from the venue's resolutions so no arm is judged on them. Trigger: **with 235, before any fade
   decision is put to the operator**, or before the lab's next report.
+  **Status 2026-09-23 (section 167): DONE.** `scripts/polyus-regrade.py` (read-only; 16 selftest assertions) re-grades
+  every live close and every lab settlement against the venue's own resolution records and writes
+  `data/polyus-regrade/regraded.json`; `scripts/trade-quality.mjs` now prints that line under the app's own per-arm
+  rows, dated, so a stale re-grade is visible. Result over 183 resolved markets: **fade 60 judged closes, app $0.08 ->
+  venue $0.88** (22 re-graded, 7 unjudgeable) - the mis-booking understated fade, it did not flatter it;
+  **micro-maker $-1.69 -> $-3.87** (8 re-graded, 10 unjudgeable); **lag $1.34 -> $1.38**; weather-fair has 2 closes and
+  neither is judgeable. The four provisional paper-lab settlements are all `opened < POLY_PAPER_RULES_SINCE`, so
+  `lab-review.py` already excludes them as legacy and the 09-24 lab read is not judged on them; neither market is in
+  our venue record, so their true 0/1 is not recoverable offline and they are excluded rather than invented.
+  The trap worth keeping: on this venue's single book, buying NO is recorded as SELLING YES, so `qtySold > 0` is not
+  an exit. Reading it as one made all 67 of fade's held-to-settlement markets `unjudgeable` in the first run. What an
+  exit leaves is a MATCHED pair, `min(qtyBought, qtySold)`, which the venue pays at netting time and the resolution
+  delta therefore excludes. Same shape as Kalshi's netted-pairs formula in `venue-pnl.py`.
 - **238. Retired Polymarket US arms: what must be fixed before any comes back (2026-09-22, section 160).**
   weather-fair: `parseUsTempSlug` (`weatherForecast.ts:235`) reads "gte80lt81" as a 1F bracket; the venue's are 2F
   ("between 80F and 81F"). book-imbalance: exits read the stored close (`miniAuto.ts` manageExits) while entries read
@@ -2794,3 +2827,13 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   **Status 2026-09-23 (section 163):** (a) done - every Polymarket US taker order from the mini is now an
   immediate-or-cancel LIMIT at its bound. (b) open, being researched now.
   (b) answered in section 164: the REST book is cached 30 s and freezes in play; nothing live reads it now.
+- **245. The sentinel's task watch list is six tasks out of sixteen (2026-09-23, section 167).**
+  `scripts/sentinel.mjs:174` names App, HrrrShadow, MetaculusShadow, MentionShadow, Maintenance and Sentinel.
+  `schtasks` lists sixteen `OracleTrader-*` tasks; the ten it does not watch include **PolyConsensus**, which was
+  found Disabled this morning with 4 missed runs and nothing raised - the same shape as 224(c), where the file no
+  check watched was the one that broke. Its shadow has a stale-`run.log` check, which is why the gap was survivable;
+  BtcCollector, CullGate, ImplicationScan, InplayBooks, SportsBooks, SpotShadow, StateBackup and WeatherBooks have
+  no task-state check at all. A `Disabled` state is the signature to add: a task that is disabled has stopped
+  forever, unlike a stale one, and no other check can see it. Deferred today because one behavioural change per run
+  and 237 was the dated one. Trigger: **the next maintenance run with no dated read to do**, or the next time a
+  task is found disabled.

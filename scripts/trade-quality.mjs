@@ -104,6 +104,19 @@ for (const v of ['polymarket-us']) {
     console.log(`  ${name.padEnd(16)} ${String(q.trades).padStart(5)}  ${q.wins}W/${q.losses}L  net $${f2(q.realizedPnl)}  ${flag}`)
   }
   if (!Object.keys(by).length) console.log('  (per-strategy split starts with the next settlement)')
+  // Backlog 237: 47 of 177 live closes were booked at a provisional settlement price (section 160), so the
+  // per-arm rows above are the app's own ledger, not the venue's. scripts/polyus-regrade.py re-grades them
+  // from the venue's resolution records; print that next to them, with its own date so a stale file shows.
+  const rg = rj(join(REPO, 'data', 'polyus-regrade', 'regraded.json'))
+  if (rg) {
+    console.log(`  venue-true re-grade (${rg.at}, ${rg.resolvedMarkets} resolved markets):`)
+    for (const [name, q] of Object.entries(rg.byArm || {})) {
+      if (!q.judged && !q.unjudgeable) continue
+      console.log(`    ${name.padEnd(16)} judged ${String(q.judged).padStart(4)}  app $${f2(q.appPnl)} -> venue $${f2(q.venuePnl)}  (${q.regraded} re-graded, ${q.unjudgeable} unjudgeable)`)
+    }
+    const labExcluded = Object.values(rg.byArm || {}).reduce((a, q) => a + (q.labExcluded || 0), 0)
+    if (labExcluded) console.log(`    ${String(labExcluded).padStart(4)} paper-lab settlements sit at a provisional price and are excluded, not re-priced`)
+  } else console.log('  venue-true re-grade: not run (python scripts/polyus-regrade.py <polyus dump> --write)')
 }
 
 console.log(`\nFLAGS: ${flags.length ? flags.join(' | ') : 'none'}`)

@@ -57,11 +57,12 @@
     },
     {
       "id": "146b",
-      "due": "2026-09-23",
+      "due": "2026-10-02",
       "what": "Lead-lag 6c gap floor",
       "how": "venue ledger, orderbook rows only (python scripts/venue-pnl.py on fresh read-only dumps)",
       "rule": "backlog 146b: >= 60 settled contracts over >= 5 days; upper bound < 0 -> revert leadLagMinDislocationCents to 4; starved at 2026-10-02 -> report to the operator",
-      "action": "config leadLagMinDislocationCents"
+      "action": "config leadLagMinDislocationCents",
+      "note": "read 2026-09-23 on the venue ledger (scripts/backtests/leadlag_gap_floor_read.py on the 08:01Z read-only dump): 221 contracts over 6 day-clusters since the 09-18 19:50Z registration, net $5.07, +2.29c/contract, day-clustered 95% band [-9.65c, +14.24c]. Sample rule MET (>=60 contracts, >=5 clusters); every dislocation row under the rule is kalshiSource=orderbook (618/618), so the 09-19 amendment is satisfied by construction. INCONCLUSIVE: the upper bound is not below zero, so no revert to 4c; the lower bound is not above zero, so nothing is proved. leadLagMinDislocationCents stays 6. Re-read at the registration deadline 2026-10-02; the band is wide because one day (09-19, +10.56c on 99) carries the mean."
     },
     {
       "id": "144a",

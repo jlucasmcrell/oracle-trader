@@ -6381,3 +6381,95 @@ On the money questions: "I'm not putting $250 in the account until we are showin
 no deposit, and the interest question (82c) is closed. The rest decided here: no separate dollar-exposure cap at a
 $67 balance and a dollar a bet (50b; revisit past $250); daily limits stay on UTC days, like every report and ledger
 (52b); state backups stay on this machine because the files carry encrypted keys, and the code is on GitHub.
+
+## §167 - 2026-09-23 12:20Z: the 6c gap floor read (inconclusive, nothing changed) and Polymarket US re-graded from the venue record
+
+Daily maintenance, headless runner. One registered read was due and one build-queue item had a date on it; both
+are below, with the two traps each one set.
+
+### The due read: backlog 146b, the lead-lag 6c gap floor - INCONCLUSIVE
+
+`docs/PREREGISTERED-leadlag-gap-floor.md` says to judge the floor on the venue ledger at >= 60 settled contracts
+across >= 5 day-clusters, and the 2026-09-19 amendment (review M-01) adds that only fills placed under the rule
+count and that the rule must hold on orderbook-quoted rows alone. New script
+`scripts/backtests/leadlag_gap_floor_read.py`: it loads `scripts/venue-pnl.py` by path so the ledger formula is
+the same one `--by-arm` uses, attributes every Kalshi fill by its order-journal ref, marks it to its market's
+published result, and clusters by settlement day. The stop rule is stated at 95%, so this script draws the
+two-sided 95% band rather than the 80% band `scripts/backtests/bands.py` draws for the ladder - a band quoted at a
+confidence the rule does not use is not the rule's band.
+
+On the 08:01Z read-only dump: **221 contracts over 6 day-clusters since 2026-09-18T19:50Z, net $5.07,
++2.29c/contract, day-clustered 95% [-9.65c, +14.24c]**. Sample rule MET. Upper bound not below zero, so no revert
+to 4c; lower bound not above zero, so nothing is proved. `leadLagMinDislocationCents` stays **6**; no config was
+touched. The orderbook condition is satisfied by construction - all **618** dislocation rows since the
+registration carry `kalshiSource == 'orderbook'`, because the honest-quote era began 2026-09-17, before the
+registration. Per day: 09-18 -4.13c (7), 09-19 +10.56c (99), 09-20 -4.17c (47), 09-21 +2.49c (17), 09-22 -8.98c
+(24), 09-23 -5.22c (27). One cluster carries the mean, which is what a band this wide is for.
+
+**The trap, and it is not a defect: the ladder's row reads 66 settled against this read's 221 contracts.**
+`leadLagEvidence` (`ladder.ts:1442`) filters `leadLagRowCounts` on `leadLagProvenCoins`, which is unset and
+therefore `LEADLAG_PROVEN_DEFAULT` - BTC and ETH only, by backlog 91, because the stage baseline was earned by
+those two and a pool cannot stop a subset. The venue ledger counts all eight coins. Both are positive ($3.82 and
+$5.07). Two different questions, two correct answers; do not re-diagnose it. The consequence worth watching is
+that the ladder's next checkpoint at 80 is paced by the BTC/ETH subset, not by the arm's real throughput.
+
+### The build: backlog 237, Polymarket US re-graded from the venue's resolutions
+
+Section 160 found that `fetchSettlementPrice` booked a close at the book's `settlementPx` as soon as the book said
+EXPIRED, and that for a few minutes the venue shows the previous close there before writing the real 0/1 - 47 of
+177 live closes and 4 of 40 lab settlements. The settle path was fixed that day; the HISTORY was not, and
+tomorrow's registered lab read (125/181/190/198) says to do this first.
+
+New `scripts/polyus-regrade.py` (read-only; `selftest` mode, 16 assertions). It reads the read-only dump's
+`positionResolution` activities, the live research log's `closed` rows and `poly-paper.json`, and sorts every
+matched close into three outcomes: **agrees** (within half a cent), **regraded** (the venue's figure replaces the
+app's) and **unjudgeable** (the record of account cannot price it, so nothing is claimed). `--write` emits
+`data/polyus-regrade/regraded.json`; `scripts/trade-quality.mjs` now prints that per-arm line under the app's own
+rows, carrying the re-grade's own timestamp so a stale file is visible rather than silently authoritative. Neither
+ledger is written to: a correction belongs next to a ledger, not inside it.
+
+Over 183 resolved markets - 72 markets agree, 31 re-graded, 15 unjudgeable, 55 with no resolution in the dump:
+
+| arm | judged closes | app | venue | re-graded | unjudgeable |
+|---|---|---|---|---|---|
+| fade | 60 | +$0.08 | **+$0.88** | 22 | 7 |
+| micro-maker | 42 | -$1.69 | **-$3.87** | 8 | 10 |
+| lag | 1 | +$1.34 | +$1.38 | 1 | 0 |
+| weather-fair | 0 | - | - | 0 | 2 |
+
+**The mis-booking understated fade and flattered micro-maker.** That is the direction that matters for backlog 235:
+the arm the operator re-armed this morning looks better on the record of account than on the app's ledger, not
+worse. The four provisional paper-lab settlements (`aec-cfb-flst-ala-2026-09-19` and
+`tsc-nfl-cin-hou-2026-09-20-total-26pt5`, both sides of each) are all `opened < POLY_PAPER_RULES_SINCE`, so
+`lab-review.py` already excludes them as legacy and tomorrow's lab read is not judged on them; neither market is
+in our venue record, so their true 0/1 is not recoverable offline. They are excluded and named, not invented.
+
+**The trap, and this one WAS a defect in the first run.** Polymarket US has one book per market, so buying NO is
+recorded as SELLING YES. The first version treated `qtySold > 0` as "the app exited before the resolution" and
+therefore as unjudgeable - which made **all 67 of fade's held-to-settlement markets unjudgeable** and left the one
+arm the read exists to serve with nothing to say. What an exit actually leaves behind is a MATCHED pair, and the
+venue pays those at netting time, outside the resolution delta: the discriminator is `min(qtyBought, qtySold)`,
+exactly the netting term in `venue-pnl.py`'s Kalshi formula. The corrected run judges 60 of fade's markets. A
+selftest assertion now pins it ("a NO position (sold, never bought) is held, not exited").
+
+The other exclusion is worth stating plainly because it is a hole in the venue's record rather than in ours: on
+some resolved rows the venue leaves `realized` unchanged on a position that cost real money
+(`aec-lol-sr-fly-2026-09-06`, $0.36 held to resolution, delta $0.00). That is not a zero and is not graded as one.
+
+`npx tsc --noEmit` clean, `npx electron-vite build` clean, `npm test` **22/22 suites**, backup
+`oracle-trader-MAINT-2026-09-23-20260923-081133.zip` (1,989 files, 837 MB). **No restart**: nothing in `src/`
+changed.
+
+### Liveness: one task was switched off and nothing said so
+
+`OracleTrader-PolyConsensus` was found **Disabled** with `LastTaskResult` 267014 and **4 missed runs**; its last
+pass was 07:58Z and the shadow had been dead for four hours. Nothing in this repo disables a scheduled task
+(`grep` for `Disable-ScheduledTask` and `schtasks /change /DISABLE` across `scripts/` and `src/` returns nothing),
+and the TaskScheduler operational log is not enabled on this box, so the cause is not recoverable from here.
+Re-enabled and started at 12:01Z; it ran clean.
+
+It went unnoticed because `scripts/sentinel.mjs:174` watches six tasks out of the sixteen `OracleTrader-*` tasks
+on the box, and PolyConsensus is not one of them - the same shape as 224(c), where the file no check watched was
+the file that broke. **A `Disabled` state is the signature to add**, because unlike a stale one it never recovers
+and no freshness check can see it. Backlog **245**; not built today, because 237 had the date on it and the rule
+is one behavioural change per run.
