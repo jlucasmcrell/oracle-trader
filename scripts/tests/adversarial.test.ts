@@ -494,6 +494,15 @@ async function main(): Promise<void> {
 eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.leadLagLiveEnabled, n: cfg.leadLagMaxContractsPerOrder, stage: st('kalshi-leadlag').stage }, { live: true, n: 1, stage: 'tiny-live' })
     eq('G: Polymarket US fade and book on at multiplier 1', { fade: mcfg.fadeEnabled, book: mcfg.bookEnabled, mult: mcfg.strategySizeMult }, { fade: true, book: true, mult: { fade: 1, 'book-imbalance': 1, 'weather-fair': 1, lag: 1 } })
     eq('G: fade still in its cool-down', st('kalshi-fade').stage, 'disabled')
+    // A registration's FAIL retires an arm (section 163): off now, never re-armed by the clock, not an operator hold.
+    await ladder.retire('polyus-lag', 'the registration failed')
+    eq('G: retire switches the arm off without an operator hold', { stage: st('polyus-lag').stage, on: mcfg.lagEnabled, hold: st('polyus-lag').operatorHold ?? false, retired: !!st('polyus-lag').retired }, { stage: 'disabled', on: false, hold: false, retired: true })
+    ;(L.state.strategies['polyus-lag'] as { cooldownUntil?: number }).cooldownUntil = 0
+    await ladder.run()
+    eq('G: a retired arm is not re-armed when its cool-down ends', { stage: st('polyus-lag').stage, on: mcfg.lagEnabled }, { stage: 'disabled', on: false })
+    mcfg = { ...mcfg, lagEnabled: true }
+    await ladder.run()
+    eq('G: the operator switching it on brings it back and clears the retirement', { stage: st('polyus-lag').stage, retired: !!st('polyus-lag').retired }, { stage: 'tiny-live', retired: false })
     // Polymarket US fade: 20 closes at +$0.10 in the research log -> x2
     // 16 x +$0.35 and 4 x -$0.50: +$3.60 net, $0.18 mean, two-sided, and wide enough for the 95% band (2026-09-19).
     ;(L.state.strategies['polyus-fade'] as { since?: number }).since = Date.now() - 6 * 86_400_000

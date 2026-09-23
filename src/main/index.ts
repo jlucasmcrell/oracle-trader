@@ -26,7 +26,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { fastLeadLagRead, ReadRunner } from './ladder/registeredReads'
+import { fastLeadLagRead, polyusLagRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -521,6 +521,10 @@ app.whenReady().then(async () => {
           return out
         },
         setFastLive: (on) => void autoTrader.setConfig({ leadLagFastLive: on })
+      }),
+      polyusLagRead({
+        researchPath: join(app.getPath('userData'), 'mini-auto-polymarket-us.json-research.jsonl'),
+        retire: (reason) => ladder.retire('polyus-lag', reason)
       })
     ],
     (title, message) => {

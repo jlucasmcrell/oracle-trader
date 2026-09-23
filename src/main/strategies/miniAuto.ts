@@ -14,6 +14,7 @@ import { refreshedCloseTime, settlementProbeDue, stuckSettlements } from './ledg
 import { PolyUsLagFeed, kalshiTop, type LagHit, type PolyUsMoneyline } from './polyusLag'
 import { HttpClient } from '../util/http'
 import type { VenueAdapter } from '../../shared/venue'
+import { restIsStale } from './autoTrader'
 
 const SETTLE_GRACE_MS = 30 * 60_000
 /** A mini arm owns its entry cost; pooled venue basis can include another arm. */
@@ -31,6 +32,17 @@ const MICRO_MAKER_BOOK_BUDGET = 120
 const STALE_DROP_MS = 12 * 3600_000
 /** docs/PREREGISTERED-polyus-lag.md: at most 10 entries a day. */
 const LAG_MAX_PER_DAY = 10
+
+/**
+ * A resting order the market has moved through is a free option (backlog 236): its own-leg limit sits more than 2c
+ * above the own-leg mid of the book now. The Kalshi makers' rule since section 150, in the YES-price terms Polymarket
+ * US rests in.
+ */
+export function miniRestIsStale(outcome: 'YES' | 'NO', yesPrice: number, bid: number | undefined, ask: number | undefined): boolean {
+  if (bid === undefined || ask === undefined || !(ask > bid)) return false
+  const leg = (yes: number): number => (outcome === 'NO' ? 1 - yes : yes)
+  return restIsStale(leg(yesPrice), leg((bid + ask) / 2))
+}
 const KALSHI_PUBLIC = 'https://api.elections.kalshi.com/trade-api/v2'
 
 /** Bump when adding a config migration below — persist() must write the CURRENT version. */
@@ -936,8 +948,9 @@ export class MiniAuto {
             outcome: c.direction,
             amount: stakeOf(c.strategy),
             limitPrice: limit,
-            // The lag arm's registered order is a taker at the price it saw: a LIMIT, immediate-or-cancel (section 162).
-            ...(c.strategy === 'lag' ? { timeInForce: 'immediate_or_cancel' as const } : {}),
+            // Every Polymarket US taker is a LIMIT, immediate-or-cancel, at its bound (section 162): the market order's
+            // slippage band did not bound a short-side buy, which filled 25c past the price it was sent for.
+            ...(this.venue === 'polymarket-us' && limit !== undefined ? { timeInForce: 'immediate_or_cancel' as const } : {}),
             feeRate: c.m.feeRate,
             ref: `mini:${c.strategy}:${c.m.id}`,
             marketQuestion: c.m.question
@@ -1141,6 +1154,19 @@ export class MiniAuto {
         if (newly > 0.005) {
           this.promotePendingFill(p, newly, legOf(p.yesPrice))
           p.promoted = o.fillCount
+        }
+        // Pull a rest the market has moved through, cancel-only (backlog 236). The row stays, so a fill that lands
+        // before the cancel is still reconciled by the gone-branch.
+        const stale = p as typeof p & { stalePulledAt?: number }
+        if (!stale.stalePulledAt && adapter.getOrderBook) {
+          const ob = await adapter.getOrderBook(p.marketId).catch(() => undefined)
+          const bid = ob?.bids[0]?.price
+          const ask = ob?.asks[0]?.price
+          if (miniRestIsStale(p.outcome === 'NO' ? 'NO' : 'YES', p.yesPrice, bid, ask)) {
+            stale.stalePulledAt = Date.now()
+            await adapter.cancelOrder(p.orderId, p.marketId).catch(() => undefined)
+            this.logResearch('pulled-stale', { marketId: p.marketId, strategy: p.strategy, outcome: p.outcome, yesPrice: p.yesPrice, bid, ask })
+          }
         }
         if (Date.now() / 1000 > p.expirationTs + 120) {
           // Cancel, but leave the row: a fill can land between the open-orders snapshot and this cancel, and the

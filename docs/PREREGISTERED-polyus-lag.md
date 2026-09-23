@@ -79,3 +79,13 @@ held. In the GSV-POR case the displayed book did not move from 0.83 x 25,216 / 0
 03:52Z while Kalshi went 0.75 to 0.54, and the order executed near Kalshi's price. If the in-play book this endpoint
 shows is mostly not what can be traded, the measured edge is an artefact of the recording - the registration's own
 FAIL condition - and the IOC limit now measures exactly that: fills at the price seen, or none.
+
+## Amendment 2026-09-23 (section 163) - the read runs itself, and two missing defaults
+
+Operator: "If anything requires me remembering to do something, it will never happen, things should be automatic." The
+read is now code (`src/main/ladder/registeredReads.ts`, `polyusLagRead`), run by the app once a UTC day from
+2026-09-24 on the cohort above: per-contract P&L after fees, clustered by game, and the average fill against the price
+seen. PASS leaves the arm to the ladder; a FAIL retires it (`Ladder.retire`: off, never re-armed by the ladder's clock,
+and not an operator hold). The registration left two cases open; fixed now, before any entry under the IOC order:
+- on 2026-10-13 with fewer than 15 settled entries, the displayed price is not tradable often enough to test: FAIL;
+- at 150 entries still inconclusive: INCONCLUSIVE, and the arm stops.

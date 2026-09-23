@@ -174,6 +174,11 @@ export interface LadderStrategy {
   demotions?: number
   /** The operator switched this strategy off in the panel: trade-small entry stays off until it is switched back on. */
   operatorHold?: boolean
+  /**
+   * Stopped by its own pre-registered read (section 163): off, and never re-armed by trade-small's clock. Not an
+   * operator hold - the operator switching it on in the panel still brings it back, and clears this.
+   */
+  retired?: { at: number; reason: string }
   /** Size notch at the live stages: 1 = micro (one contract), then 2, 4. */
   notch?: number
   /** Number of 20-trade checkpoints already judged at the current stage. */
@@ -715,7 +720,7 @@ export class Ladder {
     const cfg = this.autoTrader.getConfig()
     // The same floor decideStage applies at notch 1: max(stage stop, three stakes) x LIFETIME_STOP_MULTIPLE.
     const floor = Math.max(LIVE_STOP_DOLLARS, 3 * (cfg.amountPerTrade ?? 0)) * LIFETIME_STOP_MULTIPLE
-    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, s.operatorHold ?? false, Date.now(), target, this.lifetimeFor(s.id), floor)
+    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, (s.operatorHold ?? false) || !!s.retired, Date.now(), target, this.lifetimeFor(s.id), floor)
   }
 
   /** Realized dollars across every cohort an arm has traded under, or undefined for arms not on the trader's ledger. */
@@ -733,6 +738,7 @@ export class Ladder {
   private gateOnly(s: LadderStrategy): string {
     if (this.mode() !== 'trade-small') return ''
     if (s.operatorHold) return 'switched off in the panel (operator hold); '
+    if (s.retired) return `retired by its registration (${s.retired.reason}); `
     if (s.cooldownUntil && Date.now() < s.cooldownUntil) return `cool-down until ${new Date(s.cooldownUntil).toISOString().slice(0, 10)} after ${s.demotions ?? 0} stop(s); `
     return ''
   }
@@ -862,9 +868,23 @@ export class Ladder {
         // stays off until the operator switches it back on (a passing gate can
         // still promote). A switch-on clears the hold.
         s.operatorHold = !liveish(cfgStage)
+        if (liveish(cfgStage)) delete s.retired
       }
     }
     return s
+  }
+
+  /**
+   * Stop an arm on its pre-registered read (section 163): off now, and never re-armed by trade-small's clock. It is
+   * not an operator hold; switching it on in the panel still brings it back.
+   */
+  async retire(id: LadderStrategyId, reason: string): Promise<void> {
+    const s = this.strategy(id)
+    if (s.stage === 'tiny-live' || s.stage === 'live') await this.apply(s, { to: 'disabled', reason: `retired by its registration: ${reason}` })
+    s.retired = { at: Date.now(), reason }
+    s.lastVerdict = `retired by its registration: ${reason}`
+    this.log(`[ladder] ${id}: retired by its registration - ${reason}`)
+    this.persist()
   }
 
   private captureBaseline(id: LadderStrategyId): Record<string, number> {

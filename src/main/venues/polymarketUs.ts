@@ -633,8 +633,10 @@ export class PolymarketUsAdapter implements VenueAdapter {
       if (!(shares > 0)) continue
       const cost = Math.abs(parseFloat(before.cost?.value ?? '0'))
       const realized = parseFloat(after.realized?.value ?? '0') - parseFloat(before.realized?.value ?? '0')
-      const won = realized > 0
-      const result: 'YES' | 'NO' = net > 0 ? (won ? 'YES' : 'NO') : won ? 'NO' : 'YES'
+      // The record says which side won; the realized-P&L change is 0 on 12 of 182 real resolutions and read those wins
+      // as losses (review 2026-09-22, section 160). usLedger.ts reads the same field. Fall back only when it is absent.
+      const result: 'YES' | 'NO' =
+        r.side === 'POSITION_RESOLUTION_SIDE_LONG' ? 'YES' : r.side === 'POSITION_RESOLUTION_SIDE_SHORT' ? 'NO' : net > 0 ? (realized > 0 ? 'YES' : 'NO') : realized > 0 ? 'NO' : 'YES'
       out.push({
         marketId: r.marketSlug,
         result,

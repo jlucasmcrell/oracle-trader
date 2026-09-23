@@ -209,3 +209,77 @@ export function fastLeadLagRead(deps: {
     }
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Kalshi leads Polymarket US in play (docs/PREREGISTERED-polyus-lag.md, backlog 234)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The cohort starts at the first immediate-or-cancel LIMIT order (section 162): the build deployed 07:21:28Z. */
+export const POLYUS_LAG_COHORT_START = Date.parse('2026-09-23T07:21:28Z')
+
+export interface LagClosed { ts: string; marketId: string; pnl: number; shares: number }
+export interface LagFill { ts: string; seenLeg: number; fillLeg: number }
+
+/** Per-contract P&L in cents, clustered by game, and the average fill against the price seen. */
+export function polyusLagStats(closed: LagClosed[], fills: LagFill[]): { n: number; games: number; meanCents: number; lo80: number; hi80: number; slipCents: number | null } {
+  const rows = closed.filter((c) => c.shares > 0)
+  const byGame = new Map<string, number[]>()
+  for (const c of rows) byGame.set(c.marketId, [...(byGame.get(c.marketId) ?? []), (100 * c.pnl) / c.shares])
+  const n = rows.length
+  const all = [...byGame.values()].flat()
+  const m = n ? all.reduce((a, b) => a + b, 0) / n : 0
+  const g = byGame.size
+  const se = g >= 2 ? Math.sqrt((g / (g - 1)) * [...byGame.values()].reduce((s, v) => s + (v.reduce((a, b) => a + b, 0) - v.length * m) ** 2, 0)) / n : Infinity
+  const slip = fills.filter((f) => Number.isFinite(f.seenLeg) && Number.isFinite(f.fillLeg))
+  return { n, games: g, meanCents: m, lo80: m - 1.28 * se, hi80: m + 1.28 * se, slipCents: slip.length ? (100 * slip.reduce((s, f) => s + (f.fillLeg - f.seenLeg), 0)) / slip.length : null }
+}
+
+/**
+ * The registered rule, plus the two defaults the registration lacked (amended 2026-09-23, before any entry under it):
+ * read at 60 settled entries over 15 games, or on 2026-10-13. FAIL: the 80% band's upper bound below zero, or fills
+ * averaging more than 2c worse than the price seen. PASS: the lower bound above zero. Otherwise continue to 150 entries.
+ * Defaults: on 2026-10-13 with fewer than 15 entries the displayed price is not tradable often enough to test - FAIL;
+ * at 150 entries still inconclusive - INCONCLUSIVE, and the arm stops.
+ */
+export function polyusLagVerdict(s: ReturnType<typeof polyusLagStats>, now: number): ReadResult {
+  const line = `${s.n} settled entries over ${s.games} games: ${s.meanCents >= 0 ? '+' : ''}${s.meanCents.toFixed(2)}c/contract, 80% [${s.lo80.toFixed(2)}, ${s.hi80.toFixed(2)}]${s.slipCents === null ? '' : `, fills ${s.slipCents.toFixed(2)}c from the price seen`}`
+  const readDue = (s.n >= 60 && s.games >= 15) || now >= Date.parse('2026-10-13T00:00:00Z')
+  if (!readDue) return { verdict: 'WAIT', summary: line }
+  if (s.slipCents !== null && s.slipCents > 2) return { verdict: 'FAIL', summary: line + ' - fills average more than 2c worse than seen' }
+  if (s.n < 15) return { verdict: 'FAIL', summary: line + ' - too few fills at the displayed price to test by 2026-10-13' }
+  if (s.hi80 < 0) return { verdict: 'FAIL', summary: line }
+  if (s.lo80 > 0) return { verdict: 'PASS', summary: line }
+  if (s.n >= 150) return { verdict: 'INCONCLUSIVE', summary: line + ' - no edge shown at 150 entries' }
+  return { verdict: 'WAIT', summary: line + ' - continuing to 150 entries' }
+}
+
+export function polyusLagRead(deps: { researchPath: string; retire: (reason: string) => Promise<void> }): RegisteredRead {
+  return {
+    id: 'polyus-lag',
+    doc: 'docs/PREREGISTERED-polyus-lag.md',
+    from: Date.parse('2026-09-24T00:00:00Z'),
+    async evaluate(now) {
+      const closed: LagClosed[] = []
+      const fills: LagFill[] = []
+      if (existsSync(deps.researchPath)) {
+        for (const line of readFileSync(deps.researchPath, 'utf8').split(/\r?\n/)) {
+          if (!line.includes('"lag')) continue
+          try {
+            const r = JSON.parse(line) as { ts?: string; type?: string; strategy?: string; mode?: string; marketId?: string; pnl?: number; shares?: number; seenLeg?: number; fillLeg?: number }
+            if (!r.ts || Date.parse(r.ts) < POLYUS_LAG_COHORT_START) continue
+            if (r.type === 'closed' && r.strategy === 'lag' && r.mode === 'live' && r.marketId && typeof r.pnl === 'number' && typeof r.shares === 'number') closed.push({ ts: r.ts, marketId: r.marketId, pnl: r.pnl, shares: r.shares })
+            if (r.type === 'lag-fill' && typeof r.seenLeg === 'number' && typeof r.fillLeg === 'number') fills.push({ ts: r.ts, seenLeg: r.seenLeg, fillLeg: r.fillLeg })
+          } catch {
+            // skip a torn line
+          }
+        }
+      }
+      return polyusLagVerdict(polyusLagStats(closed, fills), now)
+    },
+    async apply(verdict) {
+      if (verdict === 'PASS') return 'stays on; the ladder may scale it under its own rules'
+      await deps.retire(`PREREGISTERED-polyus-lag ${verdict}`)
+      return 'polyus-lag retired: off, and not re-armed by the ladder'
+    }
+  }
+}

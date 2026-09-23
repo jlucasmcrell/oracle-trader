@@ -7,7 +7,7 @@ import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, par
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
-import { fastReadStats, fastReadVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
+import { fastReadStats, fastReadVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
@@ -20,7 +20,7 @@ import { ConsensusFeed, CONSENSUS_RULE, consensusAgeHours, consensusRefusal, par
 import { bankObservations, eventDayStatus, localDate, parseEventDate, stationCode, stationTimeZone } from '../../src/main/strategies/weatherDay'
 import { planFillIngest } from '../../src/main/store/fillReconciler'
 import { fadeCategoryBlock, isWeatherSeries, underlyingOf, weatherSeatBlock } from '../../src/main/strategies/classify'
-import { dailyBrakeBlock } from '../../src/main/strategies/miniAuto'
+import { dailyBrakeBlock, miniRestIsStale } from '../../src/main/strategies/miniAuto'
 import { hunchModelPlans } from '../../src/main/strategies/hunch'
 import { computeCandidate, MAX_ROWS_PER_DAY, midOf, momentumCandidateStats, momentumCandidatesActive, recordMomentumCandidates, resetMomentumCandidates, setMomentumCandidateDir } from '../../src/main/strategies/momentumCandidates'
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs'
@@ -1636,6 +1636,18 @@ async function polyUsTakerLimitTests(): Promise<void> {
   eq('polyus taker limit: nothing at the limit is no fill, never a guess', [sent[1].intent, sent[1].quantity, none.shares, none.status], ['ORDER_INTENT_BUY_LONG', 2, 0, 'open'])
   await a.placeOrder({ venue: 'polymarket-us', marketId: 'm', outcome: 'YES', amount: 1, limitPrice: 0.44 })
   eq('polyus taker limit: without immediate-or-cancel the old market order is unchanged', [sent[2].type, 'cashOrderQty' in sent[2]], ['ORDER_TYPE_MARKET', true])
+  // getSettlements reads the winner from the record (section 160 review): a win whose realized change is 0 is still a win.
+  const s: any = new PolymarketUsAdapter()
+  s.requireAuth = () => {}
+  const pos = (net: string) => ({ netPositionDecimal: net, cost: { value: '0.9' }, realized: { value: '0' } })
+  s.activities = async () => [
+    { positionResolution: { marketSlug: 'long-won', side: 'POSITION_RESOLUTION_SIDE_LONG', beforePosition: pos('1'), afterPosition: pos('0') } },
+    { positionResolution: { marketSlug: 'short-won', side: 'POSITION_RESOLUTION_SIDE_SHORT', beforePosition: pos('1'), afterPosition: pos('0') } }
+  ]
+  eq('polyus stale rest: a NO bid at YES 0.08 is pulled once the book mid moves to 0.12, not at 0.09',
+    [miniRestIsStale('NO', 0.08, 0.11, 0.13), miniRestIsStale('NO', 0.08, 0.08, 0.10), miniRestIsStale('YES', 0.45, 0.40, 0.42), miniRestIsStale('YES', 0.45, 0.44, 0.46), miniRestIsStale('YES', 0.45, undefined, 0.46)],
+    [true, false, true, false, false])
+  eq('polyus settlements: the winner comes from the record, not a zero realized change', (await s.getSettlements(10)).map((x: any) => [x.marketId, x.result]), [['long-won', 'YES'], ['short-won', 'NO']])
 }
 
 // ---- pre-registered reads run themselves (section 163) ----
@@ -1693,5 +1705,14 @@ async function registeredReadTests(): Promise<void> {
   await fr.tick(Date.parse('2026-10-02T01:00:00Z'))
   await fr.tick(Date.parse('2026-10-03T01:00:00Z'))
   eq('reads: still open at the final date is a final verdict with the registered default', finalApplied, 'INCONCLUSIVE')
+  const games = (k: number, per: number, pnl: (g: number, i: number) => number) => Array.from({ length: k * per }, (_, i) => ({ ts: '2026-09-25T00:00:00Z', marketId: `g${Math.floor(i / per)}`, pnl: pnl(Math.floor(i / per), i), shares: 2 }))
+  const early = Date.parse('2026-10-01T00:00:00Z')
+  const deadline = Date.parse('2026-10-13T00:00:00Z')
+  eq('reads: polyus-lag waits for 60 entries over 15 games', polyusLagVerdict(polyusLagStats(games(10, 5, () => 0.2), []), early).verdict, 'WAIT')
+  eq('reads: polyus-lag with a clear edge passes', polyusLagVerdict(polyusLagStats(games(16, 4, (g) => (g % 2 ? 0.3 : 0.1)), []), early).verdict, 'PASS')
+  eq('reads: polyus-lag clearly losing fails', polyusLagVerdict(polyusLagStats(games(16, 4, (g) => (g % 2 ? -0.3 : -0.1)), []), early).verdict, 'FAIL')
+  eq('reads: polyus-lag fails on fills 2c+ worse than seen', polyusLagVerdict(polyusLagStats(games(16, 4, () => 0.2), [{ ts: 't', seenLeg: 0.4, fillLeg: 0.43 }]), early).verdict, 'FAIL')
+  eq('reads: polyus-lag with almost no fills by the deadline stops rather than idling', polyusLagVerdict(polyusLagStats(games(3, 1, () => 0.2), []), deadline).verdict, 'FAIL')
+  eq('reads: polyus-lag inconclusive at 150 entries stops', polyusLagVerdict(polyusLagStats(games(30, 5, (g, i) => (i % 2 ? 0.5 : -0.5)), []), early).verdict, 'INCONCLUSIVE')
   rmSync(dir, { recursive: true, force: true })
 }
