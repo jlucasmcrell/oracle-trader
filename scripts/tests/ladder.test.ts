@@ -117,7 +117,7 @@ eq('trade-small with no ledger figure behaves as before', tradeSmallEntry('trade
 eq('trade-small re-enters a disabled micro-maker as live', tradeSmallEntry('trade-small', 'disabled', 0, 2, undefined, false, T, 'live')?.to, 'live')
 eq('trade-small never touches tiny-live', tradeSmallEntry('trade-small', 'tiny-live', 0, 2, undefined, false, T), null)
 eq('trade-small never touches live', tradeSmallEntry('trade-small', 'live', 0, 2, undefined, false, T), null)
-eq('trade-small has no hard cap (the cool-down governs)', tradeSmallEntry('trade-small', 'shadow', 2, 2, undefined, false, T)?.to, 'tiny-live')
+eq('trade-small stops re-arming an arm stopped maxDemotions times (backlog 220)', [tradeSmallEntry('trade-small', 'disabled', 2, 2, undefined, false, T), tradeSmallEntry('trade-small', 'disabled', 1, 2, undefined, false, T)?.to], [null, 'tiny-live'])
 eq('cool-down: 3 days before the cap', cooldownAfter(1, 2), COOLDOWN_MS)
 eq('cool-down: 14 days at the cap', cooldownAfter(2, 2), LONG_COOLDOWN_MS)
 eq('cool-down: doubles per stop', cooldownAfter(3, 2), 2 * LONG_COOLDOWN_MS)
@@ -210,6 +210,7 @@ eq('review skips unchanged', plan.skipped.find((s) => s.key === 'maxLlmPerScan')
 eq('review skips live mini', plan.skipped.find((s) => s.key === 'microMakerMinSpreadCents')?.reason, 'strategy is live; recorded for the operator')
 eq('review skips an unknown target', plan.skipped.find((s) => s.key === 'fadeMinLiquidity')?.reason, 'target not eligible')
 eq('review respects auto-apply off', planParameterChanges([{ target: 'kalshi', key: 'quoterMaxSpreadCents', value: 15 }], kalshi, {}, false).apply.length, 0)
+eq('review never applies a registration-fixed parameter, even with live auto-apply', [planParameterChanges([{ target: 'kalshi', key: 'fadeMinEdgeCents', value: 2.5 }], { ...kalshi, fadeEnabled: true } as unknown as AutoTraderConfig, {}, true, true).apply.length, planParameterChanges([{ target: 'kalshi', key: 'fadeMinEdgeCents', value: 2.5 }], kalshi, {}, true, true).skipped[0]?.reason], [0, 'fixed by docs/PREREGISTERED-fade-v3.md; recorded for the maintainer'])
 eq('review applies to live strategies when allowed', planParameterChanges([{ target: 'kalshi', key: 'settleMinMarginPct', value: 2 }], kalshi, {}, true, true).apply.map((a) => [a.key, a.to]), [['settleMinMarginPct', 2]])
 
 // ---- one-sided samples cannot justify a scale-up (2026-09-09: fade promoted on 19W/0 settlement losses) ----

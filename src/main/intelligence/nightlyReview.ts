@@ -68,6 +68,16 @@ interface Bound {
  * `sizesFor` sets both - so the review was moving a live arm's size against the ladder's own decision,
  * which the handbook promises it never does (audit 2026-09-19, B-46). Removed 2026-09-20.
  */
+/**
+ * Parameters an open pre-registration fixes. The review may propose them - the proposal is recorded for the maintainer -
+ * but never applies them, whatever reviewAutoApplyLive says. On 2026-09-23 it raised fade v3's registered 1.5c edge
+ * floor to 2.5c at 06:21Z, the third raise in four days (section 152 reverted the first two; section 163).
+ */
+export const REGISTRATION_FIXED: Readonly<Record<string, string>> = {
+  fadeMinEdgeCents: 'docs/PREREGISTERED-fade-v3.md',
+  fadeMinHorizonMinutes: 'docs/PREREGISTERED-fade-v3.md'
+}
+
 export const PARAM_BOUNDS: Record<'kalshi' | 'polymarket-us', Record<string, Bound>> = {
   kalshi: {
     quoterMinSpreadCents: { min: 2, max: 10, live: (k) => !!k.quoterEnabled },
@@ -118,6 +128,10 @@ export function planParameterChanges(
     const bound = Object.prototype.hasOwnProperty.call(table, p.key) ? table[p.key] : undefined
     if (!bound) {
       skipped.push({ target: p.target, key: p.key, reason: 'not in the allow-list' })
+      continue
+    }
+    if (p.target === 'kalshi' && Object.prototype.hasOwnProperty.call(REGISTRATION_FIXED, p.key)) {
+      skipped.push({ target: p.target, key: p.key, reason: `fixed by ${REGISTRATION_FIXED[p.key]}; recorded for the maintainer` })
       continue
     }
     const v = typeof p.value === 'number' ? p.value : Number(p.value)

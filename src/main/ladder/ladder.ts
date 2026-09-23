@@ -673,7 +673,11 @@ export function tradeSmallEntry(
   // stopped an arm and the cool-down handed it straight back to real money (2026-09-22: momentum -$14.42 and
   // book-imbalance -$12.38 lifetime, re-arming on 09-27 and 09-25). A gate or the operator can still promote it.
   if (lifetimeDollars !== undefined && lifetimeFloor !== undefined && lifetimeDollars <= -lifetimeFloor) return null
-  void maxDemotions
+  // Nor is an arm stopped maxDemotions times (backlog 220, section 163). The cap was discarded (`void maxDemotions`)
+  // since the first commit, so a twice-stopped arm came back on its cool-down alone: sports-anchor on 09-14 after a
+  // -$5.14 stop (3 wins in 19 after), and volume-spike was due back on 2026-10-05. A gate or the operator can still
+  // promote it.
+  if (demotions >= maxDemotions) return null
   return { to: target, reason: `trade-small mode: real-money micro test ${demotions + 1} (stop -$${LIVE_STOP_DOLLARS})` }
 }
 
@@ -739,6 +743,7 @@ export class Ladder {
     if (this.mode() !== 'trade-small') return ''
     if (s.operatorHold) return 'switched off in the panel (operator hold); '
     if (s.retired) return `retired by its registration (${s.retired.reason}); `
+    if ((s.demotions ?? 0) >= (this.autoTrader.getConfig().ladderMaxDemotionsBeforeGate ?? 2)) return `stopped ${s.demotions} times: only its gate or the operator can re-arm it; `
     if (s.cooldownUntil && Date.now() < s.cooldownUntil) return `cool-down until ${new Date(s.cooldownUntil).toISOString().slice(0, 10)} after ${s.demotions ?? 0} stop(s); `
     return ''
   }

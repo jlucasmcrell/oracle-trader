@@ -172,7 +172,7 @@ function startTask(name) {
 }
 function taskLastResults() {
   const out = {}
-  for (const name of ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-PolyConsensus', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
+  for (const name of ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
     try {
       const csv = execFileSync('schtasks', ['/Query', '/TN', name, '/FO', 'CSV', '/V'], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'ignore'] })
       const lines = csv.split(/\r?\n/).filter(Boolean)

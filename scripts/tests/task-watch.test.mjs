@@ -38,12 +38,8 @@ assert.equal(isStale(now - observedGapMs, now, undefined), false)
 // -- the table --------------------------------------------------------------------------------
 const keys = TASK_WATCH.map((r) => r[0])
 assert.equal(new Set(keys).size, keys.length, 'watch keys must be unique - state.revived is keyed by them')
-assert.ok(keys.includes('spot-shadow-stale'), 'the spot-first recorder must stay in the watch list')
-
-const spot = TASK_WATCH.find((r) => r[0] === 'spot-shadow-stale')
-assert.equal(spot[1], 'data/spot-shadow/recorder.log')
-assert.equal(spot[2], 'OracleTrader-SpotShadow')
-assert.equal(spot[3], 20 * MIN, 'a continuous recorder must not inherit the 130-minute hourly allowance')
+// Retired recorders are not watched: their tasks are disabled, and a revive would fail every three hours.
+assert.ok(!keys.includes('spot-shadow-stale') && !keys.includes('polyconsensus-stale'), 'retired recorders stay out of the watch list')
 
 for (const [key, file, task, staleMs] of TASK_WATCH) {
   assert.match(key, /-stale$/)
@@ -56,4 +52,4 @@ for (const [key, file, task, staleMs] of TASK_WATCH) {
   if (staleMs !== undefined) assert.ok(staleMs > 0 && staleMs < DEFAULT_STALE_MS, `${key}: an explicit threshold is for a recorder tighter than hourly`)
 }
 
-console.log(`task watch: ${TASK_WATCH.length} watched recorders, 11 rule assertions passed (spot-first covered at ${20 * MIN / MIN} min)`)
+console.log(`task watch: ${TASK_WATCH.length} watched recorders, rule assertions passed`)

@@ -26,7 +26,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { fastLeadLagRead, polyusLagRead, ReadRunner } from './ladder/registeredReads'
+import { decidedRead, fastLeadLagRead, polyusLagRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -525,7 +525,19 @@ app.whenReady().then(async () => {
       polyusLagRead({
         researchPath: join(app.getPath('userData'), 'mini-auto-polymarket-us.json-research.jsonl'),
         retire: (reason) => ladder.retire('polyus-lag', reason)
-      })
+      }),
+      decidedRead('convergence-gate', 'docs/PREREGISTERED-btc-convergence.md (backlog 57a)', 'FAIL',
+        'btc-gate.mjs 2026-09-23: 379 events (bar 200), event-clustered lower bound -2.36c against the +1c the registration requires, mean -0.16c/contract; "fail on any one, and this rule is not built"',
+        async () => {
+          await ladder.retire('convergence', 'btc-convergence gate FAILED at 379 events')
+          return 'convergence retired: off, and not re-armed by the ladder'
+        }),
+      decidedRead('cross-venue-read', 'docs/BACKLOG.md 133a', 'FAIL',
+        'its matcher refuses nearly every pair on below-similarity and the read due 2026-09-18 never ran; item 133 says build an asset/strike/close matcher or retire - a new matcher is a new arm',
+        async () => {
+          await ladder.retire('kalshi-cross-venue', 'backlog 133a: the matcher refuses nearly every pair')
+          return 'cross-venue retired: off, and not re-armed by the ladder'
+        })
     ],
     (title, message) => {
       const url = autoTrader.getConfig().alertWebhookUrl

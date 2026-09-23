@@ -283,3 +283,11 @@ export function polyusLagRead(deps: { researchPath: string; retire: (reason: str
     }
   }
 }
+
+/**
+ * A verdict already reached from the registration's own grader and recorded in the changelog: the app carries it out
+ * once, persists it and pushes it, the same as a read it evaluates itself (section 163).
+ */
+export function decidedRead(id: string, doc: string, verdict: 'PASS' | 'FAIL', summary: string, act: () => Promise<string>): RegisteredRead {
+  return { id, doc, from: 0, evaluate: async () => ({ verdict, summary }), apply: async () => act() }
+}

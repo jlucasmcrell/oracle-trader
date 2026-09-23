@@ -2692,6 +2692,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   cancels a rest only when its arm is off or it expires; nothing pulls a rest the market has moved through, the way
   Kalshi's §150 does. Every maker arm is currently off. Trigger: **before any Polymarket US maker arm (fade's maker
   entry, micro-maker, weather-fair) takes an order again**.
+  **Status 2026-09-23 (section 163): done** - `miniRestIsStale` pulls any resting order the book has moved more than
+  2c through, cancel-only, every pass (`miniAuto.ts` managePendingOrders).
 - **237. Polymarket US history re-graded from the venue record (2026-09-22, section 160).** The app says -$16.25
   lifetime; the venue says -$20.86 (funded $60.71, balance $39.85). 47 of 177 live closes and 4 of 40 lab
   settlements were booked at the provisional price (fixed going forward). Re-grade the research log's `closed` rows
@@ -2708,6 +2710,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   182/182, and `usLedger.ts` already uses it). `deriveUsCloseTime` assumes a game stops trading at kickoff; games
   trade to the final whistle (the lag arm runs its own feed and does not depend on it). Trigger: **the next change
   that makes `getSettlements` feed P&L or reconciliation, or any in-game design that reads the catalog's close**.
+  **Status 2026-09-23 (section 163):** `getSettlements` now reads the winner from the record's side (done). The
+  close-at-kickoff model stays deliberately for the pre-game arms; the lag arm runs its own feed. Closed.
 - **240. Polymarket paper lab: re-seat the arms the review kept (2026-09-22, section 160).** reversion to a longer
   hold (its 15-minute markout is the only one above the control's); join/improve with a passive exit; drop the 2c
   padding on one-contract taker orders; longshot/favorite re-read now that settlements are final. Each is a cohort
@@ -2732,3 +2736,5 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   25c away, and none of 17 lag orders found the displayed price. Check that endpoint against the venue's own trade
   prints before anything else is built on "Polymarket US is slow" (sections 158, 160). Trigger: **before any
   Polymarket US taker arm other than lag is switched on (move it to the IOC limit first), and at the 234 read**.
+  **Status 2026-09-23 (section 163):** (a) done - every Polymarket US taker order from the mini is now an
+  immediate-or-cancel LIMIT at its bound. (b) open, being researched now.

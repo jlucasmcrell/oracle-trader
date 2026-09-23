@@ -322,11 +322,11 @@ async function main(): Promise<void> {
     L.state.lastPromotionAt = 0
     const before = gateCalls
     await ladder.run()
-    eq('E: long cool-down holds, gate still consulted', { stage: stage('convergence'), gated: gateCalls > before, why: verdict('convergence').includes('cool-down until') }, { stage: 'shadow', gated: true, why: true })
+    eq('E: after the second stop it holds, gate still consulted, and says why', { stage: stage('convergence'), gated: gateCalls > before, why: verdict('convergence').includes('stopped 2 times') }, { stage: 'shadow', gated: true, why: true })
     L.state.strategies.convergence.cooldownUntil = 0
     L.state.lastPromotionAt = 0
     await ladder.run()
-    eq('E: third test after the long cool-down', { stage: stage('convergence'), test: verdict('convergence').includes('micro test 3 ') }, { stage: 'tiny-live', test: true })
+    eq('E: after two stops the clock no longer re-arms it - only its gate or the operator (backlog 220)', { stage: stage('convergence'), why: verdict('convergence').includes('stopped 2 times') }, { stage: 'shadow', why: true })
     cfg.convergenceLiveEnabled = false
     await ladder.run()
     // operator switches the quoter off by hand: trade-small must not switch it back on

@@ -18,8 +18,8 @@ export const TASK_WATCH = [
   ['hrrr-stale', 'data/hrrr-shadow/forecasts.jsonl', 'OracleTrader-HrrrShadow'],
   ['metaculus-stale', 'data/metaculus-shadow/last-mc.json', 'OracleTrader-MetaculusShadow'],
   ['mention-stale', 'data/mention-shadow/run.log', 'OracleTrader-MentionShadow'],
-  ['polyconsensus-stale', 'data/polymarket-consensus/run.log', 'OracleTrader-PolyConsensus'],
-  ['spot-shadow-stale', 'data/spot-shadow/recorder.log', 'OracleTrader-SpotShadow', 20 * MIN],
+  // Retired 2026-09-23 (section 163), their tasks disabled: the spot-first recorder after its FAIL (section 157), and the
+  // consensus shadow after the arm's hard stop (section 152) - its state file had been torn since the 09-21 power loss.
 ]
 
 /**
