@@ -159,6 +159,8 @@ export interface LadderTransition {
   from: Stage
   to: Stage
   reason: string
+  /** The stage's evidence baseline this transition replaced (backlog 81a). */
+  baseline?: Record<string, number>
 }
 
 export interface LadderStrategy {
@@ -442,6 +444,24 @@ export function weightedTraderStats(c: CalibAccumulator | undefined, b: Record<s
   return { mean, se, sd, groups, clusters: groups.length > 0 && covered ? groups.length : undefined }
 }
 
+/**
+ * The 5-minute markout band behind the adverse-selection veto: plain until an arm has >= 30 markouts bucketed by day
+ * over >= 3 days, then clustered by day - same-day markouts move together, and the plain band overstated how sure a
+ * veto was (backlog 183).
+ */
+export function markoutBand(
+  p: { markoutN?: number; markoutSum?: number; markoutSq?: number; markoutSqN?: number; markoutByDay?: Record<string, { n: number; sum: number }> } | undefined,
+  z: number
+): ReturnType<typeof statsBand> {
+  const plain = statsBand(p?.markoutN ?? 0, p?.markoutSum ?? 0, p?.markoutSq, p?.markoutSqN, z)
+  const days = Object.values(p?.markoutByDay ?? {}).filter((d) => d.n > 0)
+  const n = days.reduce((a, d) => a + d.n, 0)
+  if (!plain || n < 30 || days.length < 3) return plain
+  const mean = days.reduce((a, d) => a + d.sum, 0) / n
+  const se = dayClusteredSe(days, n, mean, 0)
+  return { ...plain, n, mean, se, lo: mean - z * se, hi: mean + z * se }
+}
+
 export function dayClusteredSe(groups: { n: number; sum: number }[], n: number, mean: number, sq: number): number {
   const plain = n > 1 ? Math.sqrt(Math.max(0, (sq - n * mean * mean) / (n - 1)) / n) : 0
   if (groups.length === 0 || groups.reduce((a, g) => a + g.n, 0) !== n) return plain
@@ -663,7 +683,9 @@ export function tradeSmallEntry(
   now: number,
   target: 'tiny-live' | 'live' = 'tiny-live',
   lifetimeDollars?: number,
-  lifetimeFloor?: number
+  lifetimeFloor?: number,
+  /** The stop this arm is held to at notch 1 (lead-lag's is $10, section 139); the reason must name it (backlog 23). */
+  stopDollars: number = LIVE_STOP_DOLLARS
 ): Decision | null {
   if (mode !== 'trade-small') return null
   if (stage !== 'shadow' && stage !== 'paper' && stage !== 'blocked' && stage !== 'disabled') return null
@@ -678,7 +700,7 @@ export function tradeSmallEntry(
   // -$5.14 stop (3 wins in 19 after), and volume-spike was due back on 2026-10-05. A gate or the operator can still
   // promote it.
   if (demotions >= maxDemotions) return null
-  return { to: target, reason: `trade-small mode: real-money micro test ${demotions + 1} (stop -$${LIVE_STOP_DOLLARS})` }
+  return { to: target, reason: `trade-small mode: real-money micro test ${demotions + 1} (stop -$${stopDollars})` }
 }
 
 // ---- runner ----
@@ -724,7 +746,8 @@ export class Ladder {
     const cfg = this.autoTrader.getConfig()
     // The same floor decideStage applies at notch 1: max(stage stop, three stakes) x LIFETIME_STOP_MULTIPLE.
     const floor = Math.max(LIVE_STOP_DOLLARS, 3 * (cfg.amountPerTrade ?? 0)) * LIFETIME_STOP_MULTIPLE
-    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, (s.operatorHold ?? false) || !!s.retired, Date.now(), target, this.lifetimeFor(s.id), floor)
+    const stop = GENERIC_BY_ID.get(s.id)?.contracts ? LEADLAG_STOP_DOLLARS : LIVE_STOP_DOLLARS
+    return tradeSmallEntry(this.mode(), s.stage, s.demotions ?? 0, cfg.ladderMaxDemotionsBeforeGate ?? 2, s.cooldownUntil, (s.operatorHold ?? false) || !!s.retired, Date.now(), target, this.lifetimeFor(s.id), floor, stop)
   }
 
   /** Realized dollars across every cohort an arm has traded under, or undefined for arms not on the trader's ledger. */
@@ -831,6 +854,13 @@ export class Ladder {
   }
 
   /** Stage implied by the live config (the operator may flip switches by hand; the ladder follows). */
+  private configDefaulted(id: LadderStrategyId): boolean {
+    const g = GENERIC_BY_ID.get(id)
+    const onMini = id === 'polyus-micro-maker' || g?.venue === 'polymarket-us'
+    const src = onMini ? this.minis.get('polymarket-us') : this.autoTrader
+    return !!(src as { configDefaulted?: () => boolean } | undefined)?.configDefaulted?.()
+  }
+
   private configStage(id: LadderStrategyId): Stage {
     const k = this.autoTrader.getConfig()
     switch (id) {
@@ -872,7 +902,10 @@ export class Ladder {
         // A switch-off in the panel is the operator's call: trade-small entry
         // stays off until the operator switches it back on (a passing gate can
         // still promote). A switch-on clears the hold.
-        s.operatorHold = !liveish(cfgStage)
+        // ...unless the config is defaults because its file was unreadable and set aside: a power loss zero-filled
+        // kalshi-auto.json on 2026-09-21 and every arm read as switched off by hand (backlog 224). That is no
+        // operator's call, so no hold is created (an existing one stays) and trade-small may re-arm by its own rules.
+        if (!this.configDefaulted(id)) s.operatorHold = !liveish(cfgStage)
         if (liveish(cfgStage)) delete s.retired
       }
     }
@@ -1118,7 +1151,9 @@ export class Ladder {
     // Count real-money demotions (not blocked holds, not manual flips) so
     // trade-small mode hands the strategy back to its gate after the cap.
     if (liveish(from) && !liveish(to) && to !== 'blocked') s.demotions = (s.demotions ?? 0) + 1
-    s.history.push({ at: Date.now(), from, to, reason })
+    // The baseline being replaced goes into the history row: a stop used to overwrite the promotion's baseline with
+    // nothing kept, so the evidence behind the stage just left could not be re-read (backlog 81a).
+    s.history.push({ at: Date.now(), from, to, reason, ...(s.baseline ? { baseline: s.baseline } : {}) })
     s.stage = to
     s.since = Date.now()
     s.lastVerdict = `${from} → ${to}: ${reason}`
@@ -1359,7 +1394,7 @@ export class Ladder {
     const stake = (this.autoTrader.getConfig().amountPerTrade ?? 0) * (s.notch ?? 1)
     // statsBand refuses whenever the sum of squares covers fewer observations than the sum (round 67), so a
     // half-accumulated series cannot produce a veto out of a band that was never computable.
-    const mk = statsBand(p?.markoutN ?? 0, p?.markoutSum ?? 0, p?.markoutSq, p?.markoutSqN, CONFIDENCE_Z)
+    const mk = markoutBand(p, CONFIDENCE_Z)
     const missing = p?.markoutMissingN
     const adverse = mk
       ? { n: mk.n, mean: mk.mean, lo: mk.lo, hi: mk.hi, coverage: missing === undefined ? undefined : mk.n / (mk.n + missing) }
@@ -1381,7 +1416,7 @@ export class Ladder {
   private miniAdverse(strategy: string): AdverseEvidence | undefined {
     const p = this.minis.get('polymarket-us')?.getStatus()?.perfByStrategy?.[strategy]
     if (!p) return undefined
-    const b = statsBand(p.markoutN ?? 0, p.markoutSum ?? 0, p.markoutSq, p.markoutSqN, CONFIDENCE_Z)
+    const b = markoutBand(p, CONFIDENCE_Z)
     const missing = p.markoutMissingN
     return b ? { n: b.n, mean: b.mean, lo: b.lo, hi: b.hi, coverage: missing === undefined ? undefined : b.n / (b.n + missing) } : undefined
   }

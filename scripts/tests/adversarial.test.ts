@@ -306,6 +306,7 @@ async function main(): Promise<void> {
     writeFileSync(join(dir2, 'crypto-convergence.json'), JSON.stringify({ trades: [{ ts: new Date().toISOString(), status: 'settled', realizedPnlCents: -510 }] }))
     await ladder.run()
     eq('E: convergence demoted on the stop', { stage: stage('convergence'), on: cfg.convergenceLiveEnabled, n: L.state.strategies.convergence.demotions }, { stage: 'shadow', on: false, n: 1 })
+    eq('E: the stop keeps the baseline it replaced in the history row (backlog 81a)', ladder.status().strategies.find((s) => s.id === 'convergence')!.history.slice(-1)[0].baseline !== undefined, true)
     L.state.lastPromotionAt = 0
     await ladder.run()
     eq('E: cool-down blocks the second test', stage('convergence'), 'shadow')
@@ -523,6 +524,15 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now - (i % 4) * 86_400_000).toISOString(), kalshiTicker: `KXT-${i}`, executed: true, filledContracts: 1 })).join(String.fromCharCode(10)))
     await ladder.run()
     eq('G: lead-lag scales by contracts', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'live', n: 2 })
+    // A config on defaults after its file was set aside is not the operator switching arms off (backlog 224).
+    ;(autoTrader as unknown as { configDefaulted: () => boolean }).configDefaulted = () => true
+    cfg.leadLagLiveEnabled = false
+    await ladder.run()
+    eq('G: a defaulted config does not create an operator hold', st('kalshi-leadlag').operatorHold ?? false, false)
+    ;(autoTrader as unknown as { configDefaulted: () => boolean }).configDefaulted = () => false
+    cfg.leadLagLiveEnabled = false
+    await ladder.run()
+    eq('G: ...while the same switch-off in a healthy config is an operator hold', st('kalshi-leadlag').operatorHold ?? false, true)
   }
   // ---- H. deposits are spread to the shards that trade ----
 {

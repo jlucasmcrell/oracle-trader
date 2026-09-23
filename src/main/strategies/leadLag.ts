@@ -139,6 +139,8 @@ interface LeadLagState {
   history: LeadLagDislocation[]
   /** UTC minute last admitted to the 60-second cadence shadow. */
   cadenceMinute?: number
+  /** Per UTC day: scan cycles, and cycles in which any pair's Kalshi leg failed (backlog 170; read by 164). */
+  legFailByDay?: Record<string, { cycles: number; failed: number }>
   window?: {
     epoch: number
     fills: [string, { contracts: number; spend: number }][]
@@ -997,6 +999,11 @@ export class LeadLagEngine {
         }
       }))
 
+      const day = new Date(now).toISOString().slice(0, 10)
+      const tally = ((this.state.legFailByDay ??= {})[day] ??= { cycles: 0, failed: 0 })
+      tally.cycles++
+      if (kalshiFail > 0) tally.failed++
+      for (const d of Object.keys(this.state.legFailByDay)) if (d < new Date(now - 30 * 86_400_000).toISOString().slice(0, 10)) delete this.state.legFailByDay[d]
       if (kalshiFail > 0 && now - this.lastKalshiFailLogAt > 60_000) {
         this.lastKalshiFailLogAt = now
         this.log(`[leadlag] Kalshi leg failed for ${kalshiFail} of ${pairs.length} pairs this cycle`)

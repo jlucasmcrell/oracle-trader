@@ -33,6 +33,8 @@ export function loadJsonOrQuarantine<T>(path: string, log: (s: string) => void =
 /** Minimal JSON-file persistence for a single mutable object. */
 export class JsonStore<T extends object> {
   private data: T
+  /** Set when this process found the file unreadable and moved it aside: what it holds now is defaults (backlog 224). */
+  quarantinedAt?: number
 
   constructor(
     private readonly path: string,
@@ -52,9 +54,10 @@ export class JsonStore<T extends object> {
       // Do NOT continue with defaults over a file that exists but will not
       // parse: the next save() would overwrite the only copy of the ledger.
       // Move it aside so it can be recovered by hand.
-      console.warn('[json-store] load failed:', err)
+      console.warn(`[json-store] load failed for ${this.path}:`, err)
+      this.quarantinedAt = Date.now()
       try {
-        if (existsSync(this.path)) renameSync(this.path, `${this.path}.corrupt-${Date.now()}`)
+        if (existsSync(this.path)) renameSync(this.path, `${this.path}.corrupt-${this.quarantinedAt}`)
       } catch (moveErr) {
         console.warn('[json-store] could not quarantine corrupt file:', moveErr)
       }

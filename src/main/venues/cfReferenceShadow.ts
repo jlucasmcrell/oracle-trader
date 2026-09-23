@@ -2,6 +2,7 @@ import WebSocket from 'ws'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { KalshiAdapter } from './kalshi'
+import { isSharingViolation } from '../store/append'
 
 const INDICES = ['BRTI', 'ETHUSD_RTI', 'SOLUSD_RTI', 'XRPUSD_RTI', 'DOGEUSD_RTI', 'BNBUSD_RTI', 'HYPEUSD_RTI']
 
@@ -20,6 +21,26 @@ export function startCfReferenceShadow(adapter: KalshiAdapter, directory: string
   let socket: WebSocket | undefined, retry: ReturnType<typeof setTimeout> | undefined
   let stopped = false, lastFrame = Date.now(), lastStatus = 0, rows = 0, backoff = 60_000
   const recorded = new Map<string, number>()
+  // A line the file would not take while another process held it waits here and goes out with the next write or the
+  // 30 s watchdog, instead of being logged as a rejected observation and lost (backlog 223). Never a sleep in the
+  // socket handler.
+  const pending: { file: string; line: string }[] = []
+  const flush = (): void => {
+    while (pending.length) {
+      try {
+        appendFileSync(pending[0].file, pending[0].line)
+        pending.shift()
+      } catch (e) {
+        if (isSharingViolation(e)) return
+        console.warn('[cf-reference] write failed:', e instanceof Error ? e.message : String(e))
+        pending.shift()
+      }
+    }
+  }
+  const write = (file: string, line: string): void => {
+    if (pending.length < 10_000) pending.push({ file, line })
+    flush()
+  }
   const status = (state: string) => {
     lastStatus = Date.now()
     try { writeFileSync(join(directory, 'status.json'), JSON.stringify({ at: new Date().toISOString(), state, rows, lastFrame })) } catch { /* observations still attempt their own writes */ }
@@ -50,7 +71,7 @@ export function startCfReferenceShadow(adapter: KalshiAdapter, directory: string
         if (frame.type === 'error') { console.warn('[cf-reference] subscription refused'); status('subscription refused'); ws.terminate(); return }
         const row = cfObservation(frame, lastFrame)
         if (!row || row.sourceAt - (recorded.get(row.index) ?? 0) < 2000) return
-        appendFileSync(join(directory, new Date(row.receivedAt).toISOString().slice(0, 10) + '.jsonl'), JSON.stringify(row) + '\n')
+        write(join(directory, new Date(row.receivedAt).toISOString().slice(0, 10) + '.jsonl'), JSON.stringify(row) + '\n')
         recorded.set(row.index, row.sourceAt); rows++; backoff = 60_000
         if (rows === 1) console.log('[cf-reference] authenticated reference observations received; shadow only')
         if (Date.now() - lastStatus > 60_000 || rows === 1) status('recording')
@@ -60,7 +81,7 @@ export function startCfReferenceShadow(adapter: KalshiAdapter, directory: string
     ws.on('error', () => { ws.terminate(); reconnect() })
     ws.on('close', reconnect)
   }
-  const watchdog = setInterval(() => { if (socket && Date.now() - lastFrame > 60_000) socket.terminate() }, 30_000)
+  const watchdog = setInterval(() => { flush(); if (socket && Date.now() - lastFrame > 60_000) socket.terminate() }, 30_000)
   connect()
   return () => { stopped = true; if (retry) clearTimeout(retry); clearInterval(watchdog); socket?.terminate() }
 }

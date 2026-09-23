@@ -1117,6 +1117,11 @@ export class AutoTrader {
 
   // ---- config/status ----
 
+  /** True when this process started on defaults because the config file was unreadable and set aside (backlog 224). */
+  configDefaulted(): boolean {
+    return this.store.quarantinedAt !== undefined
+  }
+
   getConfig(): AutoTraderConfig {
     return { ...this.config }
   }

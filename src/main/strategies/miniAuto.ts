@@ -410,6 +410,11 @@ export class MiniAuto {
     }
   }
 
+  /** True when this process started on defaults because the state file was unreadable and set aside (backlog 224). */
+  configDefaulted(): boolean {
+    return this.store.quarantinedAt !== undefined
+  }
+
   getConfig(): MiniAutoConfig {
     return { ...this.config }
   }

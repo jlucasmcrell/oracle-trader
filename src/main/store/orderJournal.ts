@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendDurably, isSharingViolation } from './append'
 import { dirname } from 'node:path'
 import type { VenueId } from '../../shared/types'
 
@@ -62,14 +63,25 @@ export class OrderJournal {
     if (this.pending(input.venue).some(r => r.marketId === input.marketId)) throw new Error(`Unresolved submission on ${input.marketId}; awaiting venue reconciliation`)
     const row: JournalOrder = { ...input, clientOrderId: randomUUID(), version: '2026-09-15-r3', requestedAt: Date.now(), state: 'pending' }
     this.orders.push(row)
-    this.save(row)
+    try {
+      this.save(row)
+    } catch (e) {
+      // Not on disk, so not submitted: forget it, or it blocks its market as an unresolved submission.
+      this.orders.splice(this.orders.indexOf(row), 1)
+      throw e
+    }
     return row
   }
   update(row: JournalOrder, patch: Partial<JournalOrder>): void { Object.assign(row, patch); this.save(row) }
   private save(row: JournalOrder): void {
     try {
       mkdirSync(dirname(this.path), { recursive: true })
-      appendFileSync(this.path, JSON.stringify(row) + '\n', { flush: true })
-    } catch (e) { this.failure = 'Order journal write failed; submissions blocked'; throw e }
+      appendDurably(this.path, JSON.stringify(row) + '\n', { flush: true })
+    } catch (e) {
+      // Another process holding the file (a scan, a copy) fails THIS submission without latching (backlog 223): the
+      // next one tries afresh. Any other write failure is an integrity problem and still blocks every submission.
+      if (!isSharingViolation(e)) this.failure = 'Order journal write failed; submissions blocked'
+      throw e
+    }
   }
 }

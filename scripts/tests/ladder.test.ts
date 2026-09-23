@@ -3,7 +3,7 @@
  * Run: npm run test:ladder
  */
 import { clusterT, clusteredMean, CONFIDENCE_Z, COOLDOWN_MS, LONG_COOLDOWN_MS, cooldownAfter, dayClusteredSe, decideConvergence, decideQuoter, decideSettlement, decideStage, isPromotion, meanCi, QUOTER_GATE, tradeSmallEntry } from '../../src/main/ladder/ladder'
-import { clusterT95, SCALE_Z, weightedTraderStats } from '../../src/main/ladder/ladder'
+import { clusterT95, markoutBand, SCALE_Z, weightedTraderStats } from '../../src/main/ladder/ladder'
 import { geminiKey } from '../../src/main/intelligence/gemini'
 import { planParameterChanges, REVIEW_CHEAP_MODEL, REVIEW_FREE_MODELS, REVIEW_GEMINI, reviewModelPlans } from '../../src/main/intelligence/nightlyReview'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../src/shared/ipc'
@@ -108,6 +108,16 @@ eq('trade-small off when mode unset', tradeSmallEntry(undefined, 'shadow', 0, 2,
 eq('trade-small promotes shadow', tradeSmallEntry('trade-small', 'shadow', 0, 2, undefined, false, T)?.to, 'tiny-live')
 eq('trade-small promotes paper', tradeSmallEntry('trade-small', 'paper', 0, 2, undefined, false, T)?.to, 'tiny-live')
 eq('trade-small promotes blocked', tradeSmallEntry('trade-small', 'blocked', 1, 2, undefined, false, T)?.reason, 'trade-small mode: real-money micro test 2 (stop -$5)')
+{
+  // Backlog 183: four days, each internally consistent but disagreeing with the others, clusters to a wider band.
+  const byDay = { d1: { n: 10, sum: 30 }, d2: { n: 10, sum: -10 }, d3: { n: 10, sum: 40 }, d4: { n: 10, sum: -20 } }
+  const p = { markoutN: 40, markoutSum: 40, markoutSq: 40 * 16, markoutSqN: 40, markoutByDay: byDay }
+  const plain = markoutBand({ ...p, markoutByDay: undefined }, 1.28)!
+  const clustered = markoutBand(p, 1.28)!
+  eq('markout band: the same mean, day-clustered once 30+ markouts span 3+ days, and wider here', [clustered.mean, clustered.hi - clustered.lo > plain.hi - plain.lo], [plain.mean, true])
+  eq('markout band: under 30 bucketed markouts it stays plain', markoutBand({ ...p, markoutByDay: { d1: { n: 10, sum: 30 }, d2: { n: 10, sum: 10 } } }, 1.28)?.se, plain.se)
+}
+eq('trade-small names the stop the arm is held to (lead-lag $10, backlog 23)', tradeSmallEntry('trade-small', 'shadow', 0, 2, undefined, false, T, 'tiny-live', undefined, undefined, 10)?.reason, 'trade-small mode: real-money micro test 1 (stop -$10)')
 // 2026-09-22: the cool-down must not re-arm an arm whose lifetime is past the floor (momentum -$14.42, book-imbalance -$12.38).
 eq('trade-small refuses an arm past its lifetime floor', tradeSmallEntry('trade-small', 'disabled', 2, 2, undefined, false, T, 'tiny-live', -14.42, 10), null)
 eq('trade-small refuses at exactly the floor', tradeSmallEntry('trade-small', 'disabled', 2, 2, undefined, false, T, 'tiny-live', -10, 10), null)

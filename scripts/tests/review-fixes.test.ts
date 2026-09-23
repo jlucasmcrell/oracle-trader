@@ -23,7 +23,9 @@ import { fadeCategoryBlock, isWeatherSeries, underlyingOf, weatherSeatBlock } fr
 import { dailyBrakeBlock, miniRestIsStale } from '../../src/main/strategies/miniAuto'
 import { hunchModelPlans } from '../../src/main/strategies/hunch'
 import { computeCandidate, MAX_ROWS_PER_DAY, midOf, momentumCandidateStats, momentumCandidatesActive, recordMomentumCandidates, resetMomentumCandidates, setMomentumCandidateDir } from '../../src/main/strategies/momentumCandidates'
-import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs'
+import { appendDurably } from '../../src/main/store/append'
+import { OrderJournal } from '../../src/main/store/orderJournal'
 import { killState } from '../lib/kill-state.mjs'
 import { isDnsFailure, makeResolverLookup, PUBLIC_RESOLVERS } from '../lib/dns-fallback.mjs'
 import { needsSettleFetch, settledCacheEntry } from '../lib/cull-cache.mjs'
@@ -962,6 +964,8 @@ await polyUsSettlementGateTests()
 await fastLiveTests()
 await polyUsTakerLimitTests()
 await registeredReadTests()
+await appendTests()
+await legFailCountTests()
 consensusTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
@@ -1714,5 +1718,76 @@ async function registeredReadTests(): Promise<void> {
   eq('reads: polyus-lag fails on fills 2c+ worse than seen', polyusLagVerdict(polyusLagStats(games(16, 4, () => 0.2), [{ ts: 't', seenLeg: 0.4, fillLeg: 0.43 }]), early).verdict, 'FAIL')
   eq('reads: polyus-lag with almost no fills by the deadline stops rather than idling', polyusLagVerdict(polyusLagStats(games(3, 1, () => 0.2), []), deadline).verdict, 'FAIL')
   eq('reads: polyus-lag inconclusive at 150 entries stops', polyusLagVerdict(polyusLagStats(games(30, 5, (g, i) => (i % 2 ? 0.5 : -0.5)), []), early).verdict, 'INCONCLUSIVE')
+  rmSync(dir, { recursive: true, force: true })
+}
+
+// ---- appenders ride out a file another process holds (backlog 223, section 165) ----
+async function appendTests(): Promise<void> {
+  const failing = (codes: (string | null)[]) => {
+    let i = 0
+    const calls: number[] = []
+    const fn = ((..._a: unknown[]) => {
+      calls.push(i)
+      const code = codes[i++]
+      if (code) throw Object.assign(new Error(code), { code })
+    }) as unknown as typeof import('node:fs').appendFileSync
+    return { fn, calls }
+  }
+  const busyTwice = failing(['EBUSY', 'EPERM', null])
+  appendDurably('x', 'line', {}, 5, busyTwice.fn)
+  eq('append: two sharing violations, then written', busyTwice.calls.length, 3)
+  const busyAlways = failing(['EBUSY', 'EBUSY', 'EBUSY', 'EBUSY', 'EBUSY', 'EBUSY'])
+  let thrown = ''
+  try { appendDurably('x', 'line', {}, 5, busyAlways.fn) } catch (e) { thrown = (e as { code?: string }).code ?? '' }
+  eq('append: a violation that outlasts five tries is thrown to the caller', [busyAlways.calls.length, thrown], [5, 'EBUSY'])
+  const full = failing(['ENOSPC'])
+  thrown = ''
+  try { appendDurably('x', 'line', {}, 5, full.fn) } catch (e) { thrown = (e as { code?: string }).code ?? '' }
+  eq('append: a real write failure is thrown at once', [full.calls.length, thrown], [1, 'ENOSPC'])
+
+  // The order journal: a file another process holds fails that one submission, and the next one goes through.
+  const dir = mkdtempSync(joinPath(tmpdir(), 'journal-'))
+  const path = joinPath(dir, 'order-journal.jsonl')
+  const j = new OrderJournal(path)
+  const first = j.begin({ venue: 'kalshi', marketId: 'M1', outcome: 'YES', side: 'buy', ref: 't' } as any)
+  j.update(first, { state: 'acknowledged', orderId: 'o1' } as any)
+  chmodSync(path, 0o444) // read-only: Windows answers the append with EPERM, as it does for a file held open
+  let blocked = ''
+  try { j.begin({ venue: 'kalshi', marketId: 'M2', outcome: 'YES', side: 'buy', ref: 't' } as any) } catch (e) { blocked = (e as { code?: string }).code ?? String(e) }
+  chmodSync(path, 0o666)
+  eq('journal: a held file fails that submission with the sharing code and leaves nothing pending', [blocked, j.pending('kalshi').length], ['EPERM', 0])
+  let next = ''
+  try { next = j.begin({ venue: 'kalshi', marketId: 'M2', outcome: 'YES', side: 'buy', ref: 't' } as any).state } catch (e) { next = String(e) }
+  eq('journal: ...and does not latch - the next submission is journaled', next, 'pending')
+  rmSync(dir, { recursive: true, force: true })
+}
+
+// ---- lead-lag keeps a per-day count of cycles with a failed Kalshi leg (backlog 170) ----
+async function legFailCountTests(): Promise<void> {
+  const dir = mkdtempSync(joinPath(tmpdir(), 'legfail-'))
+  const engine: any = new LeadLagEngine(joinPath(dir, 'state.json'), () => undefined)
+  const realFetch = globalThis.fetch
+  let kalshiOk = false
+  globalThis.fetch = (async (url: string | URL | Request): Promise<Response> => {
+    const u = String(url)
+    if (u.includes('gamma-api.polymarket.com/events')) {
+      const coin = (/slug=([a-z0-9]+)-updown/i.exec(u)?.[1] ?? 'x').toUpperCase()
+      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, outcomes: JSON.stringify(['Up', 'Down']), clobTokenIds: JSON.stringify([`${coin}_TOKEN`, `${coin}_DOWN`]) }] }] } as unknown as Response
+    }
+    if (u.includes('clob.polymarket.com/book')) return { ok: true, json: async () => ({ bids: [{ price: '0.49', size: '100' }], asks: [{ price: '0.51', size: '100' }] }) } as unknown as Response
+    if (u.includes('kalshi.com')) return (kalshiOk ? { ok: true, json: async () => ({ markets: [] }) } : { ok: false, status: 503, json: async () => ({}) }) as unknown as Response
+    throw new Error('unmocked fetch: ' + u)
+  }) as typeof fetch
+  const cfg = { leadLagEnabled: true, leadLagLiveEnabled: false, leadLagMinDislocationCents: 6, leadLagMaxSpreadCents: 5, leadLagMaxContractsPerOrder: 1, leadLagMaxCapitalSpend: 20, leadLagMaxContractsPerWindow: 3, leadLagMaxSpendPerWindow: 15, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagCoins: ['BTC', 'ETH'], leadLagNewCoinContracts: 2, leadLagMaxCoinsPerDirectionPerWindow: 2, pollIntervalMs: 60_000 }
+  const adapter = { placeOrder: async () => { throw new Error('no orders in this test') } } as unknown as VenueAdapter
+  try {
+    await engine.scanAndSweep(adapter, cfg, 'paper', false, false)
+    kalshiOk = true
+    await engine.scanAndSweep(adapter, cfg, 'paper', false, false)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+  const day = new Date().toISOString().slice(0, 10)
+  eq('lead-lag: a cycle whose Kalshi leg failed is counted for the day, and a clean one is not', engine.state.legFailByDay?.[day], { cycles: 2, failed: 1 })
   rmSync(dir, { recursive: true, force: true })
 }

@@ -17,7 +17,8 @@
  * them out of the win-rate/P&L denominators (they are one leg, not a round
  * trip) while still counting them as fills.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendDurably, isSharingViolation } from './append'
 import { loadJsonOrQuarantine } from './json'
 import { dirname } from 'node:path'
 import type { TradingEngine } from '../engine/engine'
@@ -163,8 +164,12 @@ export class FillReconciler {
       if (archiveRows.length) {
         try {
           mkdirSync(dirname(this.path), { recursive: true })
-          appendFileSync(this.path + '.fills.jsonl', archiveRows.map(r => JSON.stringify(r)).join('\n') + '\n', { flush: true })
-        } catch (e) { this.archiveError = 'Execution archive write failed; verify integrity before retrying'; throw e }
+          appendDurably(this.path + '.fills.jsonl', archiveRows.map(r => JSON.stringify(r)).join('\n') + '\n', { flush: true })
+        } catch (e) {
+          // A sharing violation fails this run only; the next run re-plans the same rows (backlog 223).
+          if (!isSharingViolation(e)) this.archiveError = 'Execution archive write failed; verify integrity before retrying'
+          throw e
+        }
         for (const row of archiveRows) this.archived.add(row.id)
       }
       if (plan.rows.length) this.history.recordMany(plan.rows)
