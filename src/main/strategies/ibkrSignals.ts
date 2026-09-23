@@ -22,6 +22,7 @@ export const IBKR_STRATEGIES = [
   {id:'weather-morning',name:'Morning weather forecast',description:'Same station forecast, limited to before 10 AM local time.'},
   {id:'weather-maker',name:'Passive weather value',description:'Rest below forecast fair value; requires a later executable trade-through.'},
   {id:'benchmark',name:'Market-entry control',description:'One deterministic outcome per contract as a friction/control baseline; never promoted live.'},
+  {id:'settle-control',name:'Settlement control',description:'The matched control for the hold-to-settlement arms: their admission and hold, one deterministic side per contract chosen without any signal, contracts settling within two days only; never promoted live.'},
 ] as const
 export const IBKR_UNAVAILABLE = [
   {id:'volume-spike',name:'Trade-volume spikes',reason:'ForecastEx TWS feed has no trade prints or intraday traded-volume series. Quote sizes are not trade volume.'},
@@ -61,7 +62,7 @@ export const IBKR_RETIRED:ReadonlyMap<string,string>=new Map([
  *  calibration's seven positions and, absent from the set by name, the timed exit sold all seven on 2026-09-18
  *  (-$0.63; one was bought back two hours later). Found by the 2026-09-22 review, section 160. */
 export const ibkrHoldsToSettlement=(strategy:string)=>IBKR_HOLD_TO_SETTLEMENT.has(strategy.split(':')[0])
-export const IBKR_HOLD_TO_SETTLEMENT:ReadonlySet<string>=new Set(['fade','favorite','calibration','political-favorite','fade-maker','ladder-value','spot-first','convergence','news','market-conditioned','weather-forecast','weather-morning','weather-maker','benchmark'])
+export const IBKR_HOLD_TO_SETTLEMENT:ReadonlySet<string>=new Set(['fade','favorite','calibration','political-favorite','fade-maker','ladder-value','spot-first','convergence','news','market-conditioned','weather-forecast','weather-morning','weather-maker','benchmark','settle-control'])
 /** A held position must be able to settle inside the test; the election contracts expire about 47 days out. Also
  *  bounds which contracts the daily model-forecast budget may be spent on (ibkrLab.runForecast). */
 export const IBKR_HOLD_MAX_DAYS=60
@@ -149,6 +150,10 @@ export function ibkrSignals(frames:LabFrame[],now:number):LabSignal[] {
     }
     const hash=[...f.market.id].reduce((a,c)=>a+c.charCodeAt(0),0)
     if(spread<=.08)add(f,'benchmark',hash%2?'YES':'NO','Predefined friction control; not an edge claim')
+    // The matched settlement control (BACKLOG 193/199): the hold arms' admission, the benchmark's signal-free side, and
+    // only contracts that settle within two days. The universe is bimodal (82 of 281 inside two days, median 47 days),
+    // and a control whose twelve slots fill with 47-day paper closes nothing: the benchmark had 4 trades on 1 day.
+    if(f.market.expiresAt-now<=2*86400000)add(f,'settle-control',hash%2?'YES':'NO','Settlement control; side chosen without a signal')
   }
   for(const f of valid){
     if(!f.market.direction)continue

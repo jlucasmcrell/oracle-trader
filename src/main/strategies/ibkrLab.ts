@@ -103,7 +103,7 @@ export class IbkrLab {
       const sampled=!held||losses>=IBKR_MIN_LOSSES||trades.length>=IBKR_LOSS_WAIVER_TRADES
       const gateBlockers:string[]=[]
       if(stop)gateBlockers.push(stop)
-      if(def.id==='benchmark')gateBlockers.push('control arm: never promoted')
+      if(def.id==='benchmark'||def.id==='settle-control')gateBlockers.push('control arm: never promoted')
       if(trades.length<30)gateBlockers.push(`${trades.length}/30 closed`)
       if(events<10)gateBlockers.push(`${events}/10 events`)
       if(days.size<3)gateBlockers.push(`${days.size}/3 day-clusters`)

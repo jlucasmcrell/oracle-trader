@@ -165,6 +165,22 @@ async function main(){
   // A quote-dynamics arm never needed the loss bar: it is not held to settlement, so its payout is not one-sided.
   const timedArm=setup();timedArm.s.trades=live.s.trades.map((r:any,i:number)=>({...r,strategy:'momentum',id:'M'+i,net:.3}))
   assert.equal(timedArm.lab.status().strategies.find((r:any)=>r.id==='momentum')!.gateBlockers!.some((b:string)=>/losses sampled/.test(b)),false,'the loss bar is for settlement arms only')
+  // BACKLOG 193/199: the matched settlement control. The hold arms' admission and hold, the benchmark's signal-free side,
+  // contracts settling within two days only - and never promoted, whatever its record reads.
+  {const hash=[...market().id].reduce((a,c)=>a+c.charCodeAt(0),0),side=hash%2?'YES':'NO',control=(f:LabFrame)=>ibkrSignals([f],now).filter(s=>s.strategy==='settle-control').map(s=>s.outcome)
+   assert.ok(IBKR_HOLD_TO_SETTLEMENT.has('settle-control'),'held to settlement')
+   assert.deepEqual([control(frame(.8)),control(frame(.2)),control({...frame(.8),market:{...market(),expiresAt:now+3*86400000}})],[[side],[side],[]],'the same side whatever the price says; nothing settling beyond two days')
+   assert.deepEqual(control({...frame(.8),yes:quote(200,.85),no:quote(201,.25)}),[side],'the hold arms\' admission, not the benchmark\'s 8c spread cap')
+   const sc=setup();sc.s.markets=[...Array.from({length:14},(_,i)=>market(`SHORT_091626_${i}`,300+i)),{...market('LONG_102326_1',400),closeTime:now+30*86400000,expiresAt:now+30*86400000}];sc.s.discoveryAt=now
+   ;(sc.reader as any).quotes=async(ids:number[])=>ids.map(id=>quote(id,.51));await sc.lab.scan()
+   const entries=sc.s.orders.filter((o:any)=>o.strategy==='settle-control')
+   assert.deepEqual([entries.length,entries.some((o:any)=>o.marketId==='LONG_102326_1')],[12,false],'the twelve hold slots, short-dated contracts only')
+   const h=setup();addPosition(h,{strategy:'settle-control',openedAt:now-2*3600000,market:{...h.m,closeTime:now+5*60000}});h.s.quotes['201']=quote(201,.9)
+   ;(h.lab as any).closePositions(now);assert.equal(h.s.positions.length,1,'no stop, one-hour or pre-close exit')
+   const ctl=setup();ctl.s.trades=live.s.trades.map((r:any,i:number)=>({...r,strategy:'settle-control',id:'C'+i}));ctl.venue.getAccount=async()=>({balance:20})
+   const crow=ctl.lab.status().strategies.find(r=>r.id==='settle-control')!
+   assert.deepEqual([crow.liveEligible,crow.gateBlockers],[false,['control arm: never promoted']],'the record that qualifies favorite above is refused for a control')
+   await assert.rejects(ctl.lab.configure({mode:'live',liveStrategies:['settle-control']}),/settle-control: control arm: never promoted/)}
   await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/Fund IBKR/)
   live.venue.getAccount=async()=>({balance:20});await live.lab.configure({mode:'live',liveStrategies:['favorite']})
   assert.equal(live.lab.status().config.mode,'live');await live.lab.configure({mode:'paper',liveStrategies:[]})
