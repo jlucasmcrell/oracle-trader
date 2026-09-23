@@ -52,11 +52,46 @@ def main(dump_path):
         print('  %-8s %-14s n=%-3d win %3d%%  mean net %+.3f/contract  sum %+.2f' % (k[0], k[1], len(v), round(100 * wins / len(v)), sum(v) / len(v), sum(v)))
     veto = groups.get(('VETO', 'ALL'), [])
     rest = groups.get(('ABSTAIN', 'ALL'), [])
-    if len(veto) >= 50 and len(rest) >= 50:
-        mv, mr = sum(veto) / len(veto), sum(rest) / len(rest)
-        print('verdict: vetoes %s the rest (%.3f vs %.3f); %s' % ('below' if mv < mr else 'not below', mv, mr, 'consider veto mode' if mv < mr - 0.02 else 'keep veto mode off'))
-    else:
-        print('verdict: fewer than 50 settled per group; keep measuring')
+    print(verdict(groups, veto, rest, enabled_arms()))
+
+
+# Kalshi arm -> the config flag that switches it on (GENERIC_STRATEGIES in src/main/ladder/ladder.ts).
+ARM_FLAGS = {
+    'fade': 'fadeEnabled', 'momentum': 'momentumEnabled', 'book-imbalance': 'bookEnabled', 'volume-spike': 'volumeSpikeEnabled',
+    'cross-venue': 'crossVenueEnabled', 'news': 'newsEnabled', 'dutch': 'dutchLiveEnabled', 'leadlag': 'leadLagLiveEnabled',
+    'sports-anchor': 'sportsAnchorLiveEnabled', 'consensus': 'consensusEnabled', 'flow-follow': 'flowFollowEnabled',
+    'mean-reversion': 'meanReversionEnabled', 'weather-morning': 'weatherMorningEnabled',
+}
+
+
+def enabled_arms():
+    try:
+        cfg = json.load(open(os.path.join(os.environ.get('APPDATA', ''), 'oracle-trader', 'kalshi-auto.json'), encoding='utf-8'))['config']
+    except Exception:
+        return None
+    return {arm for arm, flag in ARM_FLAGS.items() if cfg.get(flag)}
+
+
+def verdict(groups, veto, rest, enabled):
+    """The rule as amended on 2026-09-09/10 (backlog 1), encoded so the automatic daily read applies it (section 165):
+    switch to veto mode only when (i) the vetoed cohort's own net per contract is below zero, (ii) it is at least 2c below
+    the rest, and (iii) the critic looks skilled (veto below abstain) in a STRICT majority of the strategies present in
+    both cohorts among the arms enabled now - a tie counts against. No skill after 200 settled decisions: switch the
+    critic off. Returns the verdict line."""
+    if len(veto) < 50 or len(rest) < 50:
+        return 'verdict: KEEP MEASURING - fewer than 50 settled per group'
+    mv, mr = sum(veto) / len(veto), sum(rest) / len(rest)
+    shared = sorted({k[1] for k in groups if k[0] == 'VETO' and k[1] != 'ALL'} & {k[1] for k in groups if k[0] == 'ABSTAIN' and k[1] != 'ALL'})
+    if enabled is not None:
+        shared = [s for s in shared if s in enabled]
+    skilled = [s for s in shared if sum(groups[('VETO', s)]) / len(groups[('VETO', s)]) < sum(groups[('ABSTAIN', s)]) / len(groups[('ABSTAIN', s)])]
+    majority = len(shared) > 0 and len(skilled) * 2 > len(shared)
+    why = 'veto %+.3f vs rest %+.3f; skilled in %d of %d shared enabled strategies' % (mv, mr, len(skilled), len(shared))
+    if mv < 0 and mv <= mr - 0.02 and majority:
+        return 'verdict: SWITCH intelligenceMode TO veto - ' + why
+    if len(veto) + len(rest) >= 200 and not (mv < mr):
+        return 'verdict: SWITCH intelligenceEnabled OFF - no skill after %d settled decisions; ' % (len(veto) + len(rest)) + why
+    return 'verdict: KEEP veto mode OFF - ' + why
 
 
 if __name__ == '__main__':

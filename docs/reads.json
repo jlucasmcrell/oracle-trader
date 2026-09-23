@@ -291,7 +291,7 @@
       "id": "1",
       "due": "2026-09-24",
       "what": "Critic skill check (daily)",
-      "how": "python scripts/critic-skill.py <dump> (encode the amended rule in the script first)",
+      "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
       "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
       "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day"
     },

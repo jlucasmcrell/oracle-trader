@@ -30,8 +30,12 @@ nobody has to remember a date. What is left below is either the operator's, or c
 - **59b** The long-horizon slot cap counts a stopped arm's position (the consensus NCAA 2027 one).
 - **212** Resting-order fill rate on the arm rows. **60a** hunch collector page budget. **176** ladder15 grader or
   retire its recorder. **179** mention live-tracking recorder. **180** same-index twins scan. **182** reconcile one
-  buy-sell-settle example. **1** encode the amended critic rule in `critic-skill.py`.
-- Paper labs: **193/199** settlement control, **197**, **206**, **115** (IBKR, in progress 2026-09-23); **240**, **241**.
+  buy-sell-settle example.
+- **171 (rest)** the cull-gate report is still UTF-16: the scheduled task's PowerShell redirect writes it; the task's
+  command would have to change.
+- **206 (rest)** eight IBKR paper positions stay unpriced because the opposing side has no offer at all; pricing them
+  at zero would be a new rule for the lab's gate (paper only).
+- Paper labs: **240**, **241** (dated in `docs/reads.json`).
 
 ## Closed by the 2026-09-23 triage (reason in section 165)
 Retired arms or dead lines: 4, 5, 6, 7, 8, 15, 37, 21, 27, 28, 47, 61a, 63a, 73b, 78b, 79b, 144b, 145a, 204, 211, 213,
@@ -43,7 +47,9 @@ positive lower band; momentum stays declined), 81a, 84b (spot-first recorder ret
 168, 170, 183, 203 (measured: 0 of 584 sweeps held the guard over 10 s), 209, 210a (the stuck KXBTCPRICE row is
 unresolved at Kalshi, which expires it 10-19), 223, 224, 229 (the paid calls are the critic's shadow for read 1, not
 the news arm), 231, 234, 236, 239, 244, 46, 52a, 51b (cross-venue retired), 156a (measured: 1-8 portfolio 429s a
-day, all absorbed).
+day, all absorbed), 1 (the amended critic rule is now in `critic-skill.py`), 59a, 100, 101, 205, 77a/74b, 171 (progress
+off the report), 222, 102b (`venue-pnl.py --by-arm`), 93, 113, 89, 25/48a/69a/116/135b (now handbook rules 21-25),
+115, 197, 193/199 (`settle-control`), 206 (exits priced by their own predicate).
 
 
 Maintained by the maintenance session (see the scheduled task prompt). Older idea lists live in

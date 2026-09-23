@@ -6357,3 +6357,11 @@ helpers work disjoint files (sentinel and report scripts; the IBKR paper lab) in
   triage closed, with the reason.
 
 Tests: review-fixes 624/0, ladder 177/0, adversarial 96/0; `npm test` 22/22.
+
+**Merged at 09:10Z** (section 165, continued): the IBKR lab helper's 115 (an unlisted product-month is not requested
+again for a day and no longer re-arms the 30-minute discovery retry - FES alone ran the 4-minute discovery walk every
+~34 minutes), 206 (exits priced by their own predicate), 197 (crypto contracts inside six minutes of close re-quoted
+every cycle beside the held ten) and 193/199 (`settle-control`: the hold arms' admission, a signal-free side,
+contracts settling within two days, never live-eligible); and the scripts helper's 59a, 100, 101, 205, 77a/74b, 171,
+222, 102b, 93, 113, 89 and handbook rules 21-25. Also: the amended critic rule encoded in `critic-skill.py` (1), and
+the IBKR panel shows `settle-control` as control-only. `npm test` 22/22; task-watch and venue-pnl pass.
