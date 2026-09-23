@@ -24,6 +24,9 @@ const DIR = process.env.CULL_DIR ?? join(process.env.APPDATA ?? '', 'oracle-trad
 const KALSHI = 'https://api.elections.kalshi.com/trade-api/v2'
 const CACHE = join(DIR, 'settled-cache.json')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// Progress ticks go to stderr, and only on a console: the weekly task runs this under PowerShell's `*>`, which captures
+// stderr too (as NativeCommandError records), so a tick written anywhere would still land in the report (backlog 171).
+const tick = (s) => process.stderr.isTTY && process.stderr.write(s)
 
 /**
  * Entry rules, copied from the strategies' own configured bounds. Each returns the side it would buy, or
@@ -121,11 +124,11 @@ async function prefillSettled(tickers, cache) {
     }
     done += chunk.length
     if ((i / 50) % 20 === 0) saveCache(cache)
-    process.stdout.write(`  settling ${done}/${todo.length}\r`)
+    tick(`  settling ${done}/${todo.length}\r`)
     await sleep(180)
   }
   saveCache(cache)
-  process.stdout.write('\n')
+  tick('\n')
 }
 
 // ---- normal CDF / inverse, for the Wang-Transform fit below ----
@@ -236,7 +239,7 @@ let settled = 0
 let n = 0
 for (const r of due) {
   const { res, fetched } = await settle(r.ticker, cache)
-  if (++n % 50 === 0) process.stdout.write(`  ${n}/${due.length}\r`)
+  if (++n % 50 === 0) tick(`  ${n}/${due.length}\r`)
   // Pace only when a request actually went out. Sleeping on cache hits and not on fetches had it backwards.
   if (fetched) await sleep(180)
   if (res !== 'yes' && res !== 'no') continue

@@ -107,7 +107,7 @@ export default function QuantPanel({ onClose }: Props) {
               <div style={{ fontSize: 12, color: '#94a3b8' }}>{status?.leadLag.note}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ background: '#0b0f19', padding: '10px 12px', borderRadius: 6 }}>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Dislocations Detected</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Dislocations Logged</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
                     {status?.leadLag.dislocationsLogged ?? 0}
                   </div>

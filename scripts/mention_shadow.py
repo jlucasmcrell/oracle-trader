@@ -457,14 +457,26 @@ def grade_entry(rows, y, graded_at):
     }
 
 
+def settled_result(m):
+    """(result, None) for a strike Kalshi settled yes/no, else (None, why): 'void' when it settled without one,
+    'no-result' while it has not settled. Pure; see selftest()."""
+    result = (m.get('result') or '').lower()
+    if result in ('yes', 'no'):
+        return result, None
+    return None, 'void' if (m.get('status') or '') in ('settled', 'finalized') else 'no-result'
+
+
 def grade(state):
     obs = read_jsonl(OBS)
     by_ticker = collections.defaultdict(list)
     for o in obs:
         by_ticker[o['ticker']].append(o)
     graded = 0
+    # Why nothing graded, per reason: a bare "graded 0 strikes" is how a silent shadow hides for days (backlog 93).
+    skip = collections.Counter()
     for t, rows in by_ticker.items():
         if t in state['graded']:
+            skip['already-graded'] += 1
             continue
         last = rows[-1]
         # Grade only once the period is over. Mention markets settle YES the moment the phrase is
@@ -472,15 +484,18 @@ def grade(state):
         # made a 5% base rate look absurd before a single NO could exist).
         end = market_end(last)
         if end and end > NOW.isoformat():
+            skip['not-expired'] += 1
             continue
         try:
             m = get_json(f'{KALSHI}/markets/{t}').get('market', {})
         except Exception as e:  # noqa: BLE001
             log(f'grade fetch {t} failed: {e}')
+            skip['fetch-failed'] += 1
             continue
-        result = (m.get('result') or '').lower()
-        if result not in ('yes', 'no'):
-            if (m.get('status') or '') in ('settled', 'finalized'):
+        result, why = settled_result(m)
+        if why:
+            skip[why] += 1
+            if why == 'void':
                 state['graded'][t] = 'void'
             continue
         y = 1 if result == 'yes' else 0
@@ -489,7 +504,7 @@ def grade(state):
         state['graded'][t] = result
         graded += 1
         time.sleep(0.1)
-    log(f'graded {graded} strikes')
+    log(f'graded {graded} strikes' + (f' | skipped {dict(sorted(skip.items()))}' if skip else ''))
 
 
 def report():
@@ -575,7 +590,12 @@ def selftest():
     ok(counterfactual(0.50, 0.30, 0.34, 1) == {'side': 'YES', 'price': 0.34,
                                                'pnl': round(0.66 - kalshi_fee(0.34), 4)}, 'YES still fires')
     ok(counterfactual(0.50, None, None, 1) is None, 'no quote, no trade')
-    print(f'selftest: {10 - len(fails)} passed, {len(fails)} failed' + (f' -> {fails}' if fails else ''))
+
+    # The two skip reasons the venue decides (backlog 93).
+    ok(settled_result({'result': 'YES', 'status': 'finalized'}) == ('yes', None), 'a yes/no result is graded')
+    ok(settled_result({'result': '', 'status': 'finalized'}) == (None, 'void'), 'settled without a result is void')
+    ok(settled_result({'status': 'active'}) == (None, 'no-result'), 'expired but unsettled is no-result')
+    print(f'selftest: {13 - len(fails)} passed, {len(fails)} failed' + (f' -> {fails}' if fails else ''))
     return 1 if fails else 0
 
 

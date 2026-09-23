@@ -64,6 +64,41 @@ for (const f of fs.readdirSync(DIR).filter((f) => f.startsWith(prereg.runId) && 
 }
 
 /**
+ * Wall-clock coverage: per UTC day, the minutes in which the simulator wrote ANY row, over that day's minutes inside
+ * the run. The registered cycle-coverage gate counts only cycles that were written, so a dark hour cannot lower it
+ * (09-19 read ~99.9% with a third of the day dark; backlog 222). Reported beside that gate, never instead of it - the
+ * gate is pre-registered - and the verdict is read against both. Row timestamps only: no price, markout or fee.
+ */
+function wallClockLine(rows, bar) {
+  const stop = Date.parse(prereg.stopAtIso)
+  const end = Math.ceil((Number.isFinite(stop) ? Math.min(Date.now(), stop) : Date.now()) / 60000)
+  const byDay = new Map()
+  let first = Infinity
+  for (const r of rows) {
+    const m = Math.floor(Date.parse(r.ts) / 60000)
+    if (!Number.isFinite(m)) continue
+    first = Math.min(first, m)
+    const d = Math.floor(m / 1440)
+    if (!byDay.has(d)) byDay.set(d, new Set())
+    byDay.get(d).add(m)
+  }
+  const start = Math.floor(Date.parse(prereg.startedAtIso) / 60000)
+  let got = 0
+  let possible = 0
+  const low = []
+  for (let m = Number.isFinite(start) ? start : first; m < end; ) {
+    const d = Math.floor(m / 1440)
+    const next = Math.min(end, (d + 1) * 1440)
+    const n = [...(byDay.get(d) ?? [])].filter((x) => x >= m && x < next).length
+    got += n
+    possible += next - m
+    if (n < bar * (next - m)) low.push(`${new Date(d * 86400000).toISOString().slice(0, 10)} ${n}/${next - m} min`)
+    m = next
+  }
+  return `  wall-clock coverage  ${possible ? ((got / possible) * 100).toFixed(1) : '0.0'}% of ${possible} min   (reported, not gated; UTC days under ${(bar * 100).toFixed(0)}%: ${low.join(', ') || 'none'})`
+}
+
+/**
  * INTERIM: operational health only. The ONLY fields this function may touch are listed here, and none of
  * them is a price, a markout or a fee. If you find yourself wanting to add one, you want to peek.
  */
@@ -94,6 +129,7 @@ function interim() {
   console.log(`  simulated fills      ${fills.length}    (gate needs ${P.minFills})`)
   console.log(`  days with a fill     ${days.size}    (gate needs ${P.minDayClusters} admissible clusters)`)
   console.log(`  cycle coverage       ${cycles.length ? ((okCycles / cycles.length) * 100).toFixed(1) : 0}%   (gate needs ${(P.minCoverage * 100).toFixed(0)}%)`)
+  console.log(wallClockLine(rows, P.minCoverage))
   console.log(`  distinct markets     ${new Set(fills.map((f) => f.marketId)).size}`)
   console.log(`  distinct series      ${new Set(fills.map((f) => f.series)).size}`)
   console.log(`  throttles (429)      ${t429.length}`)
@@ -228,6 +264,7 @@ for (const [label, ok, got] of guards) {
   if (!ok) admissible = false
   console.log(`  ${ok ? 'met    ' : 'NOT MET'} ${String(label).padEnd(34)} ${got}`)
 }
+console.log(wallClockLine(rows, P.minCoverage))
 
 // Cohorts: may only downgrade a PASS on sign disagreement. They can never upgrade anything.
 const cohorts = {}

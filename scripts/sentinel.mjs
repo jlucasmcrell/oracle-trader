@@ -7,8 +7,8 @@
 //   2. defects: new error signatures in main.log since the last tick, a failed nightly
 //      review, stopped-strategy rests whose cancel keeps failing, a venue error that
 //      persists in a mini-trader, long-horizon positions in the short-horizon traders,
-//      a destroyed or defaulted kalshi-auto.json (lib/config-watch.mjs),
-//      scheduled-task failures, OpenRouter credit, Ollama, disk;
+//      a destroyed or defaulted kalshi-auto.json (lib/config-watch.mjs), an app that is up with a
+//      live arm but has journaled no order for a day, scheduled-task failures, OpenRouter credit, Ollama, disk;
 //   3. action: a dead app or a stale hourly task is revived directly (Start-ScheduledTask);
 //      a defect becomes an incident file under data/sentinel/incidents and, within the
 //      rate limits below, a headless repair session (scripts/repair.ps1 -> claude -p with
@@ -30,6 +30,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import net from 'node:net'
 import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
 import { WATCHED_KEYS, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from './lib/config-watch.mjs'
+import { killState } from './lib/kill-state.mjs'
 import { recorderPids } from './recorder-lock.mjs'
 
 const REPO = 'G:/PROJECTS/oracle-trader'
@@ -170,9 +171,9 @@ function startTask(name) {
   if (DRY) return 'dry'
   return ps(`Start-ScheduledTask -TaskName '${name}'; 'started'`).trim()
 }
-function taskLastResults() {
+function taskLastResults(names = ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
   const out = {}
-  for (const name of ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
+  for (const name of names) {
     try {
       const csv = execFileSync('schtasks', ['/Query', '/TN', name, '/FO', 'CSV', '/V'], { encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'ignore'] })
       const lines = csv.split(/\r?\n/).filter(Boolean)
@@ -204,17 +205,30 @@ const collector = mtime(path.join(REPO, 'data/btc-collector', `${today}.jsonl`))
 if ((collector === undefined && new Date(now).getUTCHours() >= 1) || (collector !== undefined && now - collector > 15 * MIN)) {
   add('collector-stale', 'repair', 'BTC collector not writing', collector === undefined ? `data/btc-collector/${today}.jsonl missing` : `last write ${ageMin(collector)} min ago`)
 }
+// Judged against the task's OWN next trigger, not the wall clock (backlog 101). Every watched task fires on a sentinel
+// tick's minute: a start at 06:20 raced a :35 trigger, and the 06:35 tick, 41 s before that run wrote, filed "still stale".
+// So a task due within a tick is left to its trigger, and after a start no finding opens until the trigger that was next
+// at the start has come and gone (+10 min puts that at the tick after the trigger's own). schtasks prints Next Run Time
+// in local time, which Date.parse reads as such; N/A or a failed query is NaN and falls back to the wall-clock rule.
+const reviveDue = state.reviveDue ?? (state.reviveDue = {})
 for (const [key, file, task, staleMs] of TASK_WATCH) {
   const t = mtime(path.join(REPO, file))
   if (isStale(t, now, staleMs)) {
     const last = state.revived[key] ?? 0
+    const due = Date.parse(taskLastResults([task])[task]?.nextRun ?? '')
     if (now - last > 3 * H) {
+      if (due > now && due - now <= 15 * MIN) {
+        add(key, 'notify', `${task} stale (${ageMin(t)} min); its own run is due ${iso(due)}, not starting it`, `${file} last written ${iso(t)}`)
+        continue
+      }
       state.revived[key] = now
+      if (due > now) reviveDue[key] = due
+      else delete reviveDue[key]
       add(key, 'revive-task', `${task} stale (${ageMin(t)} min); starting it`, `${file} last written ${iso(t)}`)
       const r = startTask(task)
       findings[findings.length - 1].evidence += ` | start: ${r}`
-    } else {
-      add(key, 'repair', `${task} still stale after a restart`, `${file} last written ${iso(t)}; task started at ${iso(last)} without effect`)
+    } else if (now >= (reviveDue[key] ?? last) + 10 * MIN) {
+      add(key, 'repair', `${task} still stale after a restart`, `${file} last written ${iso(t)}; task started at ${iso(last)} without effect${reviveDue[key] ? `, and its own run at ${iso(reviveDue[key])} did not write it either` : ''}`)
     }
   }
 }
@@ -434,6 +448,9 @@ function normalize(line) {
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>')
     .replace(/\bot-\d+-\w+/g, '<coid>')
     .replace(/\bKX[A-Z]+(?:-[A-Z0-9.]+)+/g, (m) => m.split('-')[0] + '-*')
+    // Polymarket US order ids (CEKRHN8VMTMY) are 12 Crockford base-32 characters - no I, L, O or U, which keeps English
+    // words out; KX excludes a Kalshi series name that happens to fit. Kept, one stopped arm's 21 cancels were 21 incidents (backlog 59).
+    .replace(/\b(?!KX)[0-9A-HJKMNP-TV-Z]{12}\b/g, '<oid>')
     .replace(/\b[a-z]{2,6}-[a-z0-9-]+-20\d\d-\d\d-\d\d[a-z0-9-]*/g, '<slug>')
     .replace(/\d+(\.\d+)?/g, 'N')
     .replace(/\s+/g, ' ')
@@ -521,6 +538,44 @@ for (const venue of ['polymarket-us']) {
   if (dp?.tripped) add(`mini-daily-brake:${venue}:${dp.date}`, 'notify', `${venue} daily loss brake tripped (${dp.realized?.toFixed?.(2) ?? dp.realized})`, `New entries are halted until 00:00Z. config.maxDailyLossDollars=${m.config?.maxDailyLossDollars}`)
   for (const t of m.state?.openTrades ?? []) {
     if (t.closeTime && t.closeTime - now > 15 * 86400_000) add(`horizon-${venue}:${t.marketId}`, 'notify', `${venue} short-horizon trader holds a position ${Math.round((t.closeTime - now) / 86400_000)} days from close`, `${t.marketId} ${t.strategy} ${t.outcome} $${t.amount}`)
+  }
+}
+// Up but placing nothing (backlog 100). Every check above asks whether something is ALIVE: on 2026-09-15 the app was up,
+// scanning and logging for two hours behind a tripped kill switch and the venue saw no order. Silence with an arm at a
+// live ladder stage is the finding; silence with a halt on record is a note naming it. A day, not N minutes: orders
+// cluster 11Z-20Z and 04Z-10Z is legitimately quiet, and a check that cries wolf every night gets suppressed.
+{
+  let lastOrderAt = 0
+  try {
+    for (const line of fs.readFileSync(path.join(UD, 'order-journal.jsonl'), 'utf8').split('\n')) {
+      try {
+        lastOrderAt = Math.max(lastOrderAt, JSON.parse(line).requestedAt || 0)
+      } catch {
+        // blank or torn line
+      }
+    }
+  } catch {
+    // no journal yet: nothing to judge
+  }
+  if (electronCount > 0 && !findings.some((f) => f.key === 'app-down') && ladder.strategies && lastOrderAt && now - lastOrderAt > 24 * H) {
+    const cfg = auto.config ?? {}
+    const halts = []
+    if (killState(auto.state, today).tripped) halts.push('kill switch tripped')
+    if (cfg.stopEntry === true) halts.push('stop-entry on')
+    if (cfg.dryRun === true) halts.push('dry run on')
+    if (cfg.enabled === false || cfg.liveArmed === false) halts.push(`auto-trader ${cfg.enabled === false ? 'off' : 'disarmed'}`)
+    try {
+      const r = await fetch('https://api.elections.kalshi.com/trade-api/v2/exchange/status', { signal: AbortSignal.timeout(10_000) })
+      if (r.ok && (await r.json()).trading_active === false) halts.push('Kalshi exchange paused')
+    } catch {
+      // public GET; unreachable is not evidence
+    }
+    const live = Object.values(ladder.strategies).filter((s) => (s.stage === 'tiny-live' || s.stage === 'live') && !s.operatorHold).map((s) => s.id)
+    if (!live.length) halts.push('no arm at a live ladder stage')
+    const silence = `no order journaled for ${Math.round((now - lastOrderAt) / H)} h`
+    const evidence = `order-journal.jsonl newest requestedAt ${iso(lastOrderAt)} | live arms: ${live.join(', ') || 'none'}`
+    if (halts.length) add('trading-halted', 'notify', `App up, ${silence}; halted: ${halts.join(', ')}`, evidence)
+    else add('trading-silent', 'repair', `App up with ${live.length} live arm(s), ${silence}, and nothing on record explains it`, `${evidence} | kill switch clear, stop-entry and dry run off, armed, exchange not reported paused`)
   }
 }
 
