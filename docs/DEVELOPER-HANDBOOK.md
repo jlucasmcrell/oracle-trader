@@ -942,6 +942,31 @@ These rules came from specific incidents. Breaking one has cost money or produce
     admission and a -2c arm about $3.30. The ladder is a loss limiter. It does not adjudicate single-cent edges;
     those are judged on the low-variance meters (graded signal, markout, CLV), and its stop of such an arm is
     noise more often than not (§138).
+21. **Weather re-opens only on a seat measurement, never on a forecast improvement** (backlog 25). Both are required:
+    on a fresh pull of 60+ station-days of the exact series we would quote, the maker seat's station-day-clustered 95%
+    lower bound is above zero in the 3-48 h / 7-93c window; and our forecast's realized error against the venue's own
+    published `expiration_value` (not METAR, which is not what pays) is at or below the venue's implied 1.4-1.5 °F.
+    When the weather arms were retired the seat read -1.70c and our error 2.36 °F: both fail.
+22. **A grader that silently drops a subpopulation reports the subpopulation, not the strategy** (backlog 48, the
+    censored anchor sample). The sports anchor's 3c rule read negative for three days because The Odds API's scores
+    feed covered mostly NCAAF; grading the two missing leagues moved it from -12.8c to +0.31c per contract on 92
+    observations. Before any shadow is read for a go-live decision, check that its graded rows cover the same
+    population as its observed rows - cheapest as graded-vs-observed counts per stratum, the way `[anchor] scores`
+    logs them.
+23. **A mid is not a price without a bid** (backlog 69, the hunch-ledger guard). The hunch ledger's multi-outcome
+    events (15-25 options, one winner) sit on books with no bid and a one-sided 85-97c ask, and a missing-bid fallback
+    has twice produced a spurious finding (a +41.58c price slice; lambda 1.124). Every slice of that dataset requires
+    `yb > 0 && ya > 0` and a spread cap before a mid is treated as a price.
+24. **Evidence in a rolling buffer is read inside the buffer's window, or it is gone** (backlog 116). Item 64 asked for
+    the 57 capacity-blocked momentum signals of 09-12 out of `state.calib.vetoWatch`; the read was deferred once, the
+    180-row buffer rolled past them, and the surviving counter is not split by strategy. A queue item that depends on
+    a bounded buffer states that buffer's retention next to its trigger (`vetoWatch` = the last 180 rows, about two
+    days at current volume). This applies to anything reading `calib.vetoWatch`, `state.signals`,
+    `state.pendingOrders` or the episodes ledger's rolling kinds.
+25. **A change to a paper lab's entry or exit rules starts a new cohort** (backlog 135, paper cohort constants). In the
+    same round, move `IBKR_RULES_SINCE` (`src/shared/ibkrLab.ts`) or `POLY_PAPER_RULES_SINCE` (`src/shared/polyPaper.ts`)
+    to the restart time of that change and say so in REVIEW-CHANGES; the labs grade trades opened before the constant
+    as legacy. `scripts/lab-review.py` mirrors both constants and `completion.test.ts` fails if they drift.
 
 ---
 
