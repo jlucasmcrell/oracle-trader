@@ -242,6 +242,20 @@ async function main(){
   await partialWalk.lab.scan();assert.deepEqual(partialWalk.s.markets.map((m:IbkrLabMarket)=>m.id).sort(),[fresh.id,partialWalk.m.id].sort(),'Failed product keeps its contracts')
   now+=31*60000;await partialWalk.lab.scan();assert.equal(walks,2,'A partial discovery is retried after 30 minutes')
   assert.match(noUniverse.lab.status().lastError!,/No exact ForecastEx/)
+  // BACKLOG 115: "No security definition" is IBKR's answer that a product-month does not exist. The real discovery walk
+  // (catalog -> reader.markets) must not ask for it again for a day, and it must not re-arm the 30-minute retry.
+  {const clock=now,originalFetch=globalThis.fetch,asked:string[]=[],d=setup()
+   const row=(id:string,product:string,oi:number)=>({contract_id:id,product_id:product,category:'Financial Markets',question:`Will ${product} exceed 100?`,last_trade_date:'2026-09-20T16:00:00',expiration_date:'2026-09-20T16:00:00',open_interest:oi,exchange_spec_url:'https://example.test/rules',last_yes_price:null})
+   globalThis.fetch=(async()=>({ok:true,json:async()=>({statusCode:200,body:{data:JSON.stringify([row('TEST_092026_100','TEST',5),row('FES_092026_100','FES',1)]),next_page:null}})})) as any
+   const reader={quotes:async(ids:number[])=>ids.map(id=>quote(id,.5)),markets:async(product:string,month:string)=>{asked.push(`${product} ${month}`);if(product==='FES')throw Error('IBKR 200: No security definition has been found for the request');return [{...instrument(300,'YES'),description:'TEST_092026_100_YES',strike:100},{...instrument(301,'NO'),description:'TEST_092026_100_NO',strike:100}]}}
+   const lab=new IbkrLab(join(root,'unlisted.json'),reader as any,d.engine as any,d.venue as any,{settlements:d.sources.settlements,spot:d.sources.spot,weather:d.sources.weather}),ls=(lab as any).state
+   try{
+    await lab.scan();assert.deepEqual([asked,Object.keys(ls.unlisted),ls.markets.map((m:IbkrLabMarket)=>m.id)],[['TEST 2026-09','FES 2026-09'],['FES 2026-09'],['TEST_092026_100']])
+    now+=31*60000;await lab.scan();assert.equal(asked.length,2,'an unlisted product-month does not re-arm the 30-minute retry')
+    now+=6*3600000;await lab.scan();assert.deepEqual(asked.slice(2),['TEST 2026-09'],'the six-hour walk does not request it again')
+    assert.match(ls.notes._discovery,/not listed on IBKR, not requested again for a day: FES 2026-09/)
+    now+=18*3600000;await lab.scan();assert.deepEqual(asked.slice(3),['TEST 2026-09','FES 2026-09'],'a day later it is asked again: a listing can appear')
+   }finally{globalThis.fetch=originalFetch;now=clock}}
   class Api extends EventEmitter{
    connect(){queueMicrotask(()=>this.emit(EventName.nextValidId,1));return this}disconnect(){this.emit(EventName.disconnected);return this}
    reqMktData(id:number,c:any){if(c.conId===2){this.emit(EventName.error,Error('Unavailable contract'),200,id);return}this.emit(EventName.marketDataType,id,c.conId===3?3:1);this.emit(EventName.tickPrice,id,2,.42);this.emit(EventName.tickSize,id,3,7);this.emit(EventName.tickSnapshotEnd,id)}

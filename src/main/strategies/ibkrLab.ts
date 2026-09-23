@@ -12,6 +12,9 @@ import {IBKR_RULES_SINCE,type IbkrLabConfig,type IbkrLabMarket,type IbkrLabPosit
 
 export const IBKR_LAB_DEFAULTS:IbkrLabConfig={enabled:true,mode:'paper',liveStrategies:[],contracts:1,maxOpenPerStrategy:4,maxDailyLoss:10,maxLiveCost:1.5}
 const fee=.01,slippage=.01,startingCash=1000
+/** How long discovery trusts IBKR's "No security definition" for a product-month (BACKLOG 115). A day, not forever:
+ *  ZFFCP 2026-11 was answered that way at 17:15Z on 2026-09-18 and matched 9 contracts on the next walk. */
+const unlistedFor=86400000
 /** Losses a hold-to-settlement arm must have SAMPLED before its band can promote it (BACKLOG 141's standard). */
 export const IBKR_MIN_LOSSES=15
 /** ...or this many closed trades, whichever comes first - the same "250 trades or 15 losses" the Kalshi arm uses. */
@@ -52,7 +55,10 @@ export class IbkrLab {
         for(const p of this.state.live)if(p.status==='submitting'){p.status='uncertain';p.message='Restart during submission; venue reconciliation required.'}
       }
     }catch(e){this.failure=`IBKR lab ledger unreadable; nothing will trade: ${String(e)}`}
-    this.sources={discover:(now,report)=>discoverForecastMarkets(reader,now,report),settlements:loadFinalSettlements,spot:cryptoSpot,weather:ibkrWeather,...sources}
+    // Discovery asks only for product-months IBKR has not just said it does not list: FES 2026-09 and 2026-12 were
+    // requested on every walk, 16-84 "No security definition" lines a day (BACKLOG 115).
+    const listed:Pick<IbkrReader,'markets'>={markets:(product:string,month:string)=>Date.now()-(this.state.unlisted?.[`${product} ${month}`]??-Infinity)<unlistedFor?Promise.resolve([]):reader.markets(product,month)}
+    this.sources={discover:(now,report)=>discoverForecastMarkets(listed as IbkrReader,now,report),settlements:loadFinalSettlements,spot:cryptoSpot,weather:ibkrWeather,...sources}
     if(sources.forecastProvider&&this.state.modelProvider!==sources.forecastProvider){
       this.state.previousModelBudget={provider:this.state.modelProvider??'configured provider',day:this.state.modelDay,calls:this.state.modelCalls}
       this.state.modelProvider=sources.forecastProvider;this.state.modelCalls=0;this.state.modelDay=day(Date.now())
@@ -141,11 +147,14 @@ export class IbkrLab {
         try{s.notes._discovery='Discovering exact exchange/IBKR contract matches'
           // Discovery reports a failed product month as "<PRODUCT> <yyyy-mm>: <error>" and carries on. Written wholesale, a
           // gateway hiccup mid-walk dropped those products for six hours; keep their previous contracts and retry in 30 min.
+          // IBKR's "No security definition" is an answer, not a hiccup: nothing to keep and nothing to retry. Counted as a
+          // failure, FES alone re-armed the 30-minute retry, so the whole walk ran every ~34 minutes instead of six hours.
           const failed=new Set<string>()
-          const found=await this.sources.discover(now,m=>{const f=/^(\S+) \d{4}-\d{2}: /.exec(m);if(f)failed.add(f[1]);s.notes._discovery=m;console.log('[ibkr-lab]',m)})
-          const kept=s.markets.filter(m=>failed.has(m.product)&&m.closeTime>now&&!found.some(x=>x.id===m.id))
+          if(s.unlisted)for(const [k,at] of Object.entries(s.unlisted))if(now-at>=unlistedFor)delete s.unlisted[k]
+          const found=await this.sources.discover(now,m=>{const f=/^(\S+) (\d{4}-\d{2}): (Error: IBKR 200: No security definition)?/.exec(m);if(f?.[3])(s.unlisted??={})[`${f[1]} ${f[2]}`]=Date.now();else if(f)failed.add(f[1]);s.notes._discovery=m;console.log('[ibkr-lab]',m)})
+          const kept=s.markets.filter(m=>failed.has(m.product)&&m.closeTime>now&&!found.some(x=>x.id===m.id)),unlisted=Object.keys(s.unlisted??{})
           s.markets=[...found,...kept];s.discoveryAt=failed.size?Date.now()-6*3600000+30*60000:Date.now()
-          s.notes._discovery=`${s.markets.length} exact contracts discovered at ${new Date().toLocaleTimeString()}`+(failed.size?`; ${failed.size} product(s) failed, previous contracts kept, retry in 30 minutes`:'')}
+          s.notes._discovery=`${s.markets.length} exact contracts discovered at ${new Date().toLocaleTimeString()}`+(failed.size?`; ${failed.size} product(s) failed, previous contracts kept, retry in 30 minutes`:'')+(unlisted.length?`; not listed on IBKR, not requested again for a day: ${unlisted.join(', ')}`:'')}
         catch(e){this.discoveryFailedAt=now;s.notes._discovery=String(e);if(!s.markets.length)throw e}
       }
       const universe=new Map(s.markets.map(m=>[m.id,m]));for(const p of s.positions)universe.set(p.market.id,p.market)

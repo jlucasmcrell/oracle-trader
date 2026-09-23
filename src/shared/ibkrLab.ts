@@ -53,6 +53,8 @@ export interface IbkrLabState {
   forecast:Record<string,{at:number;p:number;reason:string}>; modelDay:string; modelCalls:number
   modelProvider?:string; previousModelBudget?:{provider:string;day:string;calls:number}
   forecastAttempts?:Record<string,number>
+  /** "<PRODUCT> <yyyy-mm>" -> when IBKR answered "No security definition" for it; discovery does not ask again for a day (BACKLOG 115). */
+  unlisted?:Record<string,number>
 }
 /**
  * Trades OPENED before this instant ran under earlier entry/exit rules (round 114 changed marks, holds and admission at
