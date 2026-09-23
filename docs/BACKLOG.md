@@ -7,20 +7,16 @@ Triaged 2026-09-23 (section 165): 294 entries, 113 closed, 181 open. Everything 
 nobody has to remember a date. What is left below is either the operator's, or code still to write.
 
 ## Needs the operator (each is his decision or his credentials)
-- **235** Polymarket US fade: lift its panel hold or not. The review's only arm with a case (+1.56c/contract, unproven).
 - **216/217** Lead-lag size above one contract. Recommendation: keep 1 until reads 227 and 158 (both 2026-09-25).
 - **232** IB Gateway logins: set up IBC with the IBKR login, or keep logging in by hand after reboots and weekly.
 - **185** Whether the nightly review may keep auto-applying to live arms. Moot for registered parameters, which it can
   no longer touch (section 163).
-- **50b** A total-dollar exposure cap on Kalshi (today only counts: 80 positions, $10 a bet).
-- **52b** The hour daily loss limits reset (00:00 UTC splits the US evening).
-- **82c** Whether to hold more than $250 on Kalshi to earn interest.
-- An off-machine backup destination (no entry had one).
 - **243** IBKR's real fee: needs the API's read-only switch off for one what-if preview; only matters before any IBKR
   arm goes live, and none is close.
 
 ## Code still to write (none blocks trading today)
-- **24** Polymarket US trader guards (stop-entry, ledger drift): before any Polymarket arm trades again (fade, 235).
+- **24** Polymarket US trader guards (stop-entry, ledger drift): the fade now trades again at one contract, so this is
+  next.
 - **237** Re-grade Polymarket US history from the venue record: the maintenance session does it before the 09-24 lab read.
 - **172/215** Contract-weighted ladder evidence missing for mean-reversion, cross-venue and dutch baselines.
 - **214** Capacity raises should carry the evidence key they were based on.
@@ -47,7 +43,10 @@ positive lower band; momentum stays declined), 81a, 84b (spot-first recorder ret
 168, 170, 183, 203 (measured: 0 of 584 sweeps held the guard over 10 s), 209, 210a (the stuck KXBTCPRICE row is
 unresolved at Kalshi, which expires it 10-19), 223, 224, 229 (the paid calls are the critic's shadow for read 1, not
 the news arm), 231, 234, 236, 239, 244, 46, 52a, 51b (cross-venue retired), 156a (measured: 1-8 portfolio 429s a
-day, all absorbed), 1 (the amended critic rule is now in `critic-skill.py`), 59a, 100, 101, 205, 77a/74b, 171 (progress
+day, all absorbed), 235 (the operator lifted the fade hold on the review's terms; docs/PREREGISTERED-polyus-fade.md,
+read by the app), 82c (operator: no deposit until the account is moving up), 50b (the $67 balance is the cap at a
+dollar a bet; revisit if the balance passes $250), 52b (UTC stays: every report and ledger day is UTC), the off-machine backup (the code is on GitHub; the state files
+carry encrypted keys, which never leave this machine, so their backups stay local by design), 1 (the amended critic rule is now in `critic-skill.py`), 59a, 100, 101, 205, 77a/74b, 171 (progress
 off the report), 222, 102b (`venue-pnl.py --by-arm`), 93, 113, 89, 25/48a/69a/116/135b (now handbook rules 21-25),
 115, 197, 193/199 (`settle-control`), 206 (exits priced by their own predicate).
 

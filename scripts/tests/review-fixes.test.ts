@@ -7,7 +7,7 @@ import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, par
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
-import { fastReadStats, fastReadVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
+import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
@@ -1717,6 +1717,12 @@ async function registeredReadTests(): Promise<void> {
   eq('reads: polyus-lag clearly losing fails', polyusLagVerdict(polyusLagStats(games(16, 4, (g) => (g % 2 ? -0.3 : -0.1)), []), early).verdict, 'FAIL')
   eq('reads: polyus-lag fails on fills 2c+ worse than seen', polyusLagVerdict(polyusLagStats(games(16, 4, () => 0.2), [{ ts: 't', seenLeg: 0.4, fillLeg: 0.43 }]), early).verdict, 'FAIL')
   eq('reads: polyus-lag with almost no fills by the deadline stops rather than idling', polyusLagVerdict(polyusLagStats(games(3, 1, () => 0.2), []), deadline).verdict, 'FAIL')
+  const fades = (days: number, per: number, pnl: (d: number, i: number) => number) => Array.from({ length: days * per }, (_, i) => ({ ts: `2026-10-${String(1 + Math.floor(i / per)).padStart(2, '0')}T00:00:00Z`, marketId: `m${i}`, pnl: pnl(Math.floor(i / per), i), shares: 1 }))
+  const oct = Date.parse('2026-10-20T00:00:00Z')
+  eq('reads: polyus-fade waits for 15 losses or 250 settled', polyusFadeVerdict(miniArmStats(fades(10, 10, (d, i) => (i % 25 === 0 ? -0.93 : 0.05))), oct).verdict, 'WAIT')
+  eq('reads: polyus-fade with 15 losses and a clear loss fails', polyusFadeVerdict(miniArmStats(fades(10, 26, (d, i) => (i % 17 === 0 ? -0.93 : 0.02))), oct).verdict, 'FAIL')
+  eq('reads: polyus-fade with a clear edge at 250 passes', polyusFadeVerdict(miniArmStats(fades(10, 25, (d, i) => (i % 50 === 0 ? -0.93 : 0.07 + d * 0.001))), oct).verdict, 'PASS')
+  eq('reads: polyus-fade still unclear at the final read stops', polyusFadeVerdict(miniArmStats(fades(10, 50, (d, i) => (i % 20 === 0 ? -0.93 : (d % 2 ? 0.1 : 0.0)))), oct).verdict, 'INCONCLUSIVE')
   eq('reads: polyus-lag inconclusive at 150 entries stops', polyusLagVerdict(polyusLagStats(games(30, 5, (g, i) => (i % 2 ? 0.5 : -0.5)), []), early).verdict, 'INCONCLUSIVE')
   rmSync(dir, { recursive: true, force: true })
 }

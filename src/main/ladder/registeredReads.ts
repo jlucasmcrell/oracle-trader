@@ -291,3 +291,67 @@ export function polyusLagRead(deps: { researchPath: string; retire: (reason: str
 export function decidedRead(id: string, doc: string, verdict: 'PASS' | 'FAIL', summary: string, act: () => Promise<string>): RegisteredRead {
   return { id, doc, from: 0, evaluate: async () => ({ verdict, summary }), apply: async () => act() }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Polymarket US fade, re-armed 2026-09-23 (docs/PREREGISTERED-polyus-fade.md, backlog 235)
+// ---------------------------------------------------------------------------------------------------------------
+
+export interface MiniClosed { ts: string; marketId: string; pnl: number; shares: number }
+
+/** Per-contract P&L in cents with a day-clustered 80% band, and the loss count, over settled entries. */
+export function miniArmStats(closed: MiniClosed[]): { n: number; losses: number; days: number; meanCents: number; lo80: number; hi80: number } {
+  const rows = closed.filter((c) => c.shares > 0)
+  const byDay = new Map<string, number[]>()
+  for (const c of rows) byDay.set(c.ts.slice(0, 10), [...(byDay.get(c.ts.slice(0, 10)) ?? []), (100 * c.pnl) / c.shares])
+  const n = rows.length
+  const m = n ? rows.reduce((s, c) => s + (100 * c.pnl) / c.shares, 0) / n : 0
+  const g = byDay.size
+  const se = g >= 2 ? Math.sqrt((g / (g - 1)) * [...byDay.values()].reduce((s, v) => s + (v.reduce((a, b) => a + b, 0) - v.length * m) ** 2, 0)) / n : Infinity
+  return { n, losses: rows.filter((c) => c.pnl < 0).length, days: g, meanCents: m, lo80: m - 1.28 * se, hi80: m + 1.28 * se }
+}
+
+/**
+ * The registered rule: read at 15 losses or 250 settled entries. PASS: the lower bound above zero (the ladder may scale).
+ * FAIL: the upper bound below zero. Otherwise continue to 30 losses or 500 settled, or 2026-12-31: then INCONCLUSIVE, and
+ * the arm stops - a favourite fade that shows nothing over that sample is not worth the slots.
+ */
+export function polyusFadeVerdict(s: ReturnType<typeof miniArmStats>, now: number): ReadResult {
+  const line = `${s.n} settled, ${s.losses} losses over ${s.days} days: ${s.meanCents >= 0 ? '+' : ''}${s.meanCents.toFixed(2)}c/contract, 80% [${s.lo80.toFixed(2)}, ${s.hi80.toFixed(2)}]`
+  const first = s.losses >= 15 || s.n >= 250
+  const final = s.losses >= 30 || s.n >= 500 || now >= Date.parse('2026-12-31T00:00:00Z')
+  if (!first && !final) return { verdict: 'WAIT', summary: line }
+  if (s.hi80 < 0) return { verdict: 'FAIL', summary: line }
+  if (s.lo80 > 0) return { verdict: 'PASS', summary: line }
+  if (final) return { verdict: 'INCONCLUSIVE', summary: line + ' - no edge shown by the final read' }
+  return { verdict: 'WAIT', summary: line + ' - continuing to 30 losses or 500 settled' }
+}
+
+export function polyusFadeRead(deps: { researchPath: string; cohortStart: number; retire: (reason: string) => Promise<void> }): RegisteredRead {
+  return {
+    id: 'polyus-fade',
+    doc: 'docs/PREREGISTERED-polyus-fade.md',
+    from: deps.cohortStart,
+    async evaluate(now) {
+      const closed: MiniClosed[] = []
+      if (existsSync(deps.researchPath)) {
+        for (const line of readFileSync(deps.researchPath, 'utf8').split(/\r?\n/)) {
+          if (!line.includes('"closed"')) continue
+          try {
+            const r = JSON.parse(line) as { ts?: string; type?: string; strategy?: string; mode?: string; marketId?: string; pnl?: number; shares?: number }
+            if (r.type === 'closed' && r.strategy === 'fade' && r.mode === 'live' && r.ts && Date.parse(r.ts) >= deps.cohortStart && r.marketId && typeof r.pnl === 'number' && typeof r.shares === 'number') {
+              closed.push({ ts: r.ts, marketId: r.marketId, pnl: r.pnl, shares: r.shares })
+            }
+          } catch {
+            // skip a torn line
+          }
+        }
+      }
+      return polyusFadeVerdict(miniArmStats(closed), now)
+    },
+    async apply(verdict) {
+      if (verdict === 'PASS') return 'stays on; the ladder may scale it under its own rules'
+      await deps.retire(`PREREGISTERED-polyus-fade ${verdict}`)
+      return 'polyus-fade retired: off, and not re-armed by the ladder'
+    }
+  }
+}

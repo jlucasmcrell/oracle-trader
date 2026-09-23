@@ -26,7 +26,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { decidedRead, fastLeadLagRead, ReadRunner } from './ladder/registeredReads'
+import { decidedRead, fastLeadLagRead, polyusFadeRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -536,6 +536,12 @@ app.whenReady().then(async () => {
           await ladder.retire('polyus-lag', 'PREREGISTERED-polyus-lag FAIL: the prices were a data artefact')
           return 'polyus-lag retired: off, and not re-armed by the ladder'
         }),
+      // Re-armed by the operator 2026-09-23 on the review's terms; no fade entry exists between the hold and this cohort.
+      polyusFadeRead({
+        researchPath: join(app.getPath('userData'), 'mini-auto-polymarket-us.json-research.jsonl'),
+        cohortStart: Date.parse('2026-09-23T09:00:00Z'),
+        retire: (reason) => ladder.retire('polyus-fade', reason)
+      }),
       decidedRead('convergence-gate', 'docs/PREREGISTERED-btc-convergence.md (backlog 57a)', 'FAIL',
         'btc-gate.mjs 2026-09-23: 379 events (bar 200), event-clustered lower bound -2.36c against the +1c the registration requires, mean -0.16c/contract; "fail on any one, and this rule is not built"',
         async () => {

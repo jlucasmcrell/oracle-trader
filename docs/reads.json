@@ -22,6 +22,15 @@
       "note": "closed FAIL (section 164): the in-play prices were stale public data; retired by the app"
     },
     {
+      "id": "235",
+      "owner": "app",
+      "due": "2026-09-24",
+      "what": "Polymarket US favourite fade, re-armed 2026-09-23",
+      "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
+      "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
+      "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder"
+    },
+    {
       "id": "125/181/190/198",
       "due": "2026-09-24",
       "what": "Paper-lab first reads (IBKR and Polymarket)",
