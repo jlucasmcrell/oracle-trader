@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
 import {IbkrLab} from '../../src/main/strategies/ibkrLab'
-import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
+import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,exitAsk,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
 import {forecastTime,finalSettlements,csvRows} from '../../src/main/venues/forecastexData'
 import {IbkrReader} from '../../src/main/venues/ibkr'
 import {ibkrWeather} from '../../src/main/strategies/ibkrWeather'
@@ -40,6 +40,8 @@ async function main(){
   assert.deepEqual([...finalSettlements(csv,'2026-09-15',now)],[['A',1]])
   assert.throws(()=>finalSettlements('wrong,columns','2026-09-15',now),/schema/)
   for(const patch of [{askAt:now-31000},{askAt:now+1},{dataType:'delayed'},{dataType:'frozen'},{askSize:0},{askSize:undefined},{ask:undefined},{ask:NaN},{error:'Unavailable'}])assert.equal(freshAsk({...quote(1,.4),...patch},now),false)
+  // The exit predicate differs from the entry filter only in its price bound (BACKLOG 206).
+  for(const patch of [{askAt:now-31000},{askAt:now+1},{dataType:'delayed'},{askSize:0},{ask:undefined},{ask:1.01},{error:'Unavailable'}])assert.equal(exitAsk({...quote(1,.4),...patch},now),false)
   assert.ok(cryptoFair(110,100,.4,1/365)>.99)
   assert.ok(cryptoFair(90,100,.4,1/365)<.01)
   // Every declared arm must be reachable from an explicit, valid input scenario.
@@ -126,6 +128,16 @@ async function main(){
    assert.equal(pinned.s.positions.length,0,'a position whose other side is offered at 99c closes at zero')
    assert.ok(pinned.s.trades[0].net<0,'and it books the loss instead of hiding it')
    assert.equal(pos.strategy,'momentum')}
+  // BACKLOG 206: exits are priced by their own predicate. An opposing offer at $1.00 exits at zero and the loss enters
+  // `realized`; the ENTRY filter still refuses that quote; no opposing offer at all stays unpriced, not an invented zero.
+  {const tail=setup();addPosition(tail,{strategy:'momentum',entry:.3,openedAt:now-2*3600000,entryMark:-.3,entryMarkAt:now-2*3600000});tail.s.quotes['201']=quote(201,1)
+   assert.deepEqual([freshAsk(quote(201,1),now),exitAsk(quote(201,1),now),ibkrSignals([{...frame(.2),no:quote(201,1)}],now).length],[false,true,0],'the entry filter is unchanged')
+   let row=tail.lab.status().strategies.find(r=>r.id==='momentum')!
+   assert.deepEqual([row.unpriced,row.unrealized],[0,-.32],'valued as the exit would book it: zero, less both fees')
+   ;(tail.lab as any).closePositions(now);assert.deepEqual([tail.s.positions.length,tail.s.trades[0].exit,tail.s.trades[0].net],[0,0,-.32],'the near-total loss closes at zero and enters realized')
+   addPosition(tail,{id:'no-offer',strategy:'momentum',entry:.3,openedAt:now-2*3600000});tail.s.quotes['201']={...quote(201,.5),ask:undefined,askSize:0}
+   ;(tail.lab as any).closePositions(now);row=tail.lab.status().strategies.find(r=>r.id==='momentum')!
+   assert.deepEqual([tail.s.positions.length,row.unpriced],[1,1],'no opposing offer is still unpriced, not a zero')}
   const corrupt=setup();writeFileSync(corrupt.path,'{truncated');const broken=new IbkrLab(corrupt.path,corrupt.reader as any,corrupt.engine as any,corrupt.venue as any,corrupt.sources)
   await broken.scan();assert.match(broken.status().lastError!,/unreadable/);assert.equal(readFileSync(corrupt.path,'utf8'),'{truncated')
   // Qualification is based on net results across independent events and days, never win rate alone.
@@ -153,6 +165,22 @@ async function main(){
   // A quote-dynamics arm never needed the loss bar: it is not held to settlement, so its payout is not one-sided.
   const timedArm=setup();timedArm.s.trades=live.s.trades.map((r:any,i:number)=>({...r,strategy:'momentum',id:'M'+i,net:.3}))
   assert.equal(timedArm.lab.status().strategies.find((r:any)=>r.id==='momentum')!.gateBlockers!.some((b:string)=>/losses sampled/.test(b)),false,'the loss bar is for settlement arms only')
+  // BACKLOG 193/199: the matched settlement control. The hold arms' admission and hold, the benchmark's signal-free side,
+  // contracts settling within two days only - and never promoted, whatever its record reads.
+  {const hash=[...market().id].reduce((a,c)=>a+c.charCodeAt(0),0),side=hash%2?'YES':'NO',control=(f:LabFrame)=>ibkrSignals([f],now).filter(s=>s.strategy==='settle-control').map(s=>s.outcome)
+   assert.ok(IBKR_HOLD_TO_SETTLEMENT.has('settle-control'),'held to settlement')
+   assert.deepEqual([control(frame(.8)),control(frame(.2)),control({...frame(.8),market:{...market(),expiresAt:now+3*86400000}})],[[side],[side],[]],'the same side whatever the price says; nothing settling beyond two days')
+   assert.deepEqual(control({...frame(.8),yes:quote(200,.85),no:quote(201,.25)}),[side],'the hold arms\' admission, not the benchmark\'s 8c spread cap')
+   const sc=setup();sc.s.markets=[...Array.from({length:14},(_,i)=>market(`SHORT_091626_${i}`,300+i)),{...market('LONG_102326_1',400),closeTime:now+30*86400000,expiresAt:now+30*86400000}];sc.s.discoveryAt=now
+   ;(sc.reader as any).quotes=async(ids:number[])=>ids.map(id=>quote(id,.51));await sc.lab.scan()
+   const entries=sc.s.orders.filter((o:any)=>o.strategy==='settle-control')
+   assert.deepEqual([entries.length,entries.some((o:any)=>o.marketId==='LONG_102326_1')],[12,false],'the twelve hold slots, short-dated contracts only')
+   const h=setup();addPosition(h,{strategy:'settle-control',openedAt:now-2*3600000,market:{...h.m,closeTime:now+5*60000}});h.s.quotes['201']=quote(201,.9)
+   ;(h.lab as any).closePositions(now);assert.equal(h.s.positions.length,1,'no stop, one-hour or pre-close exit')
+   const ctl=setup();ctl.s.trades=live.s.trades.map((r:any,i:number)=>({...r,strategy:'settle-control',id:'C'+i}));ctl.venue.getAccount=async()=>({balance:20})
+   const crow=ctl.lab.status().strategies.find(r=>r.id==='settle-control')!
+   assert.deepEqual([crow.liveEligible,crow.gateBlockers],[false,['control arm: never promoted']],'the record that qualifies favorite above is refused for a control')
+   await assert.rejects(ctl.lab.configure({mode:'live',liveStrategies:['settle-control']}),/settle-control: control arm: never promoted/)}
   await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/Fund IBKR/)
   live.venue.getAccount=async()=>({balance:20});await live.lab.configure({mode:'live',liveStrategies:['favorite']})
   assert.equal(live.lab.status().config.mode,'live');await live.lab.configure({mode:'paper',liveStrategies:[]})
@@ -242,6 +270,34 @@ async function main(){
   await partialWalk.lab.scan();assert.deepEqual(partialWalk.s.markets.map((m:IbkrLabMarket)=>m.id).sort(),[fresh.id,partialWalk.m.id].sort(),'Failed product keeps its contracts')
   now+=31*60000;await partialWalk.lab.scan();assert.equal(walks,2,'A partial discovery is retried after 30 minutes')
   assert.match(noUniverse.lab.status().lastError!,/No exact ForecastEx/)
+  // BACKLOG 115: "No security definition" is IBKR's answer that a product-month does not exist. The real discovery walk
+  // (catalog -> reader.markets) must not ask for it again for a day, and it must not re-arm the 30-minute retry.
+  {const clock=now,originalFetch=globalThis.fetch,asked:string[]=[],d=setup()
+   const row=(id:string,product:string,oi:number)=>({contract_id:id,product_id:product,category:'Financial Markets',question:`Will ${product} exceed 100?`,last_trade_date:'2026-09-20T16:00:00',expiration_date:'2026-09-20T16:00:00',open_interest:oi,exchange_spec_url:'https://example.test/rules',last_yes_price:null})
+   globalThis.fetch=(async()=>({ok:true,json:async()=>({statusCode:200,body:{data:JSON.stringify([row('TEST_092026_100','TEST',5),row('FES_092026_100','FES',1)]),next_page:null}})})) as any
+   const reader={quotes:async(ids:number[])=>ids.map(id=>quote(id,.5)),markets:async(product:string,month:string)=>{asked.push(`${product} ${month}`);if(product==='FES')throw Error('IBKR 200: No security definition has been found for the request');return [{...instrument(300,'YES'),description:'TEST_092026_100_YES',strike:100},{...instrument(301,'NO'),description:'TEST_092026_100_NO',strike:100}]}}
+   const lab=new IbkrLab(join(root,'unlisted.json'),reader as any,d.engine as any,d.venue as any,{settlements:d.sources.settlements,spot:d.sources.spot,weather:d.sources.weather}),ls=(lab as any).state
+   try{
+    await lab.scan();assert.deepEqual([asked,Object.keys(ls.unlisted),ls.markets.map((m:IbkrLabMarket)=>m.id)],[['TEST 2026-09','FES 2026-09'],['FES 2026-09'],['TEST_092026_100']])
+    now+=31*60000;await lab.scan();assert.equal(asked.length,2,'an unlisted product-month does not re-arm the 30-minute retry')
+    now+=6*3600000;await lab.scan();assert.deepEqual(asked.slice(2),['TEST 2026-09'],'the six-hour walk does not request it again')
+    assert.match(ls.notes._discovery,/not listed on IBKR, not requested again for a day: FES 2026-09/)
+    now+=18*3600000;await lab.scan();assert.deepEqual(asked.slice(3),['TEST 2026-09','FES 2026-09'],'a day later it is asked again: a listing can appear')
+   }finally{globalThis.fetch=originalFetch;now=clock}}
+  // BACKLOG 197: every crypto contract closing inside six minutes is quoted every cycle, after the ten held markets and
+  // before the rotation. One closing in seven minutes waits for the rotation; more than twenty rotate through twenty slots.
+  {const ids=(ms:IbkrLabMarket[])=>ms.flatMap(m=>[m.yes.conId,m.no.conId]),cf=(strike:number,minutes:number)=>({...market(`CFBTC_091626_${strike}`,strike),product:'CFBTC',closeTime:now+minutes*60000,expiresAt:now+minutes*60000})
+   const far=Array.from({length:40},(_,i)=>market(`TEST_091626_${1000+i}`,1000+i))
+   const run=async(markets:IbkrLabMarket[])=>{const x=setup(),asked:number[][]=[];x.s.markets=markets;x.s.discoveryAt=now;x.s.config.enabled=false
+    for(let i=0;i<12;i++)addPosition(x,{id:`held${i}`,strategy:'fade',market:far[i]})
+    ;(x.reader as any).quotes=async(conIds:number[])=>{asked.push(conIds);return conIds.map(id=>quote(id,.5))}
+    await x.lab.scan();now+=30000;await x.lab.scan();return asked}
+   const soon=[2000,2001,2002].map(k=>cf(k,4)),later=cf(3000,7),asked=await run([...far,...soon,later])
+   assert.deepEqual(asked.map(a=>a.slice(0,26)),[[...ids(far.slice(0,10)),...ids(soon)],[...ids([...far.slice(10,12),...far.slice(0,8)]),...ids(soon)]],'the held ten lead, then every contract inside the window, every cycle')
+   assert.ok(asked.every(a=>a.length===60&&!a.includes(later.yes.conId)),'a full batch; seven minutes out waits for the rotation')
+   const many=Array.from({length:24},(_,i)=>cf(4000+i,5)),crowded=await run([...far,...many])
+   assert.ok(crowded.every(a=>a.length===60&&a.slice(0,20).every(id=>ids(far.slice(0,12)).includes(id))),'twenty-four closing together still leave the held ten')
+   assert.ok(many.every(m=>crowded.some(a=>a.includes(m.yes.conId))),'and rotate through twenty slots, none starved')}
   class Api extends EventEmitter{
    connect(){queueMicrotask(()=>this.emit(EventName.nextValidId,1));return this}disconnect(){this.emit(EventName.disconnected);return this}
    reqMktData(id:number,c:any){if(c.conId===2){this.emit(EventName.error,Error('Unavailable contract'),200,id);return}this.emit(EventName.marketDataType,id,c.conId===3?3:1);this.emit(EventName.tickPrice,id,2,.42);this.emit(EventName.tickSize,id,3,7);this.emit(EventName.tickSnapshotEnd,id)}
