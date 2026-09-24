@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {BENCH_SAMPLE,PolyPaperLab,benchHash,polyPaperFee,polyPaperOrderFee,polyPaperQuote,polyPaperSignals} from '../../src/main/strategies/polyPaper'
+import {BENCH_SAMPLE,POLY_PAPER_RETIRED,PolyPaperLab,benchHash,polyPaperFee,polyPaperOrderFee,polyPaperQuote,polyPaperSignals} from '../../src/main/strategies/polyPaper'
 import type {VenueMarket,OrderBook} from '../../src/shared/types'
 import {POLY_PAPER_RULES_SINCE} from '../../src/shared/polyPaper'
 const root=mkdtempSync(join(tmpdir(),'oracle-poly-paper-')),base=Date.parse('2026-09-16T19:00Z')
@@ -35,6 +35,9 @@ const all=new Set<string>()
 // 'test2' is deliberately an id the control sampler admits, so the lab-level assertions still exercise it.
 for(const id of ['test2'])for(const q of [quote,{...quote,bid:.06,ask:.09},{...quote,bid:.91,ask:.94},{...quote,pressure:4}])for(const h of [[],[{at:now-6*60000,mid:.35}]])for(const s of polyPaperSignals({...market,id},q,h,now))all.add(s.strategy)
 assert.equal(all.size,8,'All registered strategies reachable')
+// Detection is not admission: a retired arm still produces its signal, and the lab refuses it at the gate.
+assert(POLY_PAPER_RETIRED.has('join')&&POLY_PAPER_RETIRED.has('reversion'),'the 2026-09-24 read retirements are in force')
+assert([...all].filter(s=>POLY_PAPER_RETIRED.has(s)).length>0,'retired arms still signal; only admission is refused')
 // ...and the sampling itself: about one market in BENCH_SAMPLE, deterministic in the id, never in the clock.
 const ids=Array.from({length:2400},(_,i)=>'mkt-'+i)
 const benchAt=(id:string,at:number)=>polyPaperSignals({...market,id,closeTime:at+10*3600000},quote,[],at).find(s=>s.strategy==='benchmark')
@@ -55,12 +58,20 @@ function setup(){
 async function main(){
  const x=setup();await x.lab.scan();assert.equal(x.lab.status().positions.length,0,'No same-snapshot fills')
  await x.lab.scan();assert.equal(x.lab.status().positions.length,0,'No fill at identical timestamp')
- now+=60000;await x.lab.scan();assert(x.lab.status().positions.some(p=>p.strategy==='benchmark'));assert(!x.lab.status().positions.some(p=>p.strategy==='join'),'Bid touch does not fill a passive order')
+ now+=60000;await x.lab.scan();assert(x.lab.status().positions.some(p=>p.strategy==='benchmark'))
+ // `join` is retired (POLY_PAPER_RETIRED, 2026-09-24, section 168), so admission refuses it and the bid-touch
+ // assertion below now has nothing of its own to prove. The refusal is asserted directly instead.
+ assert(!x.lab.status().orders.some(o=>o.strategy==='join')&&!x.lab.status().positions.some(p=>p.strategy==='join'),'A retired arm is never admitted')
  // Round 114: an unchanged book is not a loss. From the entry price the taker round trip alone crossed the -5c stop.
  now+=60000;await x.lab.scan();assert(x.lab.status().positions.some(p=>p.strategy==='benchmark'),'Taker position survives an unchanged next quote')
  assert(!x.lab.status().trades.some(t=>t.strategy==='benchmark'&&t.reason==='loss stop'),'No loss stop without a price move')
  // A resting bid whose own price level has gone is a PROBABLE fill: that is what being consumed looks like on
  // snapshot data, and the venue publishes no trade prints to separate it from a cancellation (section 143).
+ // `join` was the only arm that ever used the probable channel, and it is retired, so the channel is now only
+ // reachable for inventory that already exists. The fixture seeds the resting order rather than waiting for an
+ // admission that will never come: what is under test is the FILL classifier, not admission.
+ {const st=x.state();st.orders=[...st.orders,{id:'seed-join',strategy:'join',market,side:'YES',limit:.45,maker:true,at:now,expires:now+30*60000,queue:10}];writeFileSync(x.path,JSON.stringify(st))}
+ x.lab=new PolyPaperLab(x.path,x.venue,()=>now)
  x.setBook(book(.43,.45));now+=60000;await x.lab.scan()
  const joined=x.lab.status().positions.find(p=>p.strategy==='join'&&p.side==='YES')!
  assert(joined,'A vanished touch level is a fill')
@@ -68,6 +79,8 @@ async function main(){
  assert.equal(joined.queue,10,'the size resting ahead of us when we joined is recorded')
  // The certain channel is unchanged and still proves itself on its own fixture: the ask trades THROUGH the limit.
  const c=setup();await c.lab.scan();now+=60000;await c.lab.scan()
+ {const st=c.state();st.orders=[...st.orders,{id:'seed-join',strategy:'join',market,side:'YES',limit:.45,maker:true,at:now,expires:now+30*60000,queue:10}];writeFileSync(c.path,JSON.stringify(st))}
+ c.lab=new PolyPaperLab(c.path,c.venue,()=>now)
  c.setBook(book(.42,.44));now+=60000;await c.lab.scan()
  const crossed=c.lab.status().positions.find(p=>p.strategy==='join'&&p.side==='YES')
  assert.equal(crossed?.fill,'certain','an ask through the resting limit is a certain fill')

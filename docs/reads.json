@@ -24,11 +24,12 @@
     {
       "id": "235",
       "owner": "app",
-      "due": "2026-09-24",
+      "due": "2026-09-25",
       "what": "Polymarket US favourite fade, re-armed 2026-09-23",
       "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
       "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
-      "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder"
+      "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
+      "note": "2026-09-24: the app ran it at 00:15:23Z - WAIT, 10 settled, 4 losses over 1 day, -33.90c/contract, 80% [-inf, inf]. Confirmed against the venue record: venue-pnl.py --by-arm puts mini:fade at 10 resolutions and -$3.39 = -33.9c/contract, exact agreement. STALLED, not pending: the ladder stopped the arm on 09-23 at 8 trades (cool-down to 09-26), so the cohort cannot reach 15 losses or 250 settled and the read will return WAIT until 2026-12-31. Backlog 247."
     },
     {
       "id": "125/181/190/198",
@@ -37,7 +38,8 @@
       "how": "python scripts/lab-review.py",
       "rule": "backlog 125, 181, 190, 198: judge arms at >=30 trades and >=4 days against the benchmark as well as zero; certain/probable fill brackets disagreeing in sign -> no conclusion",
       "action": "retire arms that fail via IBKR_RETIRED / POLY_PAPER_RETIRED; do backlog 237 (re-grade Polymarket history) first",
-      "note": "the Polymarket lab prices its fills from the REST book, which is cached 30 s and freezes for minutes in play (section 164): treat in-play fills as unreliable and say so in the read"
+      "note": "READ and ACTED (section 168). Five arms retired at >= 30 closes / >= 4 day-clusters with the 80% band clear of zero on the wrong side: IBKR momentum -8.57c [-11.04,-6.10] 37/8, log-momentum -9.34c [-12.97,-5.72] 32/7, breakout -9.82c [-12.41,-7.23] 33/7 (IBKR_RETIRED, read against zero because the control is n=4 G=1, backlog 199); Polymarket join -7.29c [-9.54,-5.03] 71/5 and reversion -7.68c [-11.20,-4.16] 39/4 (POLY_PAPER_RETIRED, below zero AND below the anchoring control's -6.61c). Backlog 198's fill bracket was built first and AGREED for join (certain -7.25c over 12, probable -7.30c over 59), so the 'do not conclude' branch does not bite. Polymarket momentum and weather-forecast still cross zero and are not retired.",
+      "done": "2026-09-24"
     },
     {
       "id": "167",
@@ -45,15 +47,18 @@
       "what": "Lead-lag Polymarket WebSocket shadow",
       "how": "the polyWs field of leadlag-dislocations.jsonl rows",
       "rule": "docs/PREREGISTERED-leadlag-polyws-shadow.md: PASS at >= 98% agreement over >= 500 rows and median changes >= 3",
-      "action": "PASS -> write the follow-on registration; mostly superseded by 233"
+      "action": "PASS -> write the follow-on registration; mostly superseded by 233",
+      "done": "2026-09-24",
+      "note": "CLOSED, FAIL on leg 1 (section 168): 82.62% agreement over 397 fresh rows against >= 98% over >= 500. Leg 2 passes hugely (median 1,762 top changes per window against 3). The registration reads nothing further below the agreement bar, so no follow-on registration; 233 supersedes. Residue: the disagreement is NOT age-driven (17.1% at 0-1 s vs 9.0% at >5 s), so it is an interpretation difference - backlog 246, for 233 to check."
     },
     {
       "id": "72b/161",
-      "due": "2026-09-24",
+      "due": "2026-09-25",
       "what": "Lead-lag coin cohort (frozen window from 09-19)",
       "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
       "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
-      "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04"
+      "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
+      "note": "2026-09-24: the read was reading tmp/k-2026-09-18b.json because its default glob is /^k-/ and the maintenance dump is tmp/kalshi-<date>.json - 0 settlements reported. Glob fixed in leadlag-coins.mjs and leadlag-cadence-gate.mjs (section 168). On the fresh dump: 194 settlements, new coins 143.9 of the 400 required over 6 day-clusters at +3.39c [-13.47,+20.25], BTC/ETH +8.12c [-1.53,+17.78]. Neither bound fires; at ~29 contracts a day the sample lands around 09-28. Final date 2026-10-04, at which the rule narrows."
     },
     {
       "id": "146b",
@@ -179,11 +184,12 @@
     },
     {
       "id": "2",
-      "due": "2026-09-24",
+      "due": "2026-09-25",
       "what": "WebSocket order book for execution",
       "how": "kalshi-auto.json state.wsStats.dayLog",
       "rule": "backlog 2: 7 consecutive days >= 0.99 agreement",
-      "action": "then build 'use the socket book when under 5 s old'; until then move due forward a day"
+      "action": "then build 'use the socket book when under 5 s old'; until then move due forward a day",
+      "note": "2026-09-24: state.wsStats.dayLog 09-19 0.99480, 09-20 0.98950, 09-21 0.99153, 09-22 0.99721, 09-23 0.99393. The rule wants 7 consecutive days >= 0.99; 09-20 breaks it and the current streak is 3."
     },
     {
       "id": "202",
@@ -299,19 +305,21 @@
     },
     {
       "id": "1",
-      "due": "2026-09-24",
+      "due": "2026-09-25",
       "what": "Critic skill check (daily)",
       "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
       "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
-      "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day"
+      "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
+      "note": "2026-09-24: KEEP veto mode OFF - VETO -0.043/contract vs the rest +0.033, skilled in 1 of 2 shared enabled strategies, so the amended rule's conjunction is not met. intelligenceMode is already 'shadow'; unchanged."
     },
     {
       "id": "65b/80c",
-      "due": "2026-09-24",
+      "due": "2026-10-24",
       "what": "Challenger forecaster paired read",
       "how": "node scripts/hunch-paired.mjs",
-      "rule": "no rule was registered while it spends ~$0.15 a day: register 'no advantage at >= 20 paired and settled -> hunchChallengerEnabled false' first",
-      "action": "config hunchChallengerEnabled"
+      "rule": "docs/PREREGISTERED-hunch-challenger.md",
+      "action": "config hunchChallengerEnabled",
+      "note": "2026-09-24: the rule that did not exist is now registered - docs/PREREGISTERED-hunch-challenger.md: read at >= 20 paired AND settled markets on the paired Brier difference, day-clustered 80%; no advantage -> hunchChallengerEnabled false; and false on 2026-10-24 regardless if 20 paired-and-settled do not exist by then. Today: 426 paired, 0 settled, so nothing is readable. Next due date is the termination date; an earlier read happens the moment the sample exists."
     },
     {
       "id": "40/75b",

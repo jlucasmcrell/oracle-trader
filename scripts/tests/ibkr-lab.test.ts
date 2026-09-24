@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
 import {IbkrLab} from '../../src/main/strategies/ibkrLab'
-import {IBKR_HOLD_TO_SETTLEMENT,IBKR_STRATEGIES,calibrationSlope,exitAsk,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
+import {IBKR_HOLD_TO_SETTLEMENT,IBKR_RETIRED,IBKR_STRATEGIES,calibrationSlope,exitAsk,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
 import {forecastTime,finalSettlements,csvRows} from '../../src/main/venues/forecastexData'
 import {IbkrReader} from '../../src/main/venues/ibkr'
 import {ibkrWeather} from '../../src/main/strategies/ibkrWeather'
@@ -59,6 +59,10 @@ async function main(){
   const peers=[90,100,110].map((strike,i)=>({...frame([.4,.1,.7][i]),market:market(`TEST_091626_${strike}`,strike)}))
   for(const signal of ibkrSignals(peers,now))reached.add(signal.strategy)
   assert.deepEqual(IBKR_STRATEGIES.filter(s=>!reached.has(s.id)).map(s=>s.id),[],'Every strategy has an executable signal path')
+  // A retired id that matches no declared arm retires nothing and says nothing: the realistic failure mode of
+  // every entry added to IBKR_RETIRED by hand. Detection itself is untouched - only admission is refused.
+  assert.deepEqual([...IBKR_RETIRED.keys()].filter(id=>!IBKR_STRATEGIES.some(s=>s.id===id)),[],'every retired id names a declared arm')
+  for(const id of ['momentum','log-momentum','breakout'])assert.ok(IBKR_RETIRED.has(id)&&reached.has(id),`${id} is stopped by the 2026-09-24 read and still reachable as a signal`)
   assert.equal(ibkrSignals([{...frame(),yes:{...quote(200,.8),dataType:'delayed'}}],now).length,0)
   // Paper runs against a globally live engine without invoking any broker writer.
   const x=setup();await x.lab.scan();assert.equal(x.s.positions.length,0);assert.ok(x.s.orders.length>0)

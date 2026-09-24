@@ -90,6 +90,26 @@ print('  exit reasons:', collections.Counter(t.get('reason') for t in P['trades'
 # being consumed AND what being cancelled both look like on snapshot data (section 143).
 _mk = [t for t in P['trades'] if t['opened'] >= RULES and t.get('maker')]
 print('  maker fills: %d certain, %d probable' % (sum(1 for t in _mk if t.get('fill') == 'certain'), sum(1 for t in _mk if t.get('fill') == 'probable')))
+# BACKLOG 198: a maker arm is judged on the BRACKET, not on the pooled number. If the certain-only and
+# probable-only bands disagree in sign, the arm has no read - say so and do not conclude.
+_mkc = [t for t in _mk if t.get('closed') is not None and t.get('net') is not None]
+if _mkc:
+    print('  maker fill bracket (certain-only vs probable-only; disagreeing signs = no conclusion):')
+    for k in sorted({t['strategy'] for t in _mkc}):
+        cells = []
+        for lab in ('certain', 'probable'):
+            v = band([(time.strftime('%m-%d', time.gmtime(t['closed'] / 1000)), 1.0, t['net'])
+                      for t in _mkc if t['strategy'] == k and t.get('fill') == lab])
+            cells.append('%s n=%-3d %+7.2fc %s' % (lab, v['n'], v['mean'],
+                         '[%+7.2f,%+7.2f]' % (v['lo'], v['hi']) if v['lo'] is not None else 'one day: none') if v
+                         else '%s n=0' % lab)
+        both = [band([(time.strftime('%m-%d', time.gmtime(t['closed'] / 1000)), 1.0, t['net'])
+                      for t in _mkc if t['strategy'] == k and t.get('fill') == lab]) for lab in ('certain', 'probable')]
+        flag = ''
+        if all(b and b['lo'] is not None for b in both):
+            signs = {(1 if b['lo'] > 0 else -1 if b['hi'] < 0 else 0) for b in both}
+            flag = '  NO CONCLUSION: brackets disagree' if signs == {1, -1} else '  brackets agree'
+        print('   %-14s %s | %s%s' % (k, cells[0], cells[1], flag))
 print('  open positions:', len(P.get('positions', [])), '| resting orders:', len(P.get('orders', [])), '| markets tracked:', len(P.get('markets', [])))
 
 # ---------------- IBKR ForecastEx paper lab ----------------

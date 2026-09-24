@@ -24,7 +24,7 @@
  * Usage:
  *   node scripts/leadlag-coins.mjs [dump.json] [--since ISO] [--check] [--json]
  *
- * Default dump: the newest tmp/k-*.json. Default --since: the round-91 go-live (see EXPANSION_AT).
+ * Default dump: the newest tmp/k-*.json OR tmp/kalshi-*.json. Default --since: the round-91 go-live (see EXPANSION_AT).
  */
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -153,8 +153,10 @@ if (!dumpPath) {
   const tmp = join(REPO, 'tmp')
   // By MTIME, not by name. Sorting the names picked k-20260909.json over k-2026-09-13.json ('-' < '9')
   // and the whole report came back empty and cheerful.
-  const cands = existsSync(tmp) ? readdirSync(tmp).filter((f) => /^k-.*\.json$/.test(f)).map((f) => join(tmp, f)) : []
-  if (!cands.length) throw new Error('no dump given and no tmp/k-*.json found; run scripts/readonly-kalshi-dump.cjs first')
+  // Both prefixes: the maintenance session writes tmp/kalshi-<date>.json, which /^k-/ does not match, so on
+  // 2026-09-24 this read graded against a dump from 09-18 and reported 0 settlements as "NOT YET (collecting)".
+  const cands = existsSync(tmp) ? readdirSync(tmp).filter((f) => /^(k|kalshi)-.*\.json$/.test(f)).map((f) => join(tmp, f)) : []
+  if (!cands.length) throw new Error('no dump given and no tmp/k-*.json or tmp/kalshi-*.json found; run scripts/readonly-kalshi-dump.cjs first')
   dumpPath = cands.sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs).pop()
 }
 

@@ -56,7 +56,10 @@ export const IBKR_RETIRED:ReadonlyMap<string,string>=new Map([
   ['mean-reversion','Stopped 2026-09-22 (section 160): it bets against weather moves that carry real information - 5 won against 7.2 implied, and holding every entry to settlement makes it worse (-$2.48), so the timed exit was not the problem.'],
   ['ladder-value','Stopped 2026-09-22 (section 160): 3 won against 3.3 implied; held or timed, no edge (-$1.34).'],
   ['microprice','Stopped 2026-09-20 (section 143): 47 closed, 18 events, 4 day-clusters, -6.23c/contract, band [-8.57,-3.90]. The lab\'s own promotion bar, met with the sign reversed. The handicap is the taker entry, not the signal: gross was -5.15c crossing out and -5.18c settling.'],
-  ['book-imbalance','Stopped 2026-09-20 (section 143): 51 closed, 15 events, 4 day-clusters, -6.18c/contract, band [-9.73,-2.62]. Same bar, same sign, same cause. A passive re-seat is a different hypothesis and needs its own pre-registration.']
+  ['book-imbalance','Stopped 2026-09-20 (section 143): 51 closed, 15 events, 4 day-clusters, -6.18c/contract, band [-9.73,-2.62]. Same bar, same sign, same cause. A passive re-seat is a different hypothesis and needs its own pre-registration.'],
+  ['momentum','Stopped 2026-09-24 (section 168) at the read backlog 190 registered for today: 37 closed over 8 day-clusters, -8.57c/contract, band [-11.04,-6.10]. On 09-20 its band still crossed zero and it was left to run to this read; it no longer does. Reported against ZERO, because the benchmark control has n=4 on one day and cannot anchor (backlog 199).'],
+  ['log-momentum','Stopped 2026-09-24 (section 168), same read: 32 closed over 7 day-clusters, -9.34c/contract, band [-12.97,-5.72].'],
+  ['breakout','Stopped 2026-09-24 (section 168), same read: 33 closed over 7 day-clusters, -9.82c/contract, band [-12.41,-7.23]. The whole quote-following family is now stopped; a passive re-seat is a different hypothesis and needs its own pre-registration.']
 ])
 /** Hold-to-settlement by ARM: a re-baselined cohort keeps its arm's rule. `calibration:pre-slopes-20260918` held
  *  calibration's seven positions and, absent from the set by name, the timed exit sold all seven on 2026-09-18

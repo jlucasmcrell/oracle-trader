@@ -56,7 +56,8 @@ if (Date.now() < READ_AT) {
 let dumpPath = process.argv.slice(2).find((x) => !x.startsWith('--'))
 if (!dumpPath) {
   const dir = join(REPO, 'tmp')
-  const files = existsSync(dir) ? readdirSync(dir).filter((x) => /^k-.*\.json$/.test(x)).map((x) => join(dir, x)) : []
+  // Both prefixes: the maintenance session's own dump is tmp/kalshi-<date>.json (see leadlag-coins.mjs).
+  const files = existsSync(dir) ? readdirSync(dir).filter((x) => /^(k|kalshi)-.*\.json$/.test(x)).map((x) => join(dir, x)) : []
   if (!files.length) throw new Error('no Kalshi dump found; create a fresh read-only dump first')
   dumpPath = files.sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs).pop()
 }

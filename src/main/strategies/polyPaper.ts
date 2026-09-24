@@ -56,8 +56,13 @@ export function polyPaperQuote(book:OrderBook,at:number):PolyPaperQuote|undefine
  */
 /** Admission stopped on their own evidence (review 2026-09-22, section 160): pressure -13.85c/contract [80% -16.8,
  *  -10.9] over 20, momentum -6.98c [-11.1, -2.9] over 33, and both lose at the 15-minute mark before costs.
- *  Their open positions and ledgers stay. */
-export const POLY_PAPER_RETIRED:ReadonlySet<string>=new Set(['momentum','pressure'])
+ *  Their open positions and ledgers stay.
+ *  Added 2026-09-24 by the registered paper-lab read (backlog 125/181/190/198, section 168), each at >= 30 closes
+ *  over >= 4 day-clusters with its 80% band below zero AND below the control's -6.61c, which here has n=54 and a
+ *  band of its own and so can anchor: join -7.29c [-9.54, -5.03] over 71 (a maker arm, and its fill bracket agrees
+ *  - certain-only -7.25c [-12.24, -2.26] over 12, probable-only -7.30c [-10.12, -4.47] over 59, so backlog 198's
+ *  "do not conclude" does not apply), reversion -7.68c [-11.20, -4.16] over 39. */
+export const POLY_PAPER_RETIRED:ReadonlySet<string>=new Set(['momentum','pressure','join','reversion'])
 export const BENCH_SAMPLE=24
 export const benchHash=(id:string):number=>{let h=0;for(const c of id)h=(h*31+c.charCodeAt(0))>>>0;return h}
 const sideQuote=(q:PolyPaperQuote,side:'YES'|'NO')=>side==='YES'?{bid:q.bid,ask:q.ask,bidSize:q.bidSize,askSize:q.askSize}:{bid:1-q.ask,ask:1-q.bid,bidSize:q.askSize,askSize:q.bidSize}

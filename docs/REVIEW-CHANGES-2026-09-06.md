@@ -6473,3 +6473,138 @@ on the box, and PolyConsensus is not one of them - the same shape as 224(c), whe
 the file that broke. **A `Disabled` state is the signature to add**, because unlike a stale one it never recovers
 and no freshness check can see it. Backlog **245**; not built today, because 237 had the date on it and the rule
 is one behavioural change per run.
+
+## §168 - 2026-09-24 11:20Z: the paper labs' registered read retires five arms; the coin read had been grading a six-day-old dump
+
+Seven pre-registered reads were due. Six are recorded below; the seventh (the challenger forecaster) had no rule, so
+the rule was written first and the read deferred because 0 of its 426 paired forecasts have settled.
+
+### The read that acted: backlog 125/181/190/198, both paper labs
+
+`python scripts/lab-review.py`. Prerequisite backlog 237 was DONE on 09-23, so the Polymarket ledger the read judges
+is already re-graded from the venue's resolutions.
+
+**IBKR ForecastEx.** The control has 4 closes on one day and cannot anchor anything (backlog 199), so every arm is
+read against ZERO, as 199 instructs. Three arms now have the sample backlog 190 named for today - >= 30 closes over
+>= 4 day-clusters - and all three have an 80% band clear of zero on the wrong side:
+`momentum` -8.57c/contract [-11.04, -6.10] over 37/8, `log-momentum` -9.34c [-12.97, -5.72] over 32/7, `breakout`
+-9.82c [-12.41, -7.23] over 33/7. On 09-20 momentum and log-momentum still crossed zero and were deliberately left to
+run to this read; they no longer cross it. All three are **STOPPED** via `IBKR_RETIRED` (`ibkrSignals.ts`), which keeps
+their ledger, cash and evidence on the panel and refuses only new admission. The quote-following family is now stopped
+entire; a passive re-seat is a different hypothesis and needs its own pre-registration.
+
+**Polymarket US.** Here the control DOES anchor (`benchmark`, 54 closes, band [-7.00, -6.22]). Two arms clear the bar
+with the sign reversed against zero *and* against the control: `join` -7.29c [-9.54, -5.03] over 71/5 and `reversion`
+-7.68c [-11.20, -4.16] over 39/4. Both are **STOPPED** via `POLY_PAPER_RETIRED`.
+
+`join` is a maker arm, so backlog 198 requires the FILL BRACKET before any conclusion, and the statistic did not
+exist - `lab-review.py` printed only the pooled certain/probable counts. It now prints the bracket per arm, and the
+brackets **agree**: certain-only -7.25c [-12.24, -2.26] over 12, probable-only -7.30c [-10.12, -4.47] over 59. 198's
+"if they disagree in sign, do not conclude" does not bite, so the retirement stands on evidence and not on an
+assumption about vanished price levels.
+
+Two consequences worth stating rather than discovering later. `join` was the ONLY arm that ever used the probable fill
+channel (`improve` creates its own level and is certain-only; `pressure` was retired on 09-22), so that channel now has
+no live producer and backlog 198's bracket machinery has nothing left to bracket. And `poly-paper.test.ts` used `join`
+as the fixture for the probable channel, so the correct fix broke it: the fixture now seeds the resting order directly,
+because what it is about is the FILL CLASSIFIER, not admission. A new assertion covers admission itself, and
+`ibkr-lab.test.ts` now fails if any `IBKR_RETIRED` key names no declared arm - a typo there retires nothing, silently.
+
+### The read that was reading the wrong file: backlog 72b/161, the lead-lag coin cohort
+
+`node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z` reported **0 settlements** and "NOT YET
+(collecting)". Its default dump is the newest `tmp/k-*.json`; the maintenance session's own dump is
+`tmp/kalshi-<date>.json`, which `/^k-/` does not match, so the read graded against a dump from **2026-09-18** - before
+the window it was asked about. Nothing errored and the table was empty and cheerful. This is the third time this
+pattern has cost a reading (`leadlag_basis_cells.py`, 2026-09-21) and the second file it has cost it in: the glob in
+both `leadlag-coins.mjs` and `leadlag-cadence-gate.mjs` now matches both prefixes.
+
+On the fresh dump the read is: 194 settlements, 239.94 contracts. New coins **143.9 of the 400 required** over 6
+day-clusters at +3.39c/contract [-13.47, +20.25]; BTC/ETH +8.12c [-1.53, +17.78]. Neither bound fires. Due moved to
+09-25; final date 2026-10-04, at which the registration narrows by default. At ~29 contracts a day the sample arrives
+around 09-28.
+
+### The read that failed: backlog 167, the Polymarket WebSocket shadow
+
+`docs/PREREGISTERED-leadlag-polyws-shadow.md` leg 1 asks for >= 98% agreement between the pushed top and the REST book
+over >= 500 rows with the socket top under 5 s old. Measured over 6 days: **82.62% over 397 rows** - short of the
+threshold and of the minimum sample. Leg 2 passes enormously: the median is **1,762** top changes per 15-minute window
+against the 3 required. The registration says that below the agreement bar "nothing else is read", and it closes here
+without the follow-on registration; 233 supersedes it anyway.
+
+What the numbers say about WHY is worth keeping, because the obvious explanation is wrong. Disagreement does not rise
+with the socket top's age - 17.1% at 0-1 s against 9.0% at over 5 s - so this is not a stale picture of a moving book,
+it is a different reading of the same book. Recorded as backlog 246 for 233's build to check, not fixed here.
+
+### The reads that only moved
+
+- **235, the re-armed Polymarket US fade.** The app's own `polyusFadeRead` ran at 00:15:23Z: WAIT, 10 settled, 4
+  losses over 1 day, -33.90c/contract. The maintainer's venue cross-check agrees exactly - `venue-pnl.py --by-arm`
+  puts `mini:fade` at 10 resolutions and -$3.39, which is -33.9c/contract. No registered action on WAIT. But the
+  ladder stopped the arm on 09-23 at 8 trades, so the cohort cannot grow, so the read can never reach its 15-loss /
+  250-settled first threshold and will sit WAIT until 2026-12-31 and then retire as INCONCLUSIVE. A registration whose
+  evidence supply its own ladder has cut off is stalled, not pending - backlog 247.
+- **2, the WebSocket order book.** `state.wsStats.dayLog`: 09-19 0.99480, 09-20 **0.98950**, 09-21 0.99153, 09-22
+  0.99721, 09-23 0.99393. The rule wants 7 consecutive days at or above 0.99; 09-20 breaks it and the current streak
+  is 3. Due moved a day.
+- **1, the critic skill.** `python scripts/critic-skill.py` on a fresh dump: **KEEP veto mode OFF** - VETO -0.043 per
+  contract against the rest at +0.033, skilled in 1 of the 2 shared enabled strategies, so the amended rule's
+  conjunction is not met. `intelligenceMode` is already `shadow`; nothing changed. Due moved a day.
+- **65b/80c, the challenger forecaster.** `node scripts/hunch-paired.mjs`: 426 paired, **0 paired-and-settled**, so
+  there is nothing to read. Backlog 65b's own note was that no rule had ever been registered for a shadow spending
+  about $0.15 a day; `docs/PREREGISTERED-hunch-challenger.md` is that rule, written before its numbers existed, with
+  the bar (20 paired-and-settled, day-clustered 80% on the paired Brier difference) and a **termination date of
+  2026-10-24** so a registration whose evidence never arrives still ends. `hunchChallengerEnabled` unchanged.
+
+### The measurement that changes what a trigger means: the Polymarket consensus shadow
+
+`python scripts/polymarket_consensus.py report` leads with "graded 477809". `data/polymarket-consensus/grades.jsonl`
+has 480,107 rows and **11,041 distinct `(title, kalshi_market, ts)`** - a 43x duplication, with the worst keys
+re-graded 129-133 times. The cause is the one §163 named: `state.json` has been frozen at 2026-09-21T10:00Z since the
+power loss, so every hourly run re-grades the same signals. Build-queue 13's go-live trigger is ">= 100 graded and the
+consensus beating the price after fees", and on 477,809 it reads as overwhelmingly met.
+
+De-duplicated (latest grade per key): 11,041 graded, hit rate 0.693, Brier 0.1008; P&L per contract at the Polymarket
+price **+0.0029, 95% [-0.0030, +0.0088]** - includes zero; P&L at the Kalshi ask net of fee n=1,436 **+0.0463, 95%
+[+0.0189, +0.0737]**. The executable leg survives de-duplication unchanged, and it is the only leg with a band clear of
+zero - but both bands are i.i.d. over rows, and this house promotes nothing on an unclustered band. Backlog 248 blocks
+build-queue 13 until the state file is repaired and the read is day-clustered.
+
+### Corrections to yesterday's record, and one of my own
+
+- **Backlog 245's premise is wrong.** It was filed on 09-23 because `OracleTrader-PolyConsensus` was found Disabled,
+  on the reasoning that "nothing in this repo disables a task". `scripts/lib/task-watch.mjs` records that **§163
+  disabled it deliberately** the same morning, together with the spot-first recorder, and removed both from the
+  sentinel's watch list. Yesterday's run re-enabled it and restarted the duplication measured above. The task is left
+  running, because the maintenance prompt still gives this shadow an active go-live trigger and disabling a live
+  registered read's collection on one line of a comment is not mine to do; the conflict is backlog 249.
+- **My own, same shape, same morning.** I found `OracleTrader-SpotShadow` Disabled with its recorder dead since
+  09-23T08:15Z and re-enabled and started it at 11:17Z - on the freshness signal alone, before reading
+  `task-watch.mjs`, which says §163 disabled it after its registered FAIL in §157 (it wrote ~100 MB a day and polled
+  Kalshi's shared public endpoint every 2 s). Undone at 11:18Z: process stopped, task Disabled. Residue:
+  `data/spot-shadow/2026-09-24.jsonl` (21 KB) and about 700 bytes of `recorder.log`. **A task being off is not
+  evidence that it should be on. Read why before reviving it** - and the place that knows why is the watch list, not
+  the task's own state.
+
+### Liveness, sentinel and the rest
+
+All green. App up and restarted at 11:13:20Z onto today's bundle; `main.log` current; `ladder.json` last tick
+10:15:20Z; BTC collector up; `reviews/2026-09-24.md` present. Sentinel `status.json` 10:50:01Z, one repair session
+today, **no incident OPEN**. The day's only incident (10:35Z, `engine` portfolio read failing) was closed by the
+on-call session as NOT-A-DEFECT: an upstream Polymarket US partial outage, `/v1/portfolio/positions` and
+`/v1/orders/open` at 503 `code:14` while `/v1/account/balances` and both activities feeds returned 200 on the same
+signed credential. Still live at 11:12Z with the fallback snapshot 3,004 s old; suppressed until 09-25T12:00Z. The
+residue that session flagged and did not change is unchanged: the last-good-snapshot fallback has no age ceiling, and a
+snapshot is discarded whole even when its balances leg succeeded (backlog 250).
+
+`data/metaculus-shadow/pairs.jsonl` looked 10 h stale and is not: line 186 of `metaculus-shadow.cjs` dedupes per UTC
+day, so it is written once a day by design and the hourly signal is `last-mc.json` (10:35:47Z) - which is exactly what
+the sentinel watches. The liveness wording in the maintenance prompt is what is wrong, not the shadow.
+
+Changed: `scripts/leadlag-coins.mjs`, `scripts/leadlag-cadence-gate.mjs` (dump glob), `scripts/lab-review.py` (fill
+bracket), `src/main/strategies/ibkrSignals.ts`, `src/main/strategies/polyPaper.ts` (retirements),
+`scripts/tests/poly-paper.test.ts`, `scripts/tests/ibkr-lab.test.ts`. Added:
+`docs/PREREGISTERED-hunch-challenger.md`. Tests: review-fixes 628/0, ladder 177/0, adversarial 96/0, `npm test` 22/22;
+`tsc --noEmit` clean; `electron-vite build` clean; backup `MAINT-2026-09-24`. Verified after the restart: both
+retirement sets present in `out/main/index.js`, and the newest admission for momentum, log-momentum and breakout is
+11:06:10Z - before the restart, none after.
