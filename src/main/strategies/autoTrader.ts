@@ -41,6 +41,7 @@ import { stationLocalHour, ThinQuoter } from './quoter'
 import { DutchBookEngine } from './dutchBook'
 import { CryptoConvergenceEngine } from './cryptoConvergence'
 import { LeadLagEngine } from './leadLag'
+import { scanSlotVerdict, SCAN_WEDGE_MS } from './scanSlot'
 import { OracleIntelligenceEngine } from '../intelligence/engine'
 import { app } from 'electron'
 
@@ -328,36 +329,10 @@ export function phaseDurations(marks: [string, number][]): Record<string, number
   return out
 }
 
-/**
- * How long a scan may hold the `busy` flag before the next tick takes the slot anyway.
- *
- * Twenty times the slowest scan on record (210 s, 2026-09-20T13:22Z). The point is not to catch a slow pass
- * but a pass that will never end.
- */
-export const SCAN_WEDGE_MS = 15 * 60_000
-
-/**
- * Who owns the scan slot on this tick.
- *
- * `busy` is a plain boolean cleared in a `finally`, so a THROWN scan always releases it - but a scan that
- * never settles never reaches the `finally` at all, and every later tick then returns "scan already in
- * progress" forever, silently. That happened on 2026-09-20: the 21:12:17Z tick stalled during a host freeze
- * (the whole process logged nothing for 3 min and a Kalshi read came back 401 header_timestamp_expired) and
- * `state.lastScanAt` was still 21:11:17.627Z 2 h 42 min later. Exits, settlement and entries all live inside
- * the tick, so a Kalshi position that settled at 21:07Z was still sitting open in the ledger at 23:50Z.
- *
- * 'wedged' hands the slot to the new tick. The stale one is NOT cancelled - a promise cannot be - so it is
- * superseded instead: it may finish its awaits but must not trade or write the ledger (see `scanEpoch`).
- */
-export function scanSlotVerdict(
-  busy: boolean,
-  busyAt: number,
-  now: number,
-  wedgeMs = SCAN_WEDGE_MS
-): 'free' | 'busy' | 'wedged' {
-  if (!busy) return 'free'
-  return now - busyAt >= wedgeMs ? 'wedged' : 'busy'
-}
+// The slot guard moved to ./scanSlot on 2026-09-25 so the lead-lag engine's own poll can share it rather
+// than grow a second copy: it had the identical defect and wedged for 11 h. Re-exported unchanged, because
+// callers and scripts/tests/review-fixes.test.ts import both names from here.
+export { scanSlotVerdict, SCAN_WEDGE_MS }
 
 /**
  * The long-horizon slot cap that applies to one strategy's entry. Every arm shares

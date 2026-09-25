@@ -6608,3 +6608,95 @@ bracket), `src/main/strategies/ibkrSignals.ts`, `src/main/strategies/polyPaper.t
 `tsc --noEmit` clean; `electron-vite build` clean; backup `MAINT-2026-09-24`. Verified after the restart: both
 retirement sets present in `out/main/index.js`, and the newest admission for momentum, log-momentum and breakout is
 11:06:10Z - before the restart, none after.
+
+## §169 - 2026-09-25 11:30Z: the lead-lag engine had been wedged for 11 hours, and the slot guard the auto-trader got in September never reached it
+
+**The defect, and how it was proved before anything was changed.** `leadlag.json` had not been written since
+2026-09-24T23:59:22Z, `state.lastScanAt` read **2026-09-24T23:58:49.215Z**, and `legFailByDay` - a counter the scan
+increments once per completed cycle - had entries for 09-23 (925 cycles) and 09-24 (1,315) and **no key at all for
+09-25**. Meanwhile `main.log` printed a `[leadlag] scanned ...` line every 30 minutes, byte-identical each time, with
+the dislocation total frozen at 42,843 and every pair in the `8 no Polymarket quote` bucket. Those two facts together
+are the whole diagnosis: `autoTrader.runLeadLag` was still being called every 60 s (its summary logs every 30th cycle,
+which is exactly the 30-minute spacing), and `LeadLagEngine.scanAndSweep` was returning at its first line.
+
+That line was `if (this.running || !cfg.leadLagEnabled) return`, and only one of the two can be responsible:
+`leadLagCfg()` sets `leadLagEnabled: true` as a literal (`autoTrader.ts`), and `paused` would have replaced the note
+with `exchange trading paused; not scanning`. So `running` had been stuck `true` since the pass that began at
+23:58:49Z - a promise that never settled, so the `finally` that clears the flag was never reached.
+
+**The venue was not the cause.** Probed read-only from this box at 11:13Z: Gamma resolved the current window's slug
+(`btc-updown-15m-1790334000` -> 200, Up/Down outcomes, both token ids) and the CLOB answered both `/book` and
+`/midpoint` on the resolved token. Polymarket was healthy; the arm simply was not asking.
+
+**Cost.** `kalshi-leadlag` is the only live arm that is net positive (+$5.14 over 82 settled). It observed nothing
+from 2026-09-24T23:58Z to the 11:22Z restart - 11 h 24 m, about 680 polls and most of a trading day.
+
+**The fix is the guard the auto-trader already has, moved so both can use it.** `scanSlotVerdict` and `SCAN_WEDGE_MS`
+came out of `autoTrader.ts` into a new `src/main/strategies/scanSlot.ts` and are re-exported from their old home, so
+every existing caller and `scripts/tests/review-fixes.test.ts` are unchanged. `LeadLagEngine` now carries `runningAt`
+and `runGen`: a pass more than `LEADLAG_WEDGE_MS` (5 min, five missed polls) old is superseded with a logged
+`[leadlag] scan wedged for N min - taking the slot`, and the superseded pass - which cannot be cancelled, only
+outvoted - is blocked from three things it must not do when it finally wakes. It may not `sweep` (the generation
+check sits in the condition at both dislocation branches, so an order is never placed on an hours-old price), it may
+not `persist` the window ledger it reserved against a stale view, and it may not rewrite `note` or release a slot
+another pass now owns. A paused exchange does not take the slot at all; the first unpaused poll supersedes it a
+minute later.
+
+This is the second time the same defect has been paid for. The auto-trader's own `busy` boolean wedged on 2026-09-20
+and left a settled Kalshi position open in the ledger for 2 h 42 m; `scanSlotVerdict` was written then, for that one
+call site, and the engine one layer down kept its own bare boolean. The lesson is in the new file's header.
+
+**Test.** `leadLagContainmentTests` gains a fourth block that reproduces the shape exactly: the mocked CLOB `/book`
+returns headers and then never resolves its body, so the first pass hangs. Inside the window the pass holds the slot
+and a second poll is refused rather than queued; past the deadline the next poll logs the takeover and scans all
+eight pairs; and when the hung fetches are finally released the superseded pass completes without placing an order,
+without reclaiming the slot and without overwriting the live note. review-fixes 632/0, ladder 177/0, adversarial
+96/0, `tsc --noEmit` clean, `electron-vite build` clean, backup `MAINT-2026-09-25`.
+
+**Verified live.** Restarted 11:22:26Z (PID 8084). By 11:23:01Z `leadlag.json` was being written again, `lastScanAt`
+read 2026-09-25T11:23:00.859Z, `legFailByDay["2026-09-25"]` existed for the first time, and the note had turned over
+to `scanned 8 15m crypto pairs (4 live CLOB books) ... 0 no Polymarket quote`.
+
+### A second thing that never ended: the cull-gate task
+
+`OracleTrader-CullGate` had sat in Windows state **Running with last result 267014 since 2026-09-18 08:00 local** and
+**no process behind it**. A ghost instance still counts as an instance, so the task's "do not start a new instance"
+policy refused every scheduled run for seven days; the newest report on disk is `report-20260919-0710.txt`. Cleared
+with `schtasks /end` and started at 11:28:53Z (PID 36708, genuinely running). The read it feeds (57b/68a/78a) moves
+to 09-26 because the grading pass takes hours. Same family as the wedge above, and worth stating plainly: **two of
+today's findings are one shape - a thing that stops without stopping, and no check that watches for it.**
+
+### The thirteen registered reads
+
+Twelve were performed and recorded; the thirteenth (149, the ECMWF ENS shadow) was not built and says so in
+`docs/reads.json`. Six closed for good: **144a** (the lead-lag checkpoint landed at 82 and did not stop, so nothing
+to amend), **12/68b** (the mention base-rate shadow FAILED - Brier 0.2441 against the market's 0.1551 over 182 graded
+- and its line is closed, its task disabled), **150** (7 matched Kalshi/ForecastEx Fed-funds pairs, no basket under
+$1, nothing to register), **163** (no post-final sports edge; recorder disabled), **227** (the old list-price
+mechanism fills 1% of its triggers at a band spanning zero) and **158** (the basis gate would refuse the profitable
+fills). 227 and 158 together answer **217**: lead-lag stays at one contract, and the operator is not asked.
+
+**163 nearly produced a fake arbitrage, twice.** `data/sports-books` rows are not self-describing: `pm` is always the
+Polymarket LONG side's book and the Kalshi team's YES is it or `1 - it` per `kalshiTeamIsLong`
+(`sports-books.mjs:18`). Two passes of this read inverted the wrong leg and printed a median 33c "free" edge before
+the convention was checked in the source. Read correctly there is nothing: in the genuine post-final cases Kalshi is
+already at 0.98-0.99 / 0.01-0.02, and the wide cases are the stale in-play Polymarket book that read 234 retired the
+polyus-lag arm over.
+
+**147b had no statistic, like 198 yesterday.** Nothing in the repo computed "gap under 6c and under 3 minutes left",
+so `scripts/backtests/leadlag_endgame_read.py` was written to compute it. The registered source cannot answer it
+alone - `leadlag-cadence-shadow.jsonl` is written only inside the dislocation branch and only when the gap clears the
+fee, so it can hold a sub-6c gap only from before the 09-18 floor change - so the read reports that source first,
+unchanged, and `leadlag-quotes-shadow.jsonl` (every observed pair, including the gaps the floor refused) second as
+the only orderbook-era view. Endgame n=81 at +2.75c [-12.64, +18.15] on the registered source and n=52 at -23.24c
+[-55.58, +9.11] on the corroborating one: both under the 100 bar, neither positive at 95%, and disagreeing in sign.
+The 6c floor stays alone.
+
+Two Windows tasks were disabled today, both by their own registrations and neither on a freshness signal, and both
+are now written into `scripts/lib/task-watch.mjs` with the reason so the next session does not revive them the way
+`SpotShadow` was revived on 09-24: `OracleTrader-MentionShadow` (read 12/68b FAIL) and `OracleTrader-SportsBooks`
+(read 163 found nothing; its own note said to disable it in that case).
+
+Files: `src/main/strategies/scanSlot.ts` (new), `src/main/strategies/leadLag.ts`, `src/main/strategies/autoTrader.ts`,
+`scripts/lib/task-watch.mjs`, `scripts/backtests/leadlag_endgame_read.py` (new), `scripts/tests/review-fixes.test.ts`,
+`docs/reads.json`, `docs/BACKLOG.md`, `docs/MAINTENANCE-LOG.md`, `docs/reports/2026-09-25.md`.

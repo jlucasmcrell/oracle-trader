@@ -23,6 +23,7 @@ import { HttpError } from '../util/http'
 import { PreSubmitRefusal } from '../engine/engine'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { PolyClobWs } from '../services/polyClobWs'
+import { LEADLAG_WEDGE_MS, scanSlotVerdict } from './scanSlot'
 
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2'
 const POLY_GAMMA_API = 'https://gamma-api.polymarket.com'
@@ -424,6 +425,10 @@ export class LeadLagEngine {
     history: []
   }
   private running = false
+  /** When the pass holding `running` started, so one that never settles can be superseded (see scanSlotVerdict). */
+  private runningAt = 0
+  /** Bumped when a pass takes the slot. A superseded pass must not sweep or persist; it checks this. */
+  private runGen = 0
   private note = 'idle'
   private lastDislocation: LeadLagDislocation | null = null
   /** Previous observation per Kalshi ticker: who moved since last time. */
@@ -780,15 +785,25 @@ export class LeadLagEngine {
     /** Exchange trading paused (weekly maintenance): observe nothing, place nothing. */
     paused = false,
     /** A market another arm holds or rests on: never cross it (Kalshi nets the two into one signed position). */
-    heldElsewhere: (ticker: string) => boolean = () => false
+    heldElsewhere: (ticker: string) => boolean = () => false,
+    wedgeMs = LEADLAG_WEDGE_MS
   ): Promise<void> {
-    if (this.running || !cfg.leadLagEnabled) return
+    if (!cfg.leadLagEnabled) return
+    const now = Date.now()
+    const slot = scanSlotVerdict(this.running, this.runningAt, now, wedgeMs)
+    if (slot === 'busy') return
     if (paused) {
+      // Not taking the slot: a paused exchange observes nothing. A wedged pass stays wedged and is
+      // superseded by the first unpaused poll, which is the same verdict one minute later.
       this.note = 'exchange trading paused; not scanning'
       return
     }
+    if (slot === 'wedged') {
+      this.log(`[leadlag] scan wedged for ${Math.round((now - this.runningAt) / 60_000)} min — taking the slot; the stale pass can no longer sweep or persist`)
+    }
     this.running = true
-    const now = Date.now()
+    this.runningAt = now
+    const gen = ++this.runGen
 
     try {
       this.state.lastScanAt = now
@@ -953,7 +968,8 @@ export class LeadLagEngine {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi ask ${(kYesAsk * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
           }
-          if (canTrade && d.clearsFees && !heldElsewhere(ticker)) await this.sweep(adapter, d, 'YES', kYesAsk, cfg, shardOf(kalshiMarket))
+          // `this.runGen === gen`: a superseded pass must not put an order on a price that is now hours old.
+          if (canTrade && d.clearsFees && !heldElsewhere(ticker) && this.runGen === gen) await this.sweep(adapter, d, 'YES', kYesAsk, cfg, shardOf(kalshiMarket))
         } else if (kYesBid - poly.mid >= threshold) {
           // Polymarket below Kalshi's bid: the Kalshi YES bid looks rich; buying NO at 1 − bid.
           foundDislocations++
@@ -988,7 +1004,7 @@ export class LeadLagEngine {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi bid ${(kYesBid * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
           }
-          if (canTrade && d.clearsFees && !heldElsewhere(ticker)) await this.sweep(adapter, d, 'NO', kYesBid, cfg, shardOf(kalshiMarket))
+          if (canTrade && d.clearsFees && !heldElsewhere(ticker) && this.runGen === gen) await this.sweep(adapter, d, 'NO', kYesBid, cfg, shardOf(kalshiMarket))
         }
         } catch (e) {
           errors++
@@ -1017,6 +1033,8 @@ export class LeadLagEngine {
         const tickers = [...this.fastPairs.values()].map((p) => p.ticker)
         if (tickers.length) this.fast.books.start(tickers)
       }
+      // A superseded pass reports what it saw hours ago; the note is the live one's.
+      if (this.runGen !== gen) return
       this.foundLast = foundDislocations
       // Every pair lands in exactly one bucket, so this adds up to the pair count.
       this.note = `scanned ${pairs.length} 15m crypto pairs (${pairsObserved} live CLOB books), found ${foundDislocations} dislocations; skipped: ${wide} wide/no Polymarket book, ${noPoly} no Polymarket quote, ${extreme} Polymarket price outside 5-95c, ${kalshiFail} Kalshi fetch failed, ${noMarket} no Kalshi market, ${noQuote} no Kalshi quote, ${errors} errors`
@@ -1024,8 +1042,12 @@ export class LeadLagEngine {
       this.note = 'scan failed: ' + (e instanceof Error ? e.message : String(e))
       this.log('[leadlag] error: ' + this.note)
     } finally {
-      this.persist()
-      this.running = false
+      // A superseded pass may still settle, hours late. It must not write the window ledger it reserved
+      // against a stale view, and it must not release a slot another pass now owns.
+      if (this.runGen === gen) {
+        this.persist()
+        this.running = false
+      }
     }
   }
 

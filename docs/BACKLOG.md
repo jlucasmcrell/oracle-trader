@@ -7,7 +7,6 @@ Triaged 2026-09-23 (section 165): 294 entries, 113 closed, 181 open. Everything 
 nobody has to remember a date. What is left below is either the operator's, or code still to write.
 
 ## Needs the operator (each is his decision or his credentials)
-- **216/217** Lead-lag size above one contract. Recommendation: keep 1 until reads 227 and 158 (both 2026-09-25).
 - **232** IB Gateway logins: set up IBC with the IBKR login, or keep logging in by hand after reboots and weekly.
 - **185** Whether the nightly review may keep auto-applying to live arms. Moot for registered parameters, which it can
   no longer touch (section 163).
@@ -140,6 +139,21 @@ open is folded in here with its reason. Done items are removed, not ticked.
   Anthropic key, his call, do not re-raise. Kalshi deposit +$50 on 2026-09-07 ~10:20Z, equity $106.84 after it.)
 
 ## Recently done (so nobody re-does them)
+
+2026-09-25 (daily maintenance, section 169): **the lead-lag engine had been wedged for 11 h 24 m** - a scan
+that began 2026-09-24T23:58:49Z never settled, so `LeadLagEngine.running` stayed true and every 60 s poll
+returned at the guard while the log reprinted the same frozen summary. Proved from `legFailByDay` (no 09-25
+key at all), `lastScanAt` and a read-only probe showing Gamma and the CLOB both healthy; fixed by moving
+`scanSlotVerdict` into `src/main/strategies/scanSlot.ts` and giving the engine the same wedge-and-supersede
+guard the auto-trader got after the 2026-09-20 tick wedge (`runningAt`, `runGen`, `LEADLAG_WEDGE_MS` 5 min).
+Verified live at 11:23:01Z. **OracleTrader-CullGate** had been a ghost Running instance since 09-18 08:00
+local, silently refusing seven days of scheduled runs; cleared and started. Thirteen registered reads were
+due: twelve performed, **144a / 12/68b / 150 / 163 / 227 / 158 CLOSED**, **235 / 72b/161 / 147b / 57b-68a-78a
+/ 2 / 1 MOVED**, and **149 NOT BUILT** (recorded with its reason). 227 and 158 together settle **216/217**:
+lead-lag stays at one contract, so it is no longer the operator's decision. Two tasks disabled by their own
+registrations and written into `scripts/lib/task-watch.mjs`: **MentionShadow** (12/68b FAIL) and
+**SportsBooks** (163 found nothing). New: **249** (nothing watches for an engine-level wedge or a ghost
+task), **250** (the consensus shadow's duplication is still growing).
 
 2026-09-24 (daily maintenance, section 168): **125/181/190/198 READ and ACTED, 167 CLOSED (FAIL), 72b/161 + 2 + 1 +
 65b/80c MOVED, 235 CONFIRMED against the venue.** Both paper labs' registered read retired five arms - IBKR momentum,
@@ -2895,6 +2909,23 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   ladder's stop bar. Fix shape: a registered read should resolve as INCONCLUSIVE as soon as its arm is stopped and
   out of cool-down without the sample, rather than on its calendar date. Trigger: **any day**; it is a read-side
   change (`ReadRunner`/`registeredReads.ts`) and touches no size, arm or limit.
+- **249. Nothing watches for a thing that stops without stopping (2026-09-25, section 169).** Two of today's
+  findings are the same shape and neither was visible to any check. The lead-lag engine's `running` flag stuck
+  true for 11 h while `main.log` kept printing a cheerful summary, and `OracleTrader-CullGate` sat in Windows
+  state Running with no process behind it for seven days, so its own "do not start a new instance" policy
+  refused every run. The sentinel watches file mtimes and six of the sixteen tasks; neither symptom moves a
+  file or changes a task's state. Both are now fixed at the source, but the CLASS is not: any engine with a
+  `busy` boolean and any task with an instance policy can do this again. Cheapest form: have the sentinel read
+  `getQuantStatus()`'s per-engine `lastScanAt` (it is already exposed) and flag a task whose lastResult is
+  267014 with no matching process. Trigger: the next time `sentinel.mjs` is touched, or 2026-10-02, whichever
+  is first.
+- **250. The consensus shadow is still duplicating, and the count is still growing (2026-09-25).** Item 248
+  recorded 477,809 "graded" on 09-24 against 11,041 distinct signals; today `report` prints **646,265**. The
+  frozen `state.json` from the 09-21 power loss is still being re-graded every hour, so the file grows without
+  adding information and build-queue 13's trigger stays unreadable. 248 says do not read the count; 250 says
+  stop producing it. Fix: repair or rebuild `data/polymarket-consensus/state.json` so grading resumes from the
+  last real cursor, and de-duplicate `grades.jsonl` on `(title, market, ts)`. Trigger: next build-queue slot;
+  it is a measurement defect, not a money one, which is why it did not take today's slot.
 - **248. The consensus shadow's grades are 43x duplicated, and build-queue 13 must not read them (2026-09-24,
   section 168).** `data/polymarket-consensus/grades.jsonl` has 480,107 rows and 11,041 distinct
   `(title, kalshi_market, ts)`; the worst keys are re-graded 129-133 times, because `state.json` has been frozen at

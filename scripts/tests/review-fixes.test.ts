@@ -1117,6 +1117,55 @@ async function leadLagContainmentTests(): Promise<void> {
     globalThis.fetch = fetch3
     rmSync(dir3, { recursive: true, force: true })
   }
+
+  // 2026-09-25: the pass that started at 2026-09-24T23:58:49Z never settled, `running` stayed true, and every
+  // later poll returned at the guard for 11 h - the arm observed nothing and nothing said so. A pass that will
+  // never end must be superseded, and the stale one must not sweep on its hours-old prices when it wakes.
+  const orders4: string[] = []
+  const hungResolvers: (() => void)[] = []
+  const releaseHang = (): void => { while (hungResolvers.length) hungResolvers.pop()?.() }
+  let hang = true
+  const fetch4 = globalThis.fetch
+  globalThis.fetch = (async (url: string | URL | Request): Promise<Response> => {
+    const u = String(url)
+    if (u.includes('gamma-api.polymarket.com/events')) {
+      const coin = (/slug=([a-z0-9]+)-updown/i.exec(u)?.[1] ?? 'x').toUpperCase()
+      return { ok: true, json: async () => [{ markets: [{ id: `${coin}_MARKET`, outcomes: JSON.stringify(['Up', 'Down']), clobTokenIds: JSON.stringify([`${coin}_TOKEN`, `${coin}_DOWN`]) }] }] } as unknown as Response
+    }
+    if (u.includes('clob.polymarket.com/book')) {
+      // The shape that actually happened: headers arrive, the body never does, and no timeout covers it.
+      if (hang) await new Promise<void>((r) => { hungResolvers.push(r) })
+      return { ok: true, json: async () => ({ bids: [{ price: '0.59', size: '100' }], asks: [{ price: '0.61', size: '100' }] }) } as unknown as Response
+    }
+    if (u.includes('/orderbook')) return bookFor(u)
+    if (u.includes('kalshi.com/trade-api/v2/markets')) return { ok: true, json: async () => payload(0.49, 0.5, `KX${coinOf(u)}15M-${windowStartEpoch}`) } as unknown as Response
+    throw new Error('unmocked fetch: ' + u)
+  }) as typeof fetch
+  const countingAdapter = { placeOrder: async (o: { marketId: string }) => { orders4.push(o.marketId); return { shares: 1, avgPrice: 0.5 } } } as unknown as VenueAdapter
+  const dir4 = mkdtempSync(joinPath(tmpdir(), 'leadlag4-'))
+  const logs4: string[] = []
+  try {
+    const engine4 = new LeadLagEngine(joinPath(dir4, 'state.json'), (s) => { logs4.push(s) })
+    const wcfg4 = { ...cfg, leadLagMaxContractsPerWindow: 24, leadLagMaxSpendPerWindow: 100, leadLagMaxCoinsPerDirectionPerWindow: 8 }
+    const stale = engine4.scanAndSweep(countingAdapter, wcfg4, 'live', true, false, false, undefined, 40)
+    await new Promise((r) => setTimeout(r, 10))
+    eq('leadlag: a hung pass holds the slot while it is inside the wedge window', [engine4.status(wcfg4).active, engine4.status(wcfg4).note], [true, 'idle'])
+    await engine4.scanAndSweep(countingAdapter, wcfg4, 'live', true, false, false, undefined, 40)
+    eq('leadlag: a second poll inside the window is refused, not queued', [engine4.status(wcfg4).note, orders4.length], ['idle', 0])
+    await new Promise((r) => setTimeout(r, 45))
+    hang = false
+    await engine4.scanAndSweep(countingAdapter, wcfg4, 'live', true, false, false, undefined, 40)
+    eq('leadlag: past the wedge deadline the next poll takes the slot, says so, and scans', [engine4.status(wcfg4).note.startsWith('scanned 8 15m crypto pairs (8 live CLOB books)'), logs4.some((l) => /scan wedged for \d+ min — taking the slot/.test(l)), orders4.length], [true, true, 8])
+    const afterTakeover = orders4.length
+    const noteAfterTakeover = engine4.status(wcfg4).note
+    releaseHang()
+    await stale
+    eq('leadlag: the superseded pass finishes without sweeping its stale prices, reclaiming the slot or rewriting the note', [orders4.length, engine4.status(wcfg4).active, engine4.status(wcfg4).note], [afterTakeover, false, noteAfterTakeover])
+  } finally {
+    releaseHang()
+    globalThis.fetch = fetch4
+    rmSync(dir4, { recursive: true, force: true })
+  }
 }
 
 async function cancelOrderTests(): Promise<void> {

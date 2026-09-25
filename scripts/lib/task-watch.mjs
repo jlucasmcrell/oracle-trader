@@ -17,9 +17,16 @@ export const DEFAULT_STALE_MS = 130 * MIN
 export const TASK_WATCH = [
   ['hrrr-stale', 'data/hrrr-shadow/forecasts.jsonl', 'OracleTrader-HrrrShadow'],
   ['metaculus-stale', 'data/metaculus-shadow/last-mc.json', 'OracleTrader-MetaculusShadow'],
-  ['mention-stale', 'data/mention-shadow/run.log', 'OracleTrader-MentionShadow'],
   // Retired 2026-09-23 (section 163), their tasks disabled: the spot-first recorder after its FAIL (section 157), and the
   // consensus shadow after the arm's hard stop (section 152) - its state file had been torn since the 09-21 power loss.
+  // Retired 2026-09-25 (section 169), their tasks disabled by their own registered reads, NOT by a freshness signal:
+  //   OracleTrader-MentionShadow - read 12/68b FAIL: 182 graded strikes, base-rate Brier 0.2441 against the market's
+  //     0.1551, and the counterfactual 15c-gap taker loses 2.17c/contract. The registration's action on FAIL is
+  //     "close the line and disable the task".
+  //   OracleTrader-SportsBooks - read 163 found nothing: the post-final Kalshi book is at 1c/99c wherever
+  //     Polymarket's is, and the wide cases are the stale in-play book read 234 already retired. Its note said to
+  //     disable the recorder unless the read found something.
+  // Neither is stale and neither is a bug. Do not re-enable either on a freshness or "a strategy is off" signal.
 ]
 
 /**
