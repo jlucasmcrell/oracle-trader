@@ -1,365 +1,377 @@
 {
-  "about": "Every pending pre-registered read, one entry each (section 163). scripts/due-triggers.mjs lists an entry as DUE from its `due` date until `done` is set, however overdue; the daily maintenance session performs every DUE read exactly as its registration says, records the result in docs/BACKLOG.md and the changelog, then sets `done` (the date) or moves `due` to the next check with the reason in `note`. Entries with owner `app` are carried out by the running app itself (src/main/ladder/registeredReads.ts) and are listed here so nothing is invisible.",
-  "reads": [
-    {
-      "id": "233",
-      "owner": "app",
-      "due": "2026-09-26",
-      "what": "Lead-lag at event speed",
-      "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
-      "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
-      "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off"
-    },
-    {
-      "id": "234",
-      "owner": "app",
-      "due": "2026-09-24",
-      "what": "Polymarket US lag arm",
-      "how": "in-app polyusLagRead",
-      "rule": "docs/PREREGISTERED-polyus-lag.md",
-      "action": "FAIL retires polyus-lag via Ladder.retire; PASS leaves it to the ladder",
-      "done": "2026-09-23",
-      "note": "closed FAIL (section 164): the in-play prices were stale public data; retired by the app"
-    },
-    {
-      "id": "235",
-      "owner": "app",
-      "due": "2026-09-26",
-      "what": "Polymarket US favourite fade, re-armed 2026-09-23",
-      "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
-      "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
-      "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
-      "note": "2026-09-25: the app ran it at 00:13:21Z - WAIT, 10 settled, 4 losses over 1 day, -33.90c/contract, 80% [-inf, inf]; unchanged from 09-24 because the cohort is frozen. Confirmed against the venue record again: venue-pnl.py --by-arm puts mini:fade at 10 resolutions and -$3.39 = -33.9c/contract, exact agreement. Still STALLED, not pending (backlog 247): the ladder stopped the arm on 09-23 at 8 trades, cool-down to 09-26, so 15 losses or 250 settled is unreachable and WAIT repeats until 2026-12-31."
-    },
-    {
-      "id": "125/181/190/198",
-      "due": "2026-09-24",
-      "what": "Paper-lab first reads (IBKR and Polymarket)",
-      "how": "python scripts/lab-review.py",
-      "rule": "backlog 125, 181, 190, 198: judge arms at >=30 trades and >=4 days against the benchmark as well as zero; certain/probable fill brackets disagreeing in sign -> no conclusion",
-      "action": "retire arms that fail via IBKR_RETIRED / POLY_PAPER_RETIRED; do backlog 237 (re-grade Polymarket history) first",
-      "note": "READ and ACTED (section 168). Five arms retired at >= 30 closes / >= 4 day-clusters with the 80% band clear of zero on the wrong side: IBKR momentum -8.57c [-11.04,-6.10] 37/8, log-momentum -9.34c [-12.97,-5.72] 32/7, breakout -9.82c [-12.41,-7.23] 33/7 (IBKR_RETIRED, read against zero because the control is n=4 G=1, backlog 199); Polymarket join -7.29c [-9.54,-5.03] 71/5 and reversion -7.68c [-11.20,-4.16] 39/4 (POLY_PAPER_RETIRED, below zero AND below the anchoring control's -6.61c). Backlog 198's fill bracket was built first and AGREED for join (certain -7.25c over 12, probable -7.30c over 59), so the 'do not conclude' branch does not bite. Polymarket momentum and weather-forecast still cross zero and are not retired.",
-      "done": "2026-09-24"
-    },
-    {
-      "id": "167",
-      "due": "2026-09-24",
-      "what": "Lead-lag Polymarket WebSocket shadow",
-      "how": "the polyWs field of leadlag-dislocations.jsonl rows",
-      "rule": "docs/PREREGISTERED-leadlag-polyws-shadow.md: PASS at >= 98% agreement over >= 500 rows and median changes >= 3",
-      "action": "PASS -> write the follow-on registration; mostly superseded by 233",
-      "done": "2026-09-24",
-      "note": "CLOSED, FAIL on leg 1 (section 168): 82.62% agreement over 397 fresh rows against >= 98% over >= 500. Leg 2 passes hugely (median 1,762 top changes per window against 3). The registration reads nothing further below the agreement bar, so no follow-on registration; 233 supersedes. Residue: the disagreement is NOT age-driven (17.1% at 0-1 s vs 9.0% at >5 s), so it is an interpretation difference - backlog 246, for 233 to check."
-    },
-    {
-      "id": "72b/161",
-      "due": "2026-09-26",
-      "what": "Lead-lag coin cohort (frozen window from 09-19)",
-      "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
-      "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
-      "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-      "note": "2026-09-25 on tmp/kalshi-2026-09-25.json (the 09-24 glob fix held; the dump read is today's): 226 settlements, new coins 171.03 of the 400 required over 6 day-clusters at +1.52c [-12.54, +15.58]; BTC/ETH +5.91c [-0.51, +12.33]. Neither bound fires. The new-coin sample grew 27 contracts in a day, so 400 lands around 2026-10-03, one day before the 2026-10-04 date at which the rule narrows by default."
-    },
-    {
-      "id": "146b",
-      "due": "2026-10-02",
-      "what": "Lead-lag 6c gap floor",
-      "how": "venue ledger, orderbook rows only (python scripts/venue-pnl.py on fresh read-only dumps)",
-      "rule": "backlog 146b: >= 60 settled contracts over >= 5 days; upper bound < 0 -> revert leadLagMinDislocationCents to 4; starved at 2026-10-02 -> report to the operator",
-      "action": "config leadLagMinDislocationCents",
-      "note": "read 2026-09-23 on the venue ledger (scripts/backtests/leadlag_gap_floor_read.py on the 08:01Z read-only dump): 221 contracts over 6 day-clusters since the 09-18 19:50Z registration, net $5.07, +2.29c/contract, day-clustered 95% band [-9.65c, +14.24c]. Sample rule MET (>=60 contracts, >=5 clusters); every dislocation row under the rule is kalshiSource=orderbook (618/618), so the 09-19 amendment is satisfied by construction. INCONCLUSIVE: the upper bound is not below zero, so no revert to 4c; the lower bound is not above zero, so nothing is proved. leadLagMinDislocationCents stays 6. Re-read at the registration deadline 2026-10-02; the band is wide because one day (09-19, +10.56c on 99) carries the mean."
-    },
-    {
-      "id": "144a",
-      "what": "Lead-lag ladder checkpoint",
-      "how": "ladder.json kalshi-leadlag lastVerdict (80 settled; 65 on 09-22)",
-      "rule": "backlog 144a: if it stops on BTC/ETH while the coin cohort read is positive, amend first",
-      "action": "none unless it stops; move due forward until the checkpoint lands",
-      "done": "2026-09-25",
-      "note": "2026-09-25: CLOSED - the checkpoint landed and the arm did NOT stop. ladder.json kalshi-leadlag lastVerdict at 2026-09-25T10:17:41Z: 'checkpoint 82 trades, net $5.14, mean 0.06$ (80% band 0.03..0.09): making money with 80% confidence but not 95% (lower -0.01$) ... keep testing at this size'. The amend-first clause of backlog 144a is not reached: nothing to amend, the arm stays at tiny-live and at one contract."
-    },
-    {
-      "id": "12/68b",
-      "what": "Mention base-rate shadow",
-      "how": "python scripts/mention_shadow.py report",
-      "rule": "backlog 12: live only with a Brier score better than the market price (0.2390 vs 0.1447 on 09-23)",
-      "action": "FAIL -> close the line and disable OracleTrader-MentionShadow",
-      "done": "2026-09-25",
-      "note": "2026-09-25: FAIL, and the registered action was carried out. 113,877 observation rows, 719 strikes, 182 graded (over the 100 bar) - base-rate Brier 0.2441 against the market price's 0.1551, worse on all three corpora (fed n=48 0.1716/0.0959, trump n=63 0.2535/0.1748, trump-period n=71 0.2846/0.1776), and the counterfactual 15c-gap taker loses 2.17c/contract over 54 trades. Backlog 48's coverage check passes: all three corpora are represented in the graded rows. Line closed; OracleTrader-MentionShadow disabled and recorded in scripts/lib/task-watch.mjs so nothing revives it on a freshness signal."
-    },
-    {
-      "id": "147b",
-      "due": "2026-10-02",
-      "what": "Lead-lag endgame exception",
-      "how": "grade leadlag-cadence-shadow.jsonl rows with a gap under 6c and under 3 minutes left",
-      "rule": "backlog 147b: positive at 95% over >= 100 contracts-equivalent -> register",
-      "action": "registration only; otherwise the 6c floor stays alone",
-      "note": "2026-09-25: NOT YET, and the statistic had to be built first - nothing computed it (the same hole as backlog 198 on 09-24). New read-only grader scripts/backtests/leadlag_endgame_read.py. The registered source cannot answer it alone: leadlag-cadence-shadow.jsonl is written only inside the dislocation branch and only when the gap clears the fee, so it holds a sub-6c gap only from the pre-09-18 4c-floor era. On it: endgame (<3 min left) n=81, +2.75c [-12.64, +18.15]; rest n=546, -0.62c [-4.28, +3.05]. On leadlag-quotes-shadow.jsonl, which records every observed pair including the gaps the floor refused and is the only orderbook-era view: endgame n=52, -23.24c [-55.58, +9.11]; rest n=299, +4.98c [-11.13, +21.08]. Both endgame buckets are under the 100 contracts-equivalent bar and neither is positive at 95%, and the two sources disagree in sign, which is itself a reason not to register. The 6c floor stays alone. Re-read with the gap-floor read on 2026-10-02."
-    },
-    {
-      "id": "149",
-      "due": "2026-09-26",
-      "what": "ECMWF ensemble weather shadow",
-      "how": "build per backlog 149, then grade",
-      "rule": "backlog 149: positive at 95% over >= 30 station-days at the modal bracket -> register a taker weather arm",
-      "action": "build only",
-      "note": "2026-09-25: NOT BUILT, deliberately, and this is the one due item of the day that was not completed. ecmwf-opendata, cfgrib, xarray and eccodes are all absent from the environment, so the build starts with a four-package install (eccodes ships native binaries on Windows) before a line of the shadow exists, and the day's budget went to the lead-lag wedge (section 169), which was costing the only net-positive live arm its whole day. Step 4 forbids starting what cannot be finished and verified in one run. Nothing is blocked by the delay: weather stays closed either way and HRRR remains the control."
-    },
-    {
-      "id": "150",
-      "what": "Kalshi vs ForecastEx economics shadow",
-      "how": "python scripts/crossvenue_econ.py",
-      "rule": "backlog 150: descriptive (IJC excluded)",
-      "action": "registration only if a basket persists",
-      "done": "2026-09-25",
-      "note": "2026-09-25, the registered 7-day read: 12 ForecastEx contracts quoted against 413 captured Kalshi econ markets, 7 matched pairs, all Fed funds (temperature was excluded by the 09-18 amendment, IJC by the Flash F-10 note, RGDP deliberately unpaired). No basket is under $1 - the cheapest cross-venue pair costs $1.02 and the rest $1.03-$1.67 - so there is no Dutch book and nothing to register. One pair is quote-quality noise rather than a signal: FF_102926_3.875 shows 0.01/0.99 on ForecastEx against Kalshi's 0.66/0.68, which is an empty book, not a 17c disagreement. Depth on the real pairs is thin on the ForecastEx side (23-250 against Kalshi's 232-1000). Descriptive read complete; the line closes with no arm."
-    },
-    {
-      "id": "163",
-      "what": "Sports liquidity after the final",
-      "how": "data/sports-books rows after 2026-09-22T20:51:43Z",
-      "rule": "backlog 163: descriptive",
-      "action": "close the idea if nothing is found",
-      "note": "2026-09-25: NOTHING FOUND; the idea is closed and OracleTrader-SportsBooks is disabled per this read's own note. 46,656 team-cycles over 49 games after the 2026-09-22T20:51:43Z recorder fix. Sides must be read through sports-books.mjs:18 - `pm` is always the Polymarket LONG side's book and the Kalshi team's YES is it or 1 minus it, per kalshiTeamIsLong; reading it any other way manufactures a 33c arbitrage out of a labelling error, which two of this session's passes did before the convention was checked in the source. Read correctly: 29 games had a Polymarket side at >= 0.98, 4,652 post-collapse team-cycles, and in the genuine post-final cases Kalshi is already at 0.98-0.99 / 0.01-0.02, which is 0-1c gross and nothing after the taker fee. The wide cases (Kalshi at 48-66c while Polymarket reads 98%+) are not a post-final edge but the stale in-play Polymarket book that read 234 retired the polyus-lag arm over on 09-23.",
-      "done": "2026-09-25"
-    },
-    {
-      "id": "227",
-      "what": "Lead-lag: does the old list-price mechanism still find anything?",
-      "how": "python scripts/backtests/leadlag_list_mechanism.py --since 2026-09-22T18:02Z",
-      "rule": "backlog 227: frequent old-style fills with a band clear of zero -> add the list-price condition to leadLag.ts and take 217 to the operator; otherwise keep 1 contract and stop analysing",
-      "action": "code change on a pass",
-      "done": "2026-09-25",
-      "note": "2026-09-25: FAIL on both legs of the rule. 14,763 shadow rows since 2026-09-22T18:02Z over 1,453 settled tickers. The OLD list-price mechanism (list gap >= 4c, IOC at list + 1c) fires 6,953 times and would have filled 97 - a 1% fill rate, which is not 'frequent' - at +2.5 +/- 8.9c/contract, a band that spans zero. The live mechanism (gap >= 6c net of fee) fires 59 times at +6.5 +/- 12.0c. 17 tickers/sides overlap, 80 are old-only and 42 new-only. No list-price condition is added to leadLag.ts and 217 is not taken to the operator; lead-lag stays at one contract and this line stops being analysed."
-    },
-    {
-      "id": "158",
-      "what": "Basis cost by sweep size",
-      "how": "the basis scripts (leadlag_settlement_basis.py, leadlag_basis_cells.py)",
-      "rule": "backlog 158: any size above 1 needs that number positive",
-      "action": "feeds 217",
-      "done": "2026-09-25",
-      "note": "2026-09-25, and it answers 217 in the same direction as 227. Settlement basis: 1,958 matched windows over 3 days, Kalshi and Polymarket agree on 1,938 and disagree on 20 (1.02%); of our own 101 windows, 6 disagreed. Every disagreement landed within 4.6bp of the strike, so the basis cost is concentrated exactly where a sweep has no margin. By cell: the registered gate cell (mtc<3 and dist<5bp) is +9.13c/contract over 46 fills, 3 days, day-clustered 95% [+4.76, +13.50] - the fills a gate would refuse are the PROFITABLE ones (gated +$3.41 against kept -$2.95), so no gate is added, in either direction. With 227 failing, size above one contract has nothing supporting it: 217 stays at 1."
-    },
-    {
-      "id": "57b/68a/78a",
-      "due": "2026-09-26",
-      "what": "Questions the cull-gate answers",
-      "how": "after the OracleTrader-CullGate run of 2026-09-25 12:00Z completes (fix backlog 171 first)",
-      "rule": "backlog 57b, 68a (n >= 200), 78a",
-      "action": "per-series carve-out for mean-reversion only if its band excludes zero",
-      "note": "2026-09-25: could not be read, and the reason is a defect this session fixed. OracleTrader-CullGate had been stuck in Windows state Running since 2026-09-18 08:00 local with last result 267014 and NO process behind it - a ghost instance - so the task's 'do not start a new instance' policy silently refused every run for seven days and the newest report is report-20260919-0710.txt. Cleared with schtasks /end and started at 2026-09-25T11:28:53Z; PID 36708 is genuinely running. The grading pass takes hours (the 09-19 run took 07:10 to 11:25), so the read itself moves to 09-26. Backlog 171 (the report is written UTF-16 by the task's own PowerShell redirect) is untouched; the 09-19 report reads as plain ASCII, so it does not block the read."
-    },
-    {
-      "id": "156b",
-      "due": "2026-09-26",
-      "what": "Ladder false-promotion rate under a zero-edge null",
-      "how": "scripts/ladder-power-sim.ts",
-      "rule": "backlog 156b: report how often a null arm reaches each notch",
-      "action": "informs 29/30 only"
-    },
-    {
-      "id": "162",
-      "due": "2026-09-26",
-      "what": "Cross-series implication scan",
-      "how": "data/implication-scan",
-      "rule": "backlog 162: none in a week closes the family",
-      "action": "on none: disable OracleTrader-ImplicationScan"
-    },
-    {
-      "id": "164",
-      "due": "2026-09-26",
-      "what": "Lead-lag Kalshi read bursts",
-      "how": "per-day leg-failure count (backlog 170 must exist first)",
-      "rule": "backlog 164: > 2% of cycles -> pace reads, keeping the seat ordering",
-      "action": "leadLag.ts"
-    },
-    {
-      "id": "165",
-      "due": "2026-09-26",
-      "what": "In-play MLB books",
-      "how": "data/inplay-books",
-      "rule": "backlog 165: cents a taker gets at a stale book, after fees",
-      "action": "registration if positive"
-    },
-    {
-      "id": "191",
-      "due": "2026-09-26",
-      "what": "IBKR fade gate",
-      "how": "ibkr-lab status gateBlockers",
-      "rule": "lab gate: 15 sampled losses or 250 closes",
-      "action": "if it qualifies -> backlog 110"
-    },
-    {
-      "id": "2",
-      "due": "2026-09-26",
-      "what": "WebSocket order book for execution",
-      "how": "kalshi-auto.json state.wsStats.dayLog",
-      "rule": "backlog 2: 7 consecutive days >= 0.99 agreement",
-      "action": "then build 'use the socket book when under 5 s old'; until then move due forward a day",
-      "note": "2026-09-25: state.wsStats.dayLog 09-19 0.99480 PASS, 09-20 0.98950 FAIL, 09-21 0.99153, 09-22 0.99720, 09-23 0.99393, 09-24 0.99608. The streak is 4 of the 7 consecutive days the rule wants (09-21 to 09-24, all four above the bar and the volume growing: 33k compared on 09-21 against 122k on 09-24). 09-20 is still the break. Earliest the rule can fire is 2026-09-27."
-    },
-    {
-      "id": "202",
-      "due": "2026-09-27",
-      "what": "A maker slice can be lost to the 200-fill window",
-      "how": "main.log 'fill window too short' warnings",
-      "rule": "backlog 202",
-      "action": "reproduce, then widen the window or compare share counts"
-    },
-    {
-      "id": "86b",
-      "due": "2026-09-28",
-      "what": "Weekly lead-lag basis (Mondays)",
-      "how": "leadlag_settlement_basis.py <dump> 7 and leadlag_basis_cells.py",
-      "rule": "backlog 86b: build a gate only if a cell's day-clustered upper band is below zero over >= 7 days",
-      "action": "then move due to the next Monday"
-    },
-    {
-      "id": "221",
-      "due": "2026-09-28",
-      "what": "Lead-lag markout on the per-scan rows",
-      "how": "leadlag_executable_bound.py on leadlag-quotes-shadow.jsonl",
-      "rule": "backlog 221: signal vs execution",
-      "action": "report"
-    },
-    {
-      "id": "241",
-      "due": "2026-09-29",
-      "what": "IBKR lab: re-seat the arms the review kept",
-      "how": "backlog 241",
-      "rule": "merge the momentum family into one pre-registered arm held to settlement; report the slippage allowance apart",
-      "action": "IBKR_RULES_SINCE"
-    },
-    {
-      "id": "177",
-      "due": "2026-10-03",
-      "what": "Stop-loss / take-profit read",
-      "how": "python scripts/stop-analysis.py",
-      "rule": "backlog 177: adopt only if it beats holding by more than its own day-clustered SE over >= 40 trades and >= 5 days, in shadow first",
-      "action": "report"
-    },
-    {
-      "id": "240",
-      "due": "2026-10-06",
-      "what": "Polymarket paper lab: re-seat the kept arms",
-      "how": "backlog 240",
-      "rule": "four re-seats in one cohort reset",
-      "action": "POLY_PAPER_RULES_SINCE"
-    },
-    {
-      "id": "fade-v3",
-      "due": "2026-10-06",
-      "what": "Kalshi fade v3",
-      "how": "the read in docs/PREREGISTERED-fade-v3.md (>= 40 settled over >= 5 days)",
-      "rule": "docs/PREREGISTERED-fade-v3.md",
-      "action": "per the registration; a FAIL retires kalshi-fade"
-    },
-    {
-      "id": "145b",
-      "due": "2026-10-09",
-      "what": "Mean-reversion as a taker",
-      "how": "venue ledger by arm (needs backlog 102b)",
-      "rule": "docs/PREREGISTERED-mean-reversion-taker.md: 95% upper bound < 0 -> stop; fewer than 40 settled contracts by then -> stopped for lack of flow",
-      "action": "Ladder.retire kalshi-mean-reversion"
-    },
-    {
-      "id": "225",
-      "due": "2026-10-12",
-      "what": "IBKR recalibration arm",
-      "how": "did any entry fire?",
-      "rule": "backlog 225; do not touch IBKR_HOLD_MAX_DAYS",
-      "action": "then design a separate marked-to-market arm"
-    },
-    {
-      "id": "87b",
-      "due": "2026-10-15",
-      "what": "Midterm-night favourites",
-      "how": "pre-register",
-      "rule": "backlog 87b: election-call series only, 85-97c",
-      "action": "registration"
-    },
-    {
-      "id": "70b/73a/77b",
-      "due": "2026-10-17",
-      "what": "Market-maker simulation verdict (after 23:04Z)",
-      "how": "node scripts/mmsim-grade.mjs --verdict",
-      "rule": "INCONCLUSIVE is a do-not-pursue; a PASS authorises only a 14-day live confirmation at 1 contract",
-      "action": "stop the mmsim task on FAIL or INCONCLUSIVE"
-    },
-    {
-      "id": "242",
-      "due": "2026-11-17",
-      "what": "IBKR political slope on history",
-      "how": "fit on ForecastEx daily files since 2024-09",
-      "rule": "backlog 242",
-      "action": "report; or earlier if calibration is proposed for live money"
-    },
-    {
-      "id": "81c",
-      "due": "2027-01-05",
-      "what": "Awards-season rule",
-      "how": "pre-register",
-      "rule": "backlog 81c",
-      "action": "registration"
-    },
-    {
-      "id": "58b/66a",
-      "due": "2027-01-01",
-      "what": "15-minute crypto momentum carve-out",
-      "how": "node scripts/crypto15-gate.mjs",
-      "rule": "backlog 58b/66a",
-      "action": "moot while momentum is declined to 2027-01-01"
-    },
-    {
-      "id": "1",
-      "due": "2026-09-26",
-      "what": "Critic skill check (daily)",
-      "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
-      "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
-      "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-      "note": "2026-09-25: KEEP veto mode OFF, on the amended rule the script now encodes. 2,388 decisions; settled 555 ABSTAIN / 310 VETO / 65 ERROR / 24 ALLOW_UNCHANGED. VETO -0.042/contract against the rest's +0.033, so condition (i) passes (VETO's own net is below zero) and (ii) passes (7.5c below the rest), but (iii) fails: of the two enabled arms present in both cohorts the critic is skilled in one (fade, VETO +0.008 against ABSTAIN +0.012) and anti-skilled in the other (mean-reversion, VETO +0.145 against ABSTAIN -0.091). One of two is not a strict majority. intelligenceMode stays 'shadow', intelligenceEnabled stays true; unchanged."
-    },
-    {
-      "id": "65b/80c",
-      "due": "2026-10-24",
-      "what": "Challenger forecaster paired read",
-      "how": "node scripts/hunch-paired.mjs",
-      "rule": "docs/PREREGISTERED-hunch-challenger.md",
-      "action": "config hunchChallengerEnabled",
-      "note": "2026-09-24: the rule that did not exist is now registered - docs/PREREGISTERED-hunch-challenger.md: read at >= 20 paired AND settled markets on the paired Brier difference, day-clustered 80%; no advantage -> hunchChallengerEnabled false; and false on 2026-10-24 regardless if 20 paired-and-settled do not exist by then. Today: 426 paired, 0 settled, so nothing is readable. Next due date is the termination date; an earlier read happens the moment the sample exists."
-    },
-    {
-      "id": "40/75b",
-      "due": "2026-09-28",
-      "what": "Anti-flood cap re-check (weekly)",
-      "how": "kalshi-auto.json openTrades count",
-      "rule": "backlog 40: openTrades >= 60 on 3 consecutive days -> review the per-series cap",
-      "action": "then move due a week"
-    },
-    {
-      "id": "110",
-      "due": "2026-09-26",
-      "what": "First live IBKR order",
-      "how": "ibkr-lab status gateBlockers (the first arm with none)",
-      "rule": "backlog 110",
-      "action": "push the operator: adding an arm to liveStrategies is his"
-    },
-    {
-      "id": "10",
-      "due": "2026-12-15",
-      "what": "Metaculus shadow",
-      "how": "electron scripts/metaculus-shadow.cjs report",
-      "rule": "backlog 10: >= 100 resolved pairs; build an arm only if the community forecast beats the Kalshi mid",
-      "action": "report"
-    },
-    {
-      "id": "11",
-      "due": "2026-09-28",
-      "what": "Forecaster v2 (weekly)",
-      "how": "node scripts/hunch-gate.mjs",
-      "rule": "PREREGISTERED-llm-hunch: the hunch gate reaching 200 settled events without passing",
-      "action": "build v2 in shadow under its own registration; else move due a week"
-    }
-  ]
+ "about": "Every pending pre-registered read, one entry each (section 163). scripts/due-triggers.mjs lists an entry as DUE from its `due` date until `done` is set, however overdue; the daily maintenance session performs every DUE read exactly as its registration says, records the result in docs/BACKLOG.md and the changelog, then sets `done` (the date) or moves `due` to the next check with the reason in `note`. Entries with owner `app` are carried out by the running app itself (src/main/ladder/registeredReads.ts) and are listed here so nothing is invisible.",
+ "reads": [
+  {
+   "id": "233",
+   "owner": "app",
+   "due": "2026-09-27",
+   "what": "Lead-lag at event speed",
+   "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
+   "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
+   "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
+   "note": "2026-09-26: CONTINUE. The app's own read at 00:02:31Z: +0.21c/contract, 80% [-1.18, 1.60], n=1312 over 4 days (band spans zero). The maintenance grader on a nine-hour-longer window agrees and moves nothing: -0.05c, 80% [-1.19, +1.09], n=1591 over 5 days at the registered 6c threshold. leadLagFastLive stays off. Reported whatever the verdict, as registered: at 6c the gaps last a median 0.8 s (p75 2.0, p90 5.0; 58% under 1 s, 89% under 5 s) at 47.7/hour, so the answer to the operator's co-location question is NO. Reads daily to 2026-10-03."
+  },
+  {
+   "id": "234",
+   "owner": "app",
+   "due": "2026-09-24",
+   "what": "Polymarket US lag arm",
+   "how": "in-app polyusLagRead",
+   "rule": "docs/PREREGISTERED-polyus-lag.md",
+   "action": "FAIL retires polyus-lag via Ladder.retire; PASS leaves it to the ladder",
+   "done": "2026-09-23",
+   "note": "closed FAIL (section 164): the in-play prices were stale public data; retired by the app"
+  },
+  {
+   "id": "235",
+   "owner": "app",
+   "due": "2026-09-27",
+   "what": "Polymarket US favourite fade, re-armed 2026-09-23",
+   "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
+   "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
+   "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
+   "note": "2026-09-26: WAIT, and the venue record matches the app's cohort to the cent. App at 00:02:31Z: 10 settled, 4 losses over 1 day, -33.90c/contract, 80% [-Inf, Inf] (one day cluster). scripts/venue-pnl.py --since 2026-09-23T09:00:00Z --by-arm: mini:fade n=10 -$3.39 = -33.9c/contract. Bar is 15 losses or 250 settled, so no FAIL and no retirement. BACKLOG 247 moved: ladder.json reads 'cool-down until 2026-09-26 after 1 stop(s)', so the cool-down expires today and the ladder may re-arm the arm on its own, which would let the frozen cohort grow."
+  },
+  {
+   "id": "125/181/190/198",
+   "due": "2026-09-24",
+   "what": "Paper-lab first reads (IBKR and Polymarket)",
+   "how": "python scripts/lab-review.py",
+   "rule": "backlog 125, 181, 190, 198: judge arms at >=30 trades and >=4 days against the benchmark as well as zero; certain/probable fill brackets disagreeing in sign -> no conclusion",
+   "action": "retire arms that fail via IBKR_RETIRED / POLY_PAPER_RETIRED; do backlog 237 (re-grade Polymarket history) first",
+   "note": "READ and ACTED (section 168). Five arms retired at >= 30 closes / >= 4 day-clusters with the 80% band clear of zero on the wrong side: IBKR momentum -8.57c [-11.04,-6.10] 37/8, log-momentum -9.34c [-12.97,-5.72] 32/7, breakout -9.82c [-12.41,-7.23] 33/7 (IBKR_RETIRED, read against zero because the control is n=4 G=1, backlog 199); Polymarket join -7.29c [-9.54,-5.03] 71/5 and reversion -7.68c [-11.20,-4.16] 39/4 (POLY_PAPER_RETIRED, below zero AND below the anchoring control's -6.61c). Backlog 198's fill bracket was built first and AGREED for join (certain -7.25c over 12, probable -7.30c over 59), so the 'do not conclude' branch does not bite. Polymarket momentum and weather-forecast still cross zero and are not retired.",
+   "done": "2026-09-24"
+  },
+  {
+   "id": "167",
+   "due": "2026-09-24",
+   "what": "Lead-lag Polymarket WebSocket shadow",
+   "how": "the polyWs field of leadlag-dislocations.jsonl rows",
+   "rule": "docs/PREREGISTERED-leadlag-polyws-shadow.md: PASS at >= 98% agreement over >= 500 rows and median changes >= 3",
+   "action": "PASS -> write the follow-on registration; mostly superseded by 233",
+   "done": "2026-09-24",
+   "note": "CLOSED, FAIL on leg 1 (section 168): 82.62% agreement over 397 fresh rows against >= 98% over >= 500. Leg 2 passes hugely (median 1,762 top changes per window against 3). The registration reads nothing further below the agreement bar, so no follow-on registration; 233 supersedes. Residue: the disagreement is NOT age-driven (17.1% at 0-1 s vs 9.0% at >5 s), so it is an interpretation difference - backlog 246, for 233 to check."
+  },
+  {
+   "id": "72b/161",
+   "due": "2026-09-27",
+   "what": "Lead-lag coin cohort (frozen window from 09-19)",
+   "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
+   "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
+   "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
+   "note": "2026-09-26 (on a FRESH dump, unlike 09-24): NOT YET. 268 settlements, 346.07 contracts. New coins 210.03 of the required 400 contracts, +3.73c/contract, 95% [-7.01, +14.46] over 8 day-clusters; BTC/ETH -1.64c [-18.68, +15.40]; pooled +1.62c. Neither branch fires, so leadLagCoins keeps the eight and leadLagProvenCoins stays absent. Per coin: BNB +6.60c, HYPE +5.17c, SOL +5.04c, XRP +2.90c, BTC +1.54c, DOGE -3.83c, ETH -7.47c, ZEC -17.16c (n=4). Final 2026-10-04."
+  },
+  {
+   "id": "146b",
+   "due": "2026-10-02",
+   "what": "Lead-lag 6c gap floor",
+   "how": "venue ledger, orderbook rows only (python scripts/venue-pnl.py on fresh read-only dumps)",
+   "rule": "backlog 146b: >= 60 settled contracts over >= 5 days; upper bound < 0 -> revert leadLagMinDislocationCents to 4; starved at 2026-10-02 -> report to the operator",
+   "action": "config leadLagMinDislocationCents",
+   "note": "read 2026-09-23 on the venue ledger (scripts/backtests/leadlag_gap_floor_read.py on the 08:01Z read-only dump): 221 contracts over 6 day-clusters since the 09-18 19:50Z registration, net $5.07, +2.29c/contract, day-clustered 95% band [-9.65c, +14.24c]. Sample rule MET (>=60 contracts, >=5 clusters); every dislocation row under the rule is kalshiSource=orderbook (618/618), so the 09-19 amendment is satisfied by construction. INCONCLUSIVE: the upper bound is not below zero, so no revert to 4c; the lower bound is not above zero, so nothing is proved. leadLagMinDislocationCents stays 6. Re-read at the registration deadline 2026-10-02; the band is wide because one day (09-19, +10.56c on 99) carries the mean."
+  },
+  {
+   "id": "144a",
+   "what": "Lead-lag ladder checkpoint",
+   "how": "ladder.json kalshi-leadlag lastVerdict (80 settled; 65 on 09-22)",
+   "rule": "backlog 144a: if it stops on BTC/ETH while the coin cohort read is positive, amend first",
+   "action": "none unless it stops; move due forward until the checkpoint lands",
+   "done": "2026-09-25",
+   "note": "2026-09-25: CLOSED - the checkpoint landed and the arm did NOT stop. ladder.json kalshi-leadlag lastVerdict at 2026-09-25T10:17:41Z: 'checkpoint 82 trades, net $5.14, mean 0.06$ (80% band 0.03..0.09): making money with 80% confidence but not 95% (lower -0.01$) ... keep testing at this size'. The amend-first clause of backlog 144a is not reached: nothing to amend, the arm stays at tiny-live and at one contract."
+  },
+  {
+   "id": "12/68b",
+   "what": "Mention base-rate shadow",
+   "how": "python scripts/mention_shadow.py report",
+   "rule": "backlog 12: live only with a Brier score better than the market price (0.2390 vs 0.1447 on 09-23)",
+   "action": "FAIL -> close the line and disable OracleTrader-MentionShadow",
+   "done": "2026-09-25",
+   "note": "2026-09-25: FAIL, and the registered action was carried out. 113,877 observation rows, 719 strikes, 182 graded (over the 100 bar) - base-rate Brier 0.2441 against the market price's 0.1551, worse on all three corpora (fed n=48 0.1716/0.0959, trump n=63 0.2535/0.1748, trump-period n=71 0.2846/0.1776), and the counterfactual 15c-gap taker loses 2.17c/contract over 54 trades. Backlog 48's coverage check passes: all three corpora are represented in the graded rows. Line closed; OracleTrader-MentionShadow disabled and recorded in scripts/lib/task-watch.mjs so nothing revives it on a freshness signal."
+  },
+  {
+   "id": "147b",
+   "due": "2026-10-02",
+   "what": "Lead-lag endgame exception",
+   "how": "grade leadlag-cadence-shadow.jsonl rows with a gap under 6c and under 3 minutes left",
+   "rule": "backlog 147b: positive at 95% over >= 100 contracts-equivalent -> register",
+   "action": "registration only; otherwise the 6c floor stays alone",
+   "note": "2026-09-25: NOT YET, and the statistic had to be built first - nothing computed it (the same hole as backlog 198 on 09-24). New read-only grader scripts/backtests/leadlag_endgame_read.py. The registered source cannot answer it alone: leadlag-cadence-shadow.jsonl is written only inside the dislocation branch and only when the gap clears the fee, so it holds a sub-6c gap only from the pre-09-18 4c-floor era. On it: endgame (<3 min left) n=81, +2.75c [-12.64, +18.15]; rest n=546, -0.62c [-4.28, +3.05]. On leadlag-quotes-shadow.jsonl, which records every observed pair including the gaps the floor refused and is the only orderbook-era view: endgame n=52, -23.24c [-55.58, +9.11]; rest n=299, +4.98c [-11.13, +21.08]. Both endgame buckets are under the 100 contracts-equivalent bar and neither is positive at 95%, and the two sources disagree in sign, which is itself a reason not to register. The 6c floor stays alone. Re-read with the gap-floor read on 2026-10-02."
+  },
+  {
+   "id": "149",
+   "due": "2026-09-26",
+   "what": "ECMWF ensemble weather shadow",
+   "how": "build per backlog 149, then grade",
+   "rule": "backlog 149: positive at 95% over >= 30 station-days at the modal bracket -> register a taker weather arm",
+   "action": "build only",
+   "note": "BUILT 2026-09-26 (section 170); the action was build only. Deps install and import clean (eccodes 2.48.0, cfgrib 0.9.15.1, xarray 2026.7.0, ecmwf-opendata 0.3.34; free, CC BY 4.0, no key). The registration named fields the source does not have: stream=enfo resol=0p25 has NEITHER mx2t6 nor mn2t6 (it answers 'No index entries for param=mx2t6. Did you mean mx2t3'), and type=cf is not indexed alongside them, so the ensemble is the 50 perturbed members without the control run. 3-hourly extrema are strictly better than 6-hourly for a daily max; the missing control costs one member of fifty. scripts/ecmwf_ens_shadow.py (pull/report): the 27 hrrr-shadow stations, nearest 0.25 deg point, each member's daily max over the 3-hourly maxima inside the station's LOCAL day, complete local days only, graded from data/hrrr-shadow/grades.jsonl so the ENS read shares its HRRR control's truth. No scheduled task was created - the daily maintenance run is the pull's cadence. Gate unchanged: >= 30 graded station-days at the modal bracket with a 95% band above zero before any taker weather arm. The grading read opens once station-days exist.",
+   "done": "2026-09-26"
+  },
+  {
+   "id": "150",
+   "what": "Kalshi vs ForecastEx economics shadow",
+   "how": "python scripts/crossvenue_econ.py",
+   "rule": "backlog 150: descriptive (IJC excluded)",
+   "action": "registration only if a basket persists",
+   "done": "2026-09-25",
+   "note": "2026-09-25, the registered 7-day read: 12 ForecastEx contracts quoted against 413 captured Kalshi econ markets, 7 matched pairs, all Fed funds (temperature was excluded by the 09-18 amendment, IJC by the Flash F-10 note, RGDP deliberately unpaired). No basket is under $1 - the cheapest cross-venue pair costs $1.02 and the rest $1.03-$1.67 - so there is no Dutch book and nothing to register. One pair is quote-quality noise rather than a signal: FF_102926_3.875 shows 0.01/0.99 on ForecastEx against Kalshi's 0.66/0.68, which is an empty book, not a 17c disagreement. Depth on the real pairs is thin on the ForecastEx side (23-250 against Kalshi's 232-1000). Descriptive read complete; the line closes with no arm."
+  },
+  {
+   "id": "163",
+   "what": "Sports liquidity after the final",
+   "how": "data/sports-books rows after 2026-09-22T20:51:43Z",
+   "rule": "backlog 163: descriptive",
+   "action": "close the idea if nothing is found",
+   "note": "2026-09-25: NOTHING FOUND; the idea is closed and OracleTrader-SportsBooks is disabled per this read's own note. 46,656 team-cycles over 49 games after the 2026-09-22T20:51:43Z recorder fix. Sides must be read through sports-books.mjs:18 - `pm` is always the Polymarket LONG side's book and the Kalshi team's YES is it or 1 minus it, per kalshiTeamIsLong; reading it any other way manufactures a 33c arbitrage out of a labelling error, which two of this session's passes did before the convention was checked in the source. Read correctly: 29 games had a Polymarket side at >= 0.98, 4,652 post-collapse team-cycles, and in the genuine post-final cases Kalshi is already at 0.98-0.99 / 0.01-0.02, which is 0-1c gross and nothing after the taker fee. The wide cases (Kalshi at 48-66c while Polymarket reads 98%+) are not a post-final edge but the stale in-play Polymarket book that read 234 retired the polyus-lag arm over on 09-23.",
+   "done": "2026-09-25"
+  },
+  {
+   "id": "227",
+   "what": "Lead-lag: does the old list-price mechanism still find anything?",
+   "how": "python scripts/backtests/leadlag_list_mechanism.py --since 2026-09-22T18:02Z",
+   "rule": "backlog 227: frequent old-style fills with a band clear of zero -> add the list-price condition to leadLag.ts and take 217 to the operator; otherwise keep 1 contract and stop analysing",
+   "action": "code change on a pass",
+   "done": "2026-09-25",
+   "note": "2026-09-25: FAIL on both legs of the rule. 14,763 shadow rows since 2026-09-22T18:02Z over 1,453 settled tickers. The OLD list-price mechanism (list gap >= 4c, IOC at list + 1c) fires 6,953 times and would have filled 97 - a 1% fill rate, which is not 'frequent' - at +2.5 +/- 8.9c/contract, a band that spans zero. The live mechanism (gap >= 6c net of fee) fires 59 times at +6.5 +/- 12.0c. 17 tickers/sides overlap, 80 are old-only and 42 new-only. No list-price condition is added to leadLag.ts and 217 is not taken to the operator; lead-lag stays at one contract and this line stops being analysed."
+  },
+  {
+   "id": "158",
+   "what": "Basis cost by sweep size",
+   "how": "the basis scripts (leadlag_settlement_basis.py, leadlag_basis_cells.py)",
+   "rule": "backlog 158: any size above 1 needs that number positive",
+   "action": "feeds 217",
+   "done": "2026-09-25",
+   "note": "2026-09-25, and it answers 217 in the same direction as 227. Settlement basis: 1,958 matched windows over 3 days, Kalshi and Polymarket agree on 1,938 and disagree on 20 (1.02%); of our own 101 windows, 6 disagreed. Every disagreement landed within 4.6bp of the strike, so the basis cost is concentrated exactly where a sweep has no margin. By cell: the registered gate cell (mtc<3 and dist<5bp) is +9.13c/contract over 46 fills, 3 days, day-clustered 95% [+4.76, +13.50] - the fills a gate would refuse are the PROFITABLE ones (gated +$3.41 against kept -$2.95), so no gate is added, in either direction. With 227 failing, size above one contract has nothing supporting it: 217 stays at 1."
+  },
+  {
+   "id": "57b/68a/78a",
+   "due": "2026-09-26",
+   "what": "Questions the cull-gate answers",
+   "how": "after the OracleTrader-CullGate run of 2026-09-25 12:00Z completes (fix backlog 171 first)",
+   "rule": "backlog 57b, 68a (n >= 200), 78a",
+   "action": "per-series carve-out for mean-reversion only if its band excludes zero",
+   "note": "2026-09-26: NO CARVE-OUT. From the 09-25 12:00Z cull-gate run (data/cull-gate/report-20260925-0728.txt; 116,802 culled markets over 14 day files, 103,061 settled with a result): on the discarded population mean-reversion n=39,992 at -8.12c/contract, 95% [-9.83, -6.40]; momentum n=75,779 -8.41c [-9.79, -7.03]; mid-zone n=68,299 -8.74c [-10.26, -7.23]. The registered action was a per-series carve-out for mean-reversion only if its band excludes zero - it does, on the wrong side, so the anti-flood cap is protecting the account and nothing is carved out. Descriptive Wang leg: lambda_hat 0.130, 95% [0.119, 0.141] over n=69,563, excluding both 0 and the paper's 0.187; gates nothing, as registered. BACKLOG 171's remainder stands: the report is still UTF-16, and fixing it means editing a scheduled task's command.",
+   "done": "2026-09-26"
+  },
+  {
+   "id": "156b",
+   "due": "2026-09-26",
+   "what": "Ladder false-promotion rate under a zero-edge null",
+   "how": "scripts/ladder-power-sim.ts",
+   "rule": "backlog 156b: report how often a null arm reaches each notch",
+   "action": "informs 29/30 only",
+   "done": "2026-09-26",
+   "note": "2026-09-26: reported; informs 29/30 only, nothing acted on. scripts/ladder-power-sim.ts, 60 settled rows/day, 30 days, 600 paths per edge, judged every 20 rows, hard stop $5/notch. At a TRUE EDGE OF ZERO: 14% of null arms ever reach a scale-up; 82% / 92% / 96% stopped inside 7 / 14 / 30 days (30% by the hard stop, 66% by the 100-rule, 0% by the band); mean end P&L +$0.51, and -$0.97 conditional on being stopped. For scale, a +1.5c arm scales up 26% of the time and a +5c arm 70%, so the ladder discriminates a null from a real edge at the scale-up notch at roughly 14% against 26-70%. This is the denominator for reading any single promotion."
+  },
+  {
+   "id": "162",
+   "due": "2026-10-03",
+   "what": "Cross-series implication scan",
+   "how": "data/implication-scan",
+   "rule": "backlog 162: none in a week closes the family",
+   "action": "on none: disable OracleTrader-ImplicationScan",
+   "note": "2026-09-26: the family stays OPEN, barely. Flagged rows exist on 09-19, 09-20, 09-21, 09-22 and 09-26, so it is not 'none in a week' and OracleTrader-ImplicationScan is NOT disabled. Today's single row is KXNHLSPREAD-26SEP25NYRNYI-NYI2 inside its moneyline at 0.65c surplus after fees, and the last five half-hourly passes read '0 flagged, 0 confirmed' over ~3,100 spreads and ~6,200 pairs. One 0.65c pair a week is not a strategy, and is why this family has no arm. Next read 2026-10-03: none in that week closes it."
+  },
+  {
+   "id": "164",
+   "due": "2026-09-26",
+   "what": "Lead-lag Kalshi read bursts",
+   "how": "per-day leg-failure count (backlog 170 must exist first)",
+   "rule": "backlog 164: > 2% of cycles -> pace reads, keeping the seat ordering",
+   "action": "leadLag.ts",
+   "done": "2026-09-26",
+   "note": "2026-09-26: UNDER THE BAR every day; leadLag.ts untouched. BACKLOG 170's persisted counter answers it directly, which is what 09-25 built it for. legFailByDay: 09-23 3/925 = 0.32%, 09-24 1/1315 = 0.08%, 09-25 4/753 = 0.53%, 09-26 to 11:00Z 2/675 = 0.30%. The rule paces the reads above 2% of cycles; the worst day is a quarter of that, so the direction-seat sequencing is left exactly as it is."
+  },
+  {
+   "id": "165",
+   "due": "2026-09-26",
+   "what": "In-play MLB books",
+   "how": "data/inplay-books",
+   "rule": "backlog 165: cents a taker gets at a stale book, after fees",
+   "action": "registration if positive",
+   "done": "2026-09-26",
+   "note": "2026-09-26: NEGATIVE, no registration, family answered. Built the instrument the registration implies (scripts/backtests/inplay_books_read.py) over 18,078 recorder rows, 46 games, 4 complete days, 126 scoring plays detected from the feed's run totals. Per scoring play x market, buying the side the run favours at the stale ask and marking against the mid once the top moves: ALL -2.59c/contract, 95% [-3.27, -1.92], n=1266, only 10% of decisions positive. KXMLBTOTAL -2.46c with the top moving in a median ONE 15 s cycle (p90 9); KXMLBGAME -2.30c at 4 cycles / 75 s; KXMLBRFI -6.99c at 51 cycles. Kalshi is not slow here. Stated limit: the recorder's own 15 s cadence means the 'stale' price can be 15 s old, which is the instrument the registration specified; a zero-latency claim would need the socket, not this recorder. The recorder keeps running at no cost."
+  },
+  {
+   "id": "191",
+   "due": "2026-10-01",
+   "what": "IBKR fade gate",
+   "how": "ibkr-lab status gateBlockers",
+   "rule": "lab gate: 15 sampled losses or 250 closes",
+   "action": "if it qualifies -> backlog 110",
+   "note": "2026-09-26: the gate is NOT reached and the arm has turned over. fade is 21/30 closed (19W/2L, 17 events, 7 day-clusters), realised -$1.18, lower bound -0.32c, liveEligible false, blockers '21/30 closed | 2/15 losses sampled | lower bound -0.32c'. On 09-20 it was +4.20c/contract over 10 trades with a band of [+2.89, +5.51]; eleven more trades took it to a negative realised total and a lower bound below zero. Against the control, as the read required: benchmark has 4 closed on 1 day over 3 events, -$0.77, so its own n cannot anchor anything and the benchmark-relative column (BACKLOG 181/199) is still not computable - reported against zero only, and said so. Read again at 30 closed, ~2/day from 21."
+  },
+  {
+   "id": "2",
+   "due": "2026-09-27",
+   "what": "WebSocket order book for execution",
+   "how": "kalshi-auto.json state.wsStats.dayLog",
+   "rule": "backlog 2: 7 consecutive days >= 0.99 agreement",
+   "action": "then build 'use the socket book when under 5 s old'; until then move due forward a day",
+   "note": "2026-09-26: 5 of 7, the build stays parked, and it can FIRST TRIGGER 2026-09-28. wsStats.dayLog holds seven closed UTC days: 09-19 0.99480 PASS, 09-20 0.98950 FAIL, 09-21 0.99153 PASS, 09-22 0.99721 PASS, 09-23 0.99393 PASS, 09-24 0.99608 PASS, 09-25 0.99482 PASS. The bar is seven CONSECUTIVE days at >= 0.99 and the longest run is five (09-21..09-25), broken by 09-20. Today is open at 0.99586, so the streak is 6 tomorrow and 7 on 2026-09-28 if both close above the bar. wsStats.lastError still reads 'universe drift 32%', unexplained."
+  },
+  {
+   "id": "202",
+   "due": "2026-09-27",
+   "what": "A maker slice can be lost to the 200-fill window",
+   "how": "main.log 'fill window too short' warnings",
+   "rule": "backlog 202",
+   "action": "reproduce, then widen the window or compare share counts"
+  },
+  {
+   "id": "86b",
+   "due": "2026-09-28",
+   "what": "Weekly lead-lag basis (Mondays)",
+   "how": "leadlag_settlement_basis.py <dump> 7 and leadlag_basis_cells.py",
+   "rule": "backlog 86b: build a gate only if a cell's day-clustered upper band is below zero over >= 7 days",
+   "action": "then move due to the next Monday"
+  },
+  {
+   "id": "221",
+   "due": "2026-09-28",
+   "what": "Lead-lag markout on the per-scan rows",
+   "how": "leadlag_executable_bound.py on leadlag-quotes-shadow.jsonl",
+   "rule": "backlog 221: signal vs execution",
+   "action": "report"
+  },
+  {
+   "id": "241",
+   "due": "2026-09-29",
+   "what": "IBKR lab: re-seat the arms the review kept",
+   "how": "backlog 241",
+   "rule": "merge the momentum family into one pre-registered arm held to settlement; report the slippage allowance apart",
+   "action": "IBKR_RULES_SINCE"
+  },
+  {
+   "id": "177",
+   "due": "2026-10-03",
+   "what": "Stop-loss / take-profit read",
+   "how": "python scripts/stop-analysis.py",
+   "rule": "backlog 177: adopt only if it beats holding by more than its own day-clustered SE over >= 40 trades and >= 5 days, in shadow first",
+   "action": "report"
+  },
+  {
+   "id": "240",
+   "due": "2026-10-06",
+   "what": "Polymarket paper lab: re-seat the kept arms",
+   "how": "backlog 240",
+   "rule": "four re-seats in one cohort reset",
+   "action": "POLY_PAPER_RULES_SINCE"
+  },
+  {
+   "id": "fade-v3",
+   "due": "2026-10-06",
+   "what": "Kalshi fade v3",
+   "how": "the read in docs/PREREGISTERED-fade-v3.md (>= 40 settled over >= 5 days)",
+   "rule": "docs/PREREGISTERED-fade-v3.md",
+   "action": "per the registration; a FAIL retires kalshi-fade"
+  },
+  {
+   "id": "145b",
+   "due": "2026-10-09",
+   "what": "Mean-reversion as a taker",
+   "how": "venue ledger by arm (needs backlog 102b)",
+   "rule": "docs/PREREGISTERED-mean-reversion-taker.md: 95% upper bound < 0 -> stop; fewer than 40 settled contracts by then -> stopped for lack of flow",
+   "action": "Ladder.retire kalshi-mean-reversion"
+  },
+  {
+   "id": "225",
+   "due": "2026-10-12",
+   "what": "IBKR recalibration arm",
+   "how": "did any entry fire?",
+   "rule": "backlog 225; do not touch IBKR_HOLD_MAX_DAYS",
+   "action": "then design a separate marked-to-market arm"
+  },
+  {
+   "id": "87b",
+   "due": "2026-10-15",
+   "what": "Midterm-night favourites",
+   "how": "pre-register",
+   "rule": "backlog 87b: election-call series only, 85-97c",
+   "action": "registration"
+  },
+  {
+   "id": "70b/73a/77b",
+   "due": "2026-10-17",
+   "what": "Market-maker simulation verdict (after 23:04Z)",
+   "how": "node scripts/mmsim-grade.mjs --verdict",
+   "rule": "INCONCLUSIVE is a do-not-pursue; a PASS authorises only a 14-day live confirmation at 1 contract",
+   "action": "stop the mmsim task on FAIL or INCONCLUSIVE"
+  },
+  {
+   "id": "242",
+   "due": "2026-11-17",
+   "what": "IBKR political slope on history",
+   "how": "fit on ForecastEx daily files since 2024-09",
+   "rule": "backlog 242",
+   "action": "report; or earlier if calibration is proposed for live money"
+  },
+  {
+   "id": "81c",
+   "due": "2027-01-05",
+   "what": "Awards-season rule",
+   "how": "pre-register",
+   "rule": "backlog 81c",
+   "action": "registration"
+  },
+  {
+   "id": "58b/66a",
+   "due": "2027-01-01",
+   "what": "15-minute crypto momentum carve-out",
+   "how": "node scripts/crypto15-gate.mjs",
+   "rule": "backlog 58b/66a",
+   "action": "moot while momentum is declined to 2027-01-01"
+  },
+  {
+   "id": "1",
+   "due": "2026-09-27",
+   "what": "Critic skill check (daily)",
+   "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
+   "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
+   "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
+   "note": "2026-09-26: trigger MET, action DECLINED, amendment 2 load-bearing for the eighth day. 2,421 decisions; settled 581 ABSTAIN / 313 VETO / 65 ERROR / 24 ALLOW_UNCHANGED. Raw ABSTAIN +$0.034/contract against VETO -$0.041, so raw (i) and (ii) pass. Amendment 2 (currently enabled arms only) declines it: the arms live on the ladder AND present in both cohorts are exactly fade and mean-reversion, over which VETO is +$2.33 over 101 contracts (+2.3c) against ABSTAIN's +$1.71 over 263 (+0.65c) - (i) fails because VETO's own net is above zero, (ii) fails because VETO is 1.6c ABOVE the rest rather than 2c below, (iii) fails at 1 of 2. intelligenceMode stays 'shadow', intelligenceEnabled stays true; the 200-settled disable clause is not reached because skill is not absent, it is composition-dependent."
+  },
+  {
+   "id": "65b/80c",
+   "due": "2026-10-24",
+   "what": "Challenger forecaster paired read",
+   "how": "node scripts/hunch-paired.mjs",
+   "rule": "docs/PREREGISTERED-hunch-challenger.md",
+   "action": "config hunchChallengerEnabled",
+   "note": "2026-09-24: the rule that did not exist is now registered - docs/PREREGISTERED-hunch-challenger.md: read at >= 20 paired AND settled markets on the paired Brier difference, day-clustered 80%; no advantage -> hunchChallengerEnabled false; and false on 2026-10-24 regardless if 20 paired-and-settled do not exist by then. Today: 426 paired, 0 settled, so nothing is readable. Next due date is the termination date; an earlier read happens the moment the sample exists."
+  },
+  {
+   "id": "40/75b",
+   "due": "2026-09-28",
+   "what": "Anti-flood cap re-check (weekly)",
+   "how": "kalshi-auto.json openTrades count",
+   "rule": "backlog 40: openTrades >= 60 on 3 consecutive days -> review the per-series cap",
+   "action": "then move due a week"
+  },
+  {
+   "id": "110",
+   "due": "2026-10-01",
+   "what": "First live IBKR order",
+   "how": "ibkr-lab status gateBlockers (the first arm with none)",
+   "rule": "backlog 110",
+   "action": "push the operator: adding an arm to liveStrategies is his",
+   "note": "2026-09-26: NOTHING QUALIFIES, and the operator is not asked. The read is 'the first arm with no gateBlockers'; across all 22 reachable lab arms every one has at least one blocker, the closest being fade at 21/30 closed and settle-control, which is a control and never promoted. The lab stays paper with liveStrategies: []. Re-read with 191 when fade reaches 30 closed."
+  },
+  {
+   "id": "10",
+   "due": "2026-12-15",
+   "what": "Metaculus shadow",
+   "how": "electron scripts/metaculus-shadow.cjs report",
+   "rule": "backlog 10: >= 100 resolved pairs; build an arm only if the community forecast beats the Kalshi mid",
+   "action": "report"
+  },
+  {
+   "id": "11",
+   "due": "2026-09-28",
+   "what": "Forecaster v2 (weekly)",
+   "how": "node scripts/hunch-gate.mjs",
+   "rule": "PREREGISTERED-llm-hunch: the hunch gate reaching 200 settled events without passing",
+   "action": "build v2 in shadow under its own registration; else move due a week"
+  }
+ ]
 }

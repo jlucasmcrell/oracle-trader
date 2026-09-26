@@ -65,7 +65,25 @@ export class IbkrLab {
       this.state.notes._model=`Forecast provider: ${sources.forecastProvider}; eight requests per UTC day. Previous provider attempts remain recorded.`
     }
   }
-  private save(){try{writeFileAtomic(this.path,JSON.stringify(this.state))}catch(e){this.failure='IBKR laboratory storage failed; entries stopped';throw e}}
+  /** Consecutive failed writes. One is a transient rename; a run of them is a disk that cannot hold the ledger. */
+  private saveFailures=0
+  /**
+   * Latching `failure` on the FIRST failed write stopped the lab silently for 11 h on 2026-09-26 (section 170): the
+   * 00:05:13Z write left `ibkr-lab.json.tmp` on disk, the rename failed, `failure` latched, and the throw was
+   * swallowed by the `void this.runForecast(...).catch(note)` call site - no log line, and every later scan returned
+   * at `if(this.busy||this.failure)`. So: log at error (the sentinel scans the log), keep throwing (`enterLive` saves
+   * its journal row BEFORE placing an order and must still abort), and stop the lab only once the writes persistently
+   * fail. `JsonStore.save` reached the same conclusion from the same shape of incident (audit B-55).
+   */
+  private save(){
+    try{writeFileAtomic(this.path,JSON.stringify(this.state));this.saveFailures=0}
+    catch(e){
+      this.saveFailures++
+      if(this.saveFailures>=3)this.failure='IBKR laboratory storage failed; entries stopped'
+      console.error(`[ibkr-lab] SAVE FAILED (${this.saveFailures} consecutive)${this.failure?'; entries stopped':'; the next scan retries'}: ${String(e)}`)
+      throw e
+    }
+  }
   status(now=Date.now()):IbkrLabStatus{
     const s=this.state
     const strategies:IbkrLabStrategyRow[]=IBKR_STRATEGIES.map(def=>{

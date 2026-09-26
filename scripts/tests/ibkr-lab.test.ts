@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {EventEmitter} from 'node:events'
-import {mkdtempSync,readFileSync,writeFileSync} from 'node:fs'
+import {mkdirSync,mkdtempSync,readFileSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
@@ -303,12 +303,45 @@ async function main(){
    assert.ok(crowded.every(a=>a.length===60&&a.slice(0,20).every(id=>ids(far.slice(0,12)).includes(id))),'twenty-four closing together still leave the held ten')
    assert.ok(many.every(m=>crowded.some(a=>a.includes(m.yes.conId))),'and rotate through twenty slots, none starved')}
   class Api extends EventEmitter{
+   silent=new Set<number>()
    connect(){queueMicrotask(()=>this.emit(EventName.nextValidId,1));return this}disconnect(){this.emit(EventName.disconnected);return this}
-   reqMktData(id:number,c:any){if(c.conId===2){this.emit(EventName.error,Error('Unavailable contract'),200,id);return}this.emit(EventName.marketDataType,id,c.conId===3?3:1);this.emit(EventName.tickPrice,id,2,.42);this.emit(EventName.tickSize,id,3,7);this.emit(EventName.tickSnapshotEnd,id)}
+   reqMktData(id:number,c:any){if(this.silent.has(c.conId))return;if(c.conId===2){this.emit(EventName.error,Error('Unavailable contract'),200,id);return}this.emit(EventName.marketDataType,id,c.conId===3?3:1);this.emit(EventName.tickPrice,id,2,.42);this.emit(EventName.tickSize,id,3,7);this.emit(EventName.tickSnapshotEnd,id)}
   }
   const reader=new IbkrReader(()=>new Api() as any,async()=>({connected:true,port:4001,mode:'live',message:''}),50)
   const batch=await reader.quotes([1,2,3]);assert.equal(batch.length,3);assert.equal(batch[0].askSize,7);assert.match(batch[1].error!,/200/);assert.equal(freshAsk(batch[2],now),false)
   await assert.rejects(reader.quotes(Array(61).fill(1)),/1–60/)
+  // A contract that never sends tickSnapshotEnd used to reject the whole batch and abort the scan with it (incident
+  // 2026-09-25T23-50). The silent id is marked unavailable; the answered ones survive. Silence on ALL of them stays
+  // an error, so a wedged Gateway is never mistaken for an empty book.
+  const quiet=(silent:number[])=>new IbkrReader(()=>{const a=new Api();for(const id of silent)a.silent.add(id);return a as any},async()=>({connected:true,port:4001,mode:'live',message:''}),50)
+  const answered=await quiet([3]).quotes([1,2,3])
+  assert.equal(answered.length,3);assert.equal(answered[0].askSize,7);assert.match(answered[1].error!,/200/);assert.match(answered[2].error!,/No snapshot within the request timeout/)
+  assert.equal(freshAsk(answered[2],Date.now()),false)
+  await assert.rejects(quiet([1,2,3]).quotes([1,2,3]),/timed out/)
+  // A failed write used to latch `failure` on the FIRST failure, which is a hard stop for the whole lab, and the two
+  // fire-and-forget savers (`runForecast`, `reconcileLive`) swallow the throw into a note - so on 2026-09-26 the lab
+  // stopped scanning for 11 h with nothing in the log (section 170). One failure must be survivable; three
+  // consecutive ones must still stop entries; and it must keep throwing, because `enterLive` writes its journal row
+  // before placing an order.
+  {
+   const x=setup()
+   // Renaming onto a directory fails after the .tmp has been written - the shape of the incident exactly.
+   const blocked=join(root,`blocked-${sequence}`);mkdirSync(blocked)
+   const good=(x.lab as any).path
+   const failedSave=()=>{let threw=false;try{(x.lab as any).save()}catch{threw=true}
+    assert.ok(threw,'a failed write still throws, so enterLive aborts before placing an order')}
+   ;(x.lab as any).path=blocked
+   failedSave()
+   assert.equal((x.lab as any).failure,undefined,'one failed write does not stop the lab')
+   ;(x.lab as any).path=good
+   await (x.lab as any).scan(now)
+   assert.ok((x.lab as any).state.scans>0,'and the next scan runs and lands')
+   assert.equal((x.lab as any).saveFailures,0,'a write that lands clears the run, so isolated failures never accumulate')
+   ;(x.lab as any).path=blocked
+   failedSave();failedSave();failedSave()
+   assert.match((x.lab as any).failure,/storage failed/,'three consecutive failures do stop entries')
+   ;(x.lab as any).path=good
+  }
   console.log(`IBKR laboratory passed: ${IBKR_STRATEGIES.length} reachable strategies, quote realism, settlement, fees, persistence, paper/live isolation, qualification, IOC reconciliation and recovery`)
  }finally{Date.now=actualNow}
 }

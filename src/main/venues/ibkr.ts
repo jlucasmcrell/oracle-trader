@@ -20,7 +20,7 @@ export class IbkrReader {
     private readonly timeoutMs = 25_000
   ) {}
 
-  private run<T>(start: (ib: IBApi, port: number, done: (value: T) => void, nextId: number, fail: (err: Error) => void) => void, handledError?: (message:string,code:number,id:number) => boolean): Promise<T> {
+  private run<T>(start: (ib: IBApi, port: number, done: (value: T) => void, nextId: number, fail: (err: Error) => void) => void, handledError?: (message:string,code:number,id:number) => boolean, onTimeout?: () => T | undefined): Promise<T> {
     const job = this.queue.then(async () => {
       const gateway = await this.detect()
       if (!gateway.port) throw new Error(gateway.message)
@@ -35,7 +35,13 @@ export class IbkrReader {
           ib.disconnect()
           if (err) reject(err); else resolve(value as T)
         }
-        const timer = setTimeout(() => finish(new Error('IBKR request timed out before a complete response. Check Gateway login and API permissions.')), this.timeoutMs)
+        // A request that has already answered for SOME ids carries partial truth; `onTimeout` returns it instead of
+        // throwing the whole batch away. Returning nothing keeps the error, so a wedged or unauthorised Gateway is
+        // never reported as an empty answer.
+        const timer = setTimeout(() => {
+          const partial = onTimeout?.()
+          finish(partial === undefined ? new Error('IBKR request timed out before a complete response. Check Gateway login and API permissions.') : undefined, partial)
+        }, this.timeoutMs)
         ib.on(EventName.error, (err: Error, code: number, id: number) => {
           if ([202, 2104, 2106, 2107, 2108, 2158].includes(code)) return
           const message = `IBKR ${code ?? ''}: ${err.message}`
@@ -142,6 +148,13 @@ export class IbkrReader {
     },(message,_code,id)=>{
       const q=rows.get(id);if(!q)return false
       q.error=message;q.at=new Date().toISOString();ended.add(id);finish();return true
+    },()=>{
+      // One ForecastEx contract that never sends tickSnapshotEnd used to reject all 60 and abort the lab scan with
+      // them - 24 lost scans over 2026-09-20..25 (incident 2026-09-25T23-50). Mark the silent ids, keep the answers.
+      if(!ended.size)return undefined
+      const at=new Date().toISOString()
+      for(const [id,q] of rows)if(!ended.has(id)){q.error='No snapshot within the request timeout';q.at=at}
+      return [...rows.values()]
     })
   }
 

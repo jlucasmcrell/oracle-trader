@@ -140,6 +140,42 @@ open is folded in here with its reason. Done items are removed, not ticked.
 
 ## Recently done (so nobody re-does them)
 
+2026-09-26 (daily maintenance, section 170): **the IBKR lab was stopped for 11 h 13 m by ONE failed file rename, and
+nothing logged it** - `[ibkr-lab]` lines end 00:05:08.899Z and return only at the 11:18Z restart, ~1,340 scans lost,
+with no error or warning while every other engine logged normally. Proved from an orphaned `ibkr-lab.json.tmp`
+(00:05:13.902Z, 84 bytes larger, parseable, differing from the live ledger only in `notes.news` and `forecast` - the
+model's answer the second `runForecast` save was carrying): `writeFileAtomic` wrote the `.tmp` and `renameSync` failed,
+`save()` latched `this.failure` - a hard stop for the whole lab - and rethrew into
+`void this.runForecast(...).catch(e => { s.notes.news = String(e) })`, a note, not a log line, and a note that could
+not be persisted because persisting was what had failed. `save()` now counts consecutive failures, logs every one at
+**error** level, and latches `failure` only at three (`src/main/strategies/ibkrLab.ts:68-86`); the throw is kept
+because `enterLive` persists its journal row before placing a real order. Test
+`scripts/tests/ibkr-lab.test.ts:325-345` reproduces it. What held the file is unknown - ruled out: the 23:55Z backup
+(finished 23:57:00Z, and it opens shared on purpose since incident 2026-09-21T13-35), the Gateway (up all night,
+`[reconciler]` reached it at 05:02:51Z), and last night's IBKR timeout repair (pre-restart, marker never appeared).
+
+2026-09-26: **the fourteen reads due today were all performed and none changed a setting.** 233 CONTINUE (event-speed
+gaps last a median 0.8 s at 6c, so the answer to "do we need to co-locate" is **no**); 235 WAIT and the venue record
+matches the app's cohort to the cent (-33.9c over 10); 72b/161 NOT YET at 210 of 400 new-coin contracts; 149 built
+(and the registration's `mx2t6`/`mn2t6` and `type=cf` **do not exist** at 0p25 - the source has `mx2t3`/`mn2t3` and 50
+`pf` members); 57b/68a/78a **no carve-out**, the cull-gate's discarded mean-reversion population is -8.12c
+[-9.83,-6.40]; 156b **14% of zero-edge arms ever reach a scale-up**; 162 one flagged pair (0.65c) so the family stays
+open; 164 leg failures 0.08-0.53% against a 2% bar; 165 **answered and closed** at -2.59c/contract 95% [-3.27,-1.92]
+over 126 scoring plays, so no in-play arm; 191 the IBKR fade gate is not reached (21/30 closed, lower bound -0.32c,
+and its control still has n=4 on one day); 2 the socket streak is 5 of 7 and can first trigger 2026-09-28; 1 the
+critic rule declines veto mode for the eighth day on amendment 2; 110 no arm has zero gateBlockers, so the operator is
+not asked. Instruments added: `scripts/backtests/inplay_books_read.py` and `scripts/ecmwf_ens_shadow.py`.
+
+2026-09-26 (repair session, incident 2026-09-25T23-50): **one silent ForecastEx contract was aborting the IBKR
+lab's whole 60-quote batch, and the scan with it** - 24 lost scans in the six days from 2026-09-20. `quotes()`
+completed only at `ended.size === rows.size`, so a contract answering with neither a tick nor an error let the 25 s
+timer in `IbkrReader.run` reject the batch and drop every quote that had arrived, before `fillOrders` and
+`closePositions` ran. `run()` now takes an optional `onTimeout` (`src/main/venues/ibkr.ts:23,38-45`) and `quotes()`
+supplies one (`ibkr.ts:151-158`): the silent ids are marked `No snapshot within the request timeout` and the rest of
+the batch survives, while **nothing answered at all still errors**, so a wedged or unauthorised Gateway is never
+reported as an empty book. Test `scripts/tests/ibkr-lab.test.ts:313-320` fails without the fix. Live confirmation
+waits on the next natural occurrence: look for the marker in `ibkr-lab.json` `notes._quotes`.
+
 2026-09-25 (daily maintenance, section 169): **the lead-lag engine had been wedged for 11 h 24 m** - a scan
 that began 2026-09-24T23:58:49Z never settled, so `LeadLagEngine.running` stayed true and every 60 s poll
 returned at the guard while the log reprinted the same frozen summary. Proved from `legFailByDay` (no 09-25
@@ -2132,6 +2168,20 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
     Positive at 95% over >= 30 station-days at the modal bracket -> register a taker weather arm; otherwise weather
     stays closed and this line records why. HRRR (§116) is the control: it lost on the cheap brackets.
 
+**149 BUILT 2026-09-26 (section 170), and the registration named fields the source does not have.**
+`pip install ecmwf-opendata eccodes cfgrib xarray` installs and imports clean (eccodes 2.48.0, cfgrib 0.9.15.1,
+xarray 2026.7.0, ecmwf-opendata 0.3.34; free, CC BY 4.0, no key). But `stream=enfo, resol=0p25` has NEITHER `mx2t6`
+nor `mn2t6` - it answers `No index entries for param=mx2t6. Did you mean 'mx2t3'` - and `type=cf` is not indexed
+alongside them either, so the ensemble is the **50 perturbed members** without the control run. 3-hourly extrema are
+strictly better than 6-hourly for a daily max, so the substitution costs nothing; the missing control costs one
+member of fifty. `scripts/ecmwf_ens_shadow.py` (`pull`/`report`): the same 27 stations as `hrrr-shadow.mjs`, nearest
+0.25 deg gridpoint, each member's daily max over the 3-hourly maxima whose window midpoint lands in the station's
+LOCAL day, COMPLETE local days only, graded against `data/hrrr-shadow/grades.jsonl` so the ENS read shares its
+control's truth. No scheduled task: the daily maintenance run is the right cadence for a once-a-day ENS run. ECMWF
+open data has no spatial subsetting, so the registered D+1..D+3 is ~1.7 GB a run and steps are fetched and discarded
+one at a time. The gate is UNCHANGED: positive at 95% over >= 30 graded station-days at the modal bracket before any
+taker weather arm is registered, and `report` prints the station-day count so the bar is never guessed at. The
+book-relative leg (the modal bracket's ask) is added when the count is in reach.
 150. **Kalshi <-> ForecastEx same-event shadow (trigger: 2026-09-19 to build; read at 7 days).** Match by product
     (FF, CPIY, UNR, IJC, RGDP, elections, CF crypto strikes, temperature thresholds: ForecastEx "exceed X" = the sum
     of Kalshi brackets above X). Record both books every 30 min from feeds we hold (IBKR lab quotes, weather books,
@@ -2229,6 +2279,10 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   covers pairs across series where A implies B (cut by September inside cut by November; a spread inside its
   moneyline; conference champion inside national champion). GET-only scanner over the open catalog, logging every
   `ask(B) < bid(A)` net of fees. Trigger: build by **2026-09-23**; read at 7 days.
+- **162 READ 2026-09-26 (section 170): the family stays OPEN, barely.** Flagged rows exist on 09-19, 09-20, 09-21,
+  09-22 and 09-26, so it is not "none in a week" and `OracleTrader-ImplicationScan` is NOT disabled. Today's single row
+  is `KXNHLSPREAD-26SEP25NYRNYI-NYI2` inside its moneyline at **0.65c after fees**, and the last five half-hourly
+  passes read `0 flagged, 0 confirmed` over ~3,100 spreads. One 0.65c pair a week is why this family has no arm.
 - **162 BUILT and first read (2026-09-19 10:15Z, §130).** `scripts/implication-scan.mjs`: 6,528 spread-vs-moneyline
   pairs across 166 series, zero violations, best -0.92c after fees. Recording every 30 min for 8 days
   (`OracleTrader-ImplicationScan`, `data/implication-scan/`). Trigger: read on **2026-09-26** - count confirmed
@@ -2240,6 +2294,9 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   20:51:43Z that day (fixed in `sports-books.mjs`); count only rows after the fix for the in-game and post-final stretch.
   An early read on the truncated data found the winner at <= 97c in 1 of 14 clean decisions and MLB asks absent at
   Final in 17 of 17.
+- **164 READ AND CLOSED 2026-09-26 (section 170).** `legFailByDay` answers it directly: 09-23 3/925 = 0.32%, 09-24
+  1/1315 = 0.08%, 09-25 4/753 = 0.53%, 09-26 to 11:00Z 2/675 = 0.30%, against a 2% bar. No pacing change; the
+  direction-seat sequencing is untouched.
 - **164. Lead-lag Kalshi read bursts (§129, Gemini Pro F-01).** Count `Kalshi leg failed` cycles per day from the
   log. Trigger: **2026-09-26**; if above 2% of cycles on any day, pace the reads with the direction-seat
   sequencing preserved (the 120 ms stagger changed it and was reverted).
@@ -2263,6 +2320,13 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
 - **56 (line 673) DONE 2026-09-19 (§131).** WS agreement persists per UTC day in `wsStats.day` / `dayLog`.
   Trigger: read `dayLog` on **2026-09-26**; seven closed days at ≥ 99% agreement (2c tolerance) is the
   pre-registered bar for promoting the socket book to the Kalshi read path.
+- **165 READ AND CLOSED 2026-09-26 (section 170): NEGATIVE, no arm.** `scripts/backtests/inplay_books_read.py` over
+  18,078 rows, 46 games, 4 complete days, 126 scoring plays: buying the side the run favours at the stale ask and
+  marking against the mid once the top moves gives **-2.59c/contract, 95% [-3.27, -1.92]** over n=1266 (KXMLBTOTAL
+  -2.46c with the top moving in a median ONE 15 s cycle, KXMLBGAME -2.30c/4 cycles, KXMLBRFI -6.99c/51 cycles); only
+  10% of decisions are positive. Kalshi is not slow here. Limit stated: the recorder's 15 s cadence means the "stale"
+  price can be 15 s old, which is the instrument the registration named; a zero-latency claim needs the socket.
+  The recorder keeps running at no cost.
 - **165 BUILT 2026-09-19 (§131).** `OracleTrader-InplayBooks` running; first live games 18:10Z today. Trigger: read
   `data/inplay-books/` on **2026-09-26**: per scoring play (runs change in the feed), cycles until the
   moneyline / RFI / totals top moves, and the cents available to a taker at the stale book minus the fee.
@@ -2442,6 +2506,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   breakout, microprice and book-imbalance are each confidently negative, and the gross result is the same whether
   they cross out or settle, so the ~5c handicap is the entry (ask + 1c slippage). Either retire them or re-seat
   them passively. Trigger: at the **2026-09-24** read, when each has >= 30 trades and >= 4 days.
+- **191 READ 2026-09-26 (section 170): the gate is NOT reached and the arm has turned over.** fade is 21/30 closed
+  (19W/2L, 17 events, 7 day-clusters), realised **-$1.18**, lower bound **-0.32c**, `liveEligible: false`. On 09-20 it
+  was +4.20c/contract over 10 trades with a band of [+2.89, +5.51]; eleven more trades took it negative. Against the
+  control, as the read required: benchmark has 4 closed on 1 day over 3 events, -$0.77, so the benchmark-relative
+  column (181/199) is still not computable and this is reported against zero only. Next read when fade reaches 30.
 - **191. IBKR: fade is the only candidate; the control cannot anchor yet (2026-09-20, §142).** fade +4.20c/contract
   over 10 trades, 3 days, 7 events, band [+2.89, +5.51]; it reaches the 30-trade/10-event gate around
   **2026-09-26**. The benchmark control has 4 trades on 1 day, so GLM F-07's benchmark-relative column (BACKLOG
@@ -2900,6 +2969,11 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   this is not its business; it IS 233's, because an event-driven read would act on the socket's number. Trigger:
   **the 233 build, before any change to the quote the live arm acts on** - and note the answer may be that the
   socket is right and the REST book is the stale one, which would reverse the sign of the conclusion.
+- **247 update 2026-09-26 (section 170): this instance is no longer certain to stall.** `ladder.json` reads
+  `cool-down until 2026-09-26 after 1 stop(s)` for polyus-fade, so the cool-down expires TODAY and the ladder may
+  re-arm the arm on its own, which would let the cohort grow past 10. The CLASS is unchanged and still open: any
+  registration whose `n` bar exceeds the ladder's stop bar can starve itself. Today's read was WAIT at 10 settled /
+  4 losses, and the venue record matched it to the cent (-33.9c over 10).
 - **247. A registration whose ladder cut off its evidence supply is stalled, not pending (2026-09-24, section 168).**
   `polyusFadeRead` (docs/PREREGISTERED-polyus-fade.md) reads at 15 losses or 250 settled entries. The arm produced 10
   settled entries and 4 losses, then the ladder's own generic checkpoint stopped it on 09-23 at 8 trades
@@ -2926,6 +3000,28 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
   stop producing it. Fix: repair or rebuild `data/polymarket-consensus/state.json` so grading resumes from the
   last real cursor, and de-duplicate `grades.jsonl` on `(title, market, ts)`. Trigger: next build-queue slot;
   it is a measurement defect, not a money one, which is why it did not take today's slot.
+- **251. The ladder's P&L for the one live arm is 3.8x the venue ledger's over the same window (2026-09-26, section
+  170).** Read at the same instant - `ladder.json` and a fresh read-only Kalshi dump taken together - `kalshi-leadlag`
+  reports *11 settled since stage start, net -$6.35* while the settlement ledger since that stage start
+  (2026-09-26T02:57:26Z) reports `leadlag` **n=22 contracts, -$1.68**. Over that window the WHOLE account is -$1.54
+  across 24 settlements and every one is attributed by its order-journal ref (`leadlag` -$1.68, `auto:fade` -$0.97,
+  `auto:mean-reversion` +$1.11), so the ladder's figure for one arm exceeds the entire account's loss. Both are
+  negative, so no verdict turned on it today. It decides something in nine more settlements: at 20 the ladder judges
+  the only arm that has ever earned, on a number the ledger of record does not support. Note the units differ by
+  construction (the ladder counts TRADES, `venue-pnl --by-arm` counts CONTRACTS) - that explains 11 vs 22, not $6.35
+  vs $1.68. First thing to check: whether the ladder's tracker counts positions exited by SALE before settlement,
+  which the settlement ledger cannot see, and whether entry fees are being charged twice. Trigger: **before
+  kalshi-leadlag reaches 20 settled since stage start**; read-side only, touches no size, arm or limit.
+
+- **252. The quoter's disabled line mixes two population sizes and invites the exact misreading the maintenance prompt
+  warns about (2026-09-26, section 170).** `[quoter] disabled: 32 candidates, would quote 0 (4 gated)` reads as a
+  silent quoter - 32 candidates and nothing quotable - and it is not one. `quoter.ts:869` prints `cands.length` for the
+  first number but computes `quotable` and `gated` over the smaller `chosen` set, so the true reading is 4 chosen and
+  all 4 gated. Fix: print `chosen.length` alongside, e.g. `32 candidates, 4 chosen, would quote 0 (4 gated)`, and while
+  disabled also print the fair-value count the live line carries, since "fair-value on 0 of M" is half of the
+  registered silence check and is invisible while the arm is off. Log-only; no behaviour. Trigger: any day
+  `quoter.ts` is touched.
+
 - **248. The consensus shadow's grades are 43x duplicated, and build-queue 13 must not read them (2026-09-24,
   section 168).** `data/polymarket-consensus/grades.jsonl` has 480,107 rows and 11,041 distinct
   `(title, kalshi_market, ts)`; the worst keys are re-graded 129-133 times, because `state.json` has been frozen at

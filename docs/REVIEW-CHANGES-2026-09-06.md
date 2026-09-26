@@ -6700,3 +6700,253 @@ are now written into `scripts/lib/task-watch.mjs` with the reason so the next se
 Files: `src/main/strategies/scanSlot.ts` (new), `src/main/strategies/leadLag.ts`, `src/main/strategies/autoTrader.ts`,
 `scripts/lib/task-watch.mjs`, `scripts/backtests/leadlag_endgame_read.py` (new), `scripts/tests/review-fixes.test.ts`,
 `docs/reads.json`, `docs/BACKLOG.md`, `docs/MAINTENANCE-LOG.md`, `docs/reports/2026-09-25.md`.
+
+## §170 - 2026-09-26 11:40Z: the IBKR lab had been stopped 11 hours by ONE failed file rename, and nothing said so
+
+Fourteen pre-registered reads came due today (`data/due-triggers.md`). None of them changed a setting: one PASS was
+available to be taken and was not earned. The day's defect is separate, and it is the third instance in three days of
+the same class as BACKLOG 249 - a thing that stops without stopping.
+
+### The defect: a transient write failure is a permanent, silent stop
+
+`[ibkr-lab]` lines end at **2026-09-26T00:05:08.899Z** and do not resume for **11 h 13 m**, to the restart at
+11:18Z. ~1,340 scans lost. The app itself was fine throughout - `[leadlag]`, `[quoter]`, `[convergence]` and the
+auto-trader all logged normally the whole time - and **not one error or warning line was printed**, so neither the
+sentinel's log scan nor the nightly review nor the liveness checks in this prompt could see it. `data/sentinel` was
+quiet; the 23:50Z incident from the night before was already CLOSED.
+
+**The evidence is on disk, and it is unambiguous.** `%APPDATA%/oracle-trader/ibkr-lab.json` was last written at
+00:05:08.884Z and `ibkr-lab.json.tmp` **still exists**, written 00:05:13.902Z, 84 bytes larger, and it parses. Diffed
+against the live ledger the only differences are `notes` and `forecast`: the ledger holds
+`news = "Requesting forecast from OpenRouter / deepseek/deepseek-v4-pro"` and the orphaned `.tmp` holds the answer
+(`"Probability recorded although the model declined to recommend a trade: Market at 97% is roughly fair..."`). Those
+are exactly the two `this.save()` calls in `runForecast` (`ibkrLab.ts:329` then `:330`). So the first save landed, the
+second wrote its `.tmp` and **the `renameSync` failed**.
+
+`writeFileAtomic` (`src/main/store/json.ts:6-11`) writes `path.tmp` then renames; a failed rename leaves the `.tmp`
+and throws. `IbkrLab.save()` caught that throw, set `this.failure = 'IBKR laboratory storage failed; entries stopped'`
+- a hard stop for the WHOLE lab - and rethrew. And the call site was `void this.runForecast(frames,now).catch(e => {
+s.notes.news = String(e) })` (`ibkrLab.ts:229`): the rejection went into a note, the note was never persisted because
+saving was the thing that had just failed, and nothing was logged. From then on every 30-second
+`setInterval(() => void ibkrLab.scan(), 30000)` returned immediately at `if(this.busy||this.failure)return`
+(`ibkrLab.ts:139`).
+
+**Three things had to line up, and all three are design faults rather than bad luck.** (a) A *transient* failure
+latched a *permanent* stop on the first occurrence. (b) The stop's only log path is `scan()`'s own catch, so a save
+that fails anywhere else is mute. (c) Two of the three savers - `runForecast` and `reconcileLive` - are
+fire-and-forget promises whose `.catch` writes a note instead of a log line. The same file already contains the right
+answer to (a) and (b): `JsonStore.save` refuses to throw at its callers and logs at ERROR with a consecutive-failure
+counter, because "one warn line was all a disk-full or EPERM ever produced" (audit B-55).
+
+**What was NOT the cause, checked before writing this.** Not the 23:46-23:52Z `IBKR request timed out` warns or last
+night's repair - those are pre-restart, the repair's own fix is in the running bundle and its marker never appeared.
+Not the Gateway: the sentinel reports it up all night and `[reconciler]` reached it at 05:02:51Z. Not the 23:55Z
+`REPAIR-2026-09-25` backup, which finished at 23:57:00Z and opens every file with `open_shared` precisely so that a
+concurrent atomic write survives (incident 2026-09-21T13-35). **What held the file at 00:05:13Z is not known** - no
+process was recorded and the errno was the thing that was not logged. The fix does not depend on knowing: the error
+line it adds will name the errno the next time, and one failure no longer stops anything.
+
+### The change: 12 lines in `ibkrLab.save()`
+
+`src/main/strategies/ibkrLab.ts:68-86`. A `saveFailures` counter, cleared by any write that lands. Every failure now
+logs at **error** (`[ibkr-lab] SAVE FAILED (N consecutive); the next scan retries: <errno>`), which is the level the
+sentinel's log scan reads. `this.failure` latches only at **three consecutive** failures, and the log line then says
+`entries stopped` instead. The throw is **kept**: `enterLive` writes its journal row before placing a real order
+(`ibkrLab.ts:342`) and must still abort if that row cannot be persisted. No other behaviour changed, no threshold,
+size, arm or limit was touched, and the lab is paper with `liveStrategies: []`.
+
+**Verified.** `scripts/tests/ibkr-lab.test.ts:325-345` reproduces the incident's shape - a path pointed at a
+directory, so the `.tmp` is written and the rename fails - and asserts all four properties: the write still throws,
+ONE failure leaves `failure` unset, the next `scan()` runs and lands (and clears the counter), and three consecutive
+failures do stop entries. The suite's own output now carries the new error lines. `npx tsc --noEmit` clean,
+`npx electron-vite build` clean, the marker is in `out/main/index.js`. `ibkr-lab` and `ibkr` suites pass;
+review-fixes **632/0**, ladder **177/0**, adversarial **96/0**. `python scripts/backup.py MAINT-2026-09-26` wrote
+`oracle-trader-MAINT-2026-09-26-20260926-071543.zip` (1,056,740,647 bytes). Restarted at 11:18:27Z (pid 43352, main
+bundle built 11:15:36Z); discovery walked at 11:18:48Z and **scan 17181 logged at 11:22:29Z** (16/30 fresh pairs, 77
+paper positions, 643 closed), with the ledger written again. The stale `.tmp` was left where it is: it is the
+evidence, and `writeFileAtomic` overwrites it on the next save anyway.
+
+**What this run could not verify.** The new path only executes when a write actually fails, which happened once in the
+five weeks of log this machine holds. So the behaviour rests on the reproducing test and the bundle, not on a live
+occurrence - the same honest limit the 09-25 repair recorded about its own fix. The next real one will name itself in
+`main.log` at error level.
+
+### The fourteen reads, in the order `data/due-triggers.md` lists them
+
+**233 - lead-lag at event speed. CONTINUE; `leadLagFastLive` stays off, by the app's own hand.** The app ran the read
+itself at 00:02:31Z: `+0.21c/contract, 80% [-1.18, 1.60], n=1312 over 4 days (band spans zero)`. The maintenance
+grader on a window nine hours longer agrees and moves nothing:
+`python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z` gives **-0.05c, 80% [-1.19, +1.09],
+n=1591 over 5 days** at the registered 6c threshold. n clears 150 and the band spans zero, so it is neither PASS nor
+FAIL; it reads again daily to 2026-10-03.
+And the question the registration promised to answer whatever the verdict - *do we need to co-locate?* - **no.** At 6c
+net the gaps last a median **0.8 s** (p75 2.0 s, p90 5.0 s); 58% are under a second, 89% under five. Nothing here asks
+for less than this machine's 60 ms order path. Frequency is not the problem either: 47.7 six-cent gaps an hour, 632
+two-cent gaps an hour. The problem is that they do not pay.
+
+**235 - Polymarket US favourite fade. WAIT, and the venue record agrees to the cent.** The app read it at 00:02:31Z:
+`10 settled, 4 losses over 1 days: -33.90c/contract, 80% [-Infinity, Infinity]`. The registered check of that against
+the venue: `python scripts/venue-pnl.py ... --since 2026-09-23T09:00:00Z --by-arm` gives `mini:fade n=10 -$3.39`,
+i.e. **-33.9c per contract over the same ten entries**. The read's bar is 15 losses or 250 settled; at 4 and 10
+neither is near, so there is no FAIL and no retirement. The band is infinite because all ten closes fall in one UTC
+day cluster.
+BACKLOG 247 is why that matters and it moved today: the ladder stopped the arm on 09-23 at 8 trades, so the cohort
+was frozen - but `ladder.json` now reads `cool-down until 2026-09-26 after 1 stop(s)`, so the cool-down **expires
+today** and the ladder may re-arm it on its own. 247 stays open as a class (any registration whose `n` bar exceeds
+the ladder's stop bar), but this instance is no longer certain to sit at WAIT until December.
+
+**72b/161 - lead-lag coin cohort. NOT YET; the coin list is unchanged.**
+`node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z`, on today's fresh dump (the 09-25 note about
+grading a six-day-old dump does not recur): 268 settlements, 346.07 contracts. New coins (not BTC/ETH)
+**210.03 contracts, +3.73c/contract, 95% [-7.01, +14.46] over 8 day-clusters**; established BTC/ETH -1.64c
+[-18.68, +15.40]; pooled +1.62c. The stop rule needs **>= 400 contracts on the new coins** and has 210, so neither
+the narrow-back nor the leave-it branch fires. `leadLagCoins` stays at the eight; `leadLagProvenCoins` is still
+absent, which is correct while nothing is proven. Per-coin, for the record: BNB +6.60c, SOL +5.04c, HYPE +5.17c,
+XRP +2.90c, BTC +1.54c, DOGE -3.83c, ETH -7.47c, ZEC -17.16c on four contracts. `due` moves to 2026-09-27; final
+2026-10-04.
+
+**149 - ECMWF ENS weather shadow. BUILT, and the registration named two fields the source does not have.**
+`pip install ecmwf-opendata eccodes cfgrib xarray` installs and imports clean on this machine (eccodes 2.48.0,
+cfgrib 0.9.15.1, xarray 2026.7.0, ecmwf-opendata 0.3.34 - all free, CC BY 4.0, no key). Then the probe: backlog 149
+asks for **`mx2t6`/`mn2t6`** at 0.25 deg and the `stream=enfo, resol=0p25` index has neither - it answers
+`No index entries for param=mx2t6. Did you mean 'mx2t3'`. `type=cf` is likewise not indexed alongside them
+(`No index entries for type=cf`), so the usable ensemble is the **50 perturbed members**, without the control run.
+3-hourly extrema are strictly better than 6-hourly for a daily max, so the substitution costs nothing; the missing
+control costs one member of fifty. Both are written into the script's own header rather than left to be rediscovered.
+`scripts/ecmwf_ens_shadow.py` (`pull`, `report`): the same 27 stations as `hrrr-shadow.mjs`, nearest 0.25 deg
+gridpoint, each member's daily max taken over the 3-hourly maxima whose window midpoint lands in the station's LOCAL
+day, and only **complete** local days written - a day clipped by the run start or the horizon is a max over part of a
+day, which is not the number the market settles. Observations come from `data/hrrr-shadow/grades.jsonl` on purpose:
+the ENS read must be gradeable against the same truth as its HRRR control. Steps are downloaded one at a time and
+discarded, because ECMWF open data has no spatial subsetting - every step is a whole globe, ~32 MB per field, so the
+registered D+1..D+3 is ~1.7 GB a run and the chunking keeps peak disk at one field.
+**Action was "build only" and the gate is untouched:** positive at 95% over >= 30 graded station-days at the modal
+bracket before any taker weather arm is registered. Nothing can be graded today; `report` says so in those words
+rather than printing a number. No scheduled task was created - the daily maintenance run is the pull's cadence, which
+is the right one for a once-a-day ENS run.
+
+**First pull verified end to end, on real data.** `python scripts/ecmwf_ens_shadow.py pull --days 1` at 11:35Z on the 2026-09-26 00Z run: 11 steps of `mx2t3` and 11 of `mn2t3` decoded and discarded chunk by chunk, and **27 station-day rows written for 2026-09-27 at D+1, 50 members each** (NYC daily max 65.0-69.5 degF over the members, min 59.5-65.4). `report` then reads 27 rows, 0 graded, against 540 station-days of observations already on hand, and says in those words that nothing is decided. Tomorrow's HRRR grades are what grade it.
+
+**57b/68a/78a - the questions the cull-gate answers. No carve-out; the cap is protecting the account.** The 09-25
+12:00Z run produced `data/cull-gate/report-20260925-0728.txt` (116,802 culled markets over 14 day files, 103,061
+settled with a result). On the discarded population: mean-reversion **n=39,992, -8.12c/contract, 95% [-9.83, -6.40]**;
+momentum n=75,779, -8.41c [-9.79, -7.03]; mid-zone n=68,299, -8.74c [-10.26, -7.23]. The registered action was a
+per-series carve-out for mean-reversion **only if its band excludes zero** - it does, on the wrong side of zero, so
+there is no carve-out and the anti-flood cap keeps discarding losers. The descriptive Wang-transform leg:
+lambda_hat 0.130, 95% [0.119, 0.141] over n=69,563 - excludes both 0 (our `calibratedYesRate()` identity above 10c is
+wrong in this population) and the paper's 0.187. Gates nothing, as registered. BACKLOG 171's remainder stands: the
+report is still UTF-16 with the PowerShell redirect's encoding, so it needs `iconv` or Python bytes to read, and
+fixing it means changing a scheduled task's command line, which this session does not do.
+
+**156b - ladder false-promotion rate under a zero-edge null. Reported; informs 29/30 only.**
+`npx tsx scripts/ladder-power-sim.ts`, 60 settled rows/day, 30 days, 600 paths per edge, judged every 20 rows, hard
+stop $5/notch. **At a true edge of exactly zero: 14% of null arms ever reach a scale-up**, 82% are stopped inside 7
+days, 92% inside 14, 96% inside 30 (30% by the hard stop, 66% by the 100-rule, 0% by the band). Mean end P&L +$0.51,
+and -$0.97 conditional on being stopped. For scale: a +1.5c arm scales up 26% of the time and a +5c arm 70%, so the
+ladder's discrimination between a null and a real edge at the scale-up notch is roughly 14% against 26-70%. Nothing
+acts on this; it is the denominator for reading any single promotion.
+
+**162 - cross-series implication scan. The family stays OPEN; one flagged pair today.** `data/implication-scan/`
+holds flagged rows on 09-19, 09-20, 09-21, 09-22 and **2026-09-26** - so it is not "none in a week" and the family is
+not closed and `OracleTrader-ImplicationScan` is not disabled. The read is honest about how thin that is: today's one
+row is `KXNHLSPREAD-26SEP25NYRNYI-NYI2` inside its moneyline at **0.65c surplus after fees**, and `scan.log`'s last
+five half-hourly passes all read `0 flagged, 0 confirmed` over ~3,100 spreads and ~6,200 pairs. A 0.65c surplus on
+one pair a week is not a strategy; it is the reason the family has no arm. The recorder keeps running.
+
+**164 - lead-lag Kalshi read bursts. Under the bar every day; `leadLag.ts` untouched.** BACKLOG 170's persisted
+counter exists and answers it directly, which is what 09-25 built it for. `legFailByDay`: 09-23 **3/925 = 0.32%**,
+09-24 **1/1315 = 0.08%**, 09-25 **4/753 = 0.53%**, 09-26 to 11:00Z **2/675 = 0.30%**. The rule paces the reads above
+**2%** of cycles; the worst day is a quarter of that, so the direction-seat sequencing is left exactly as it is.
+Read done, not deferred.
+
+**165 - in-play MLB books. NEGATIVE; no registration.** Built the grader the registration implies
+(`scripts/backtests/inplay_books_read.py`) over 18,078 recorder rows across 46 games and four complete days, and
+detected **126 scoring plays** from the feed's run totals. Per scoring play x market, buying the side the run favours
+at the stale ask and marking it against the mid once the top moves:
+
+| series | n | cycles to move (p50/p90) | secs p50 | c/contract after fee | 95% band | positive |
+|---|---|---|---|---|---|---|
+| KXMLBTOTAL | 1052 | 1 / 9 | 20 | **-2.46** | [-3.03, -1.89] | 11% |
+| KXMLBGAME | 172 | 4 / 70 | 75 | **-2.30** | [-3.16, -1.44] | 7% |
+| KXMLBRFI | 42 | 51 / 364 | 879 | **-6.99** | [-11.71, -2.27] | 0% |
+| ALL | 1266 | 2 / 20 | 32 | **-2.59** | [-3.27, -1.92] | 10% |
+
+The registration said a registration follows only if that is positive. It is negative in every series and the band
+excludes zero, so **there is no arm and the family is answered.** The mechanism is worth keeping: the totals top moves
+in a median of **one 15-second cycle**, so by the time the recorder sees a run the book has already moved - Kalshi is
+not slow here. The honest limit is that the recorder's own 15 s cadence means the "stale" price can be up to 15 s old,
+so this measures what a 15-second-latency taker gets, which is exactly the instrument the registration specified. A
+zero-latency taker is a different claim and would need the socket, not this recorder.
+
+**191 - IBKR fade gate. NOT reached, and the arm has turned over.** `fade` is at **21/30 closed** (19W/2L, 17 events,
+7 day-clusters), realised **-$1.18**, lower bound **-0.32c**, `liveEligible: false`, blockers
+`21/30 closed | 2/15 losses sampled | lower bound -0.32c`. On 09-20 this arm was +4.20c/contract over 10 trades with a
+band of [+2.89, +5.51]; eleven more trades have taken it to a negative realised total and a lower bound below zero.
+Against the control, as the read required: the benchmark has **4 closed on 1 day over 3 events, -$0.77**, so its own n
+cannot anchor anything and the benchmark-relative column (BACKLOG 181/199) is still not computable. Reported against
+zero only, and said so.
+
+**110 - first live IBKR order. Nothing qualifies; the operator is not asked.** The read is "the first arm with no
+gateBlockers". Across all 22 reachable arms, **every one has at least one blocker** - the closest are fade (21/30
+closed) and settle-control (a control, never promoted). So no arm reaches `liveStrategies` and there is nothing to
+push. The lab stays paper with `liveStrategies: []`.
+
+**2 - WebSocket order book for execution. 5 of 7; the build stays parked, and it can trigger on 09-28.**
+`wsStats.dayLog` now holds seven closed UTC days: 09-19 **0.99480 PASS**, 09-20 **0.98950 FAIL**, 09-21 0.99153 PASS,
+09-22 0.99721 PASS, 09-23 0.99393 PASS, 09-24 0.99608 PASS, 09-25 0.99482 PASS. The bar is **seven consecutive** days
+at >= 0.99 and the longest run is **five** (09-21..09-25), broken by 09-20. Today is open at 0.99586. So the streak
+reaches 6 tomorrow and **7 on 2026-09-28** if both days close above the bar - the first date this build can trigger.
+`due` moves to 2026-09-27. `wsStats.lastError` still reads `universe drift 32%`, unexplained and unchanged.
+
+**1 - critic skill check. KEEP veto mode off; `intelligenceMode` stays `shadow`, `intelligenceEnabled` stays true.**
+`python scripts/critic-skill.py` on today's fresh dump: 2,421 decisions, settled 581 ABSTAIN / 313 VETO / 65 ERROR /
+24 ALLOW_UNCHANGED. Raw aggregate ABSTAIN **+$0.034**/contract against VETO **-$0.041**, so the raw (i) and (ii) pass.
+Amendment 2 declines it again, and this is the eighth day it has been the load-bearing clause. Arms enabled on the
+ladder today AND present in both cohorts are exactly **fade and mean-reversion**: over those, VETO is
+**+$2.33 over 101 contracts (+2.3c)** against ABSTAIN's **+$1.71 over 263 (+0.65c)**. Condition (i) fails (VETO's own
+net is above zero), (ii) fails (VETO is 1.6c ABOVE the rest, not 2c below), (iii) fails at 1 of 2. The
+`intelligenceEnabled: false` clause is not reached: skill is not absent, it is composition-dependent. `due` moves to
+2026-09-27.
+
+### The rest of the day, briefly
+
+**Liveness.** App up; `main.log` current; `ladder.json` lastRunAt 10:57:20Z then 11:22Z, inside the 2 h bar; BTC
+collector up (`node scripts/btc-collector.mjs`); `reviews/2026-09-26.md` written. Sentinel `status.json` at 11:05:01Z,
+**no incident file in OPEN state** - the 2026-09-25T23-50 IBKR-timeout incident is CLOSED by last night's repair, and
+the sentinel revived `mmsim` twice on its own (09-25 23:20Z, 09-26 09:05Z). Hourly shadows all ran inside the bar:
+HrrrShadow 10:20Z, MetaculusShadow 10:35Z, PolyConsensus 10:55Z, ImplicationScan 10:54Z, StateBackup 10:20Z.
+`OracleTrader-MentionShadow` is **Disabled** and `OracleTrader-SportsBooks` / `OracleTrader-SpotShadow` likewise -
+each by its own registered read, not by discretion (sections 163, 168).
+
+**Shadows.** HRRR vs NBM at **513 graded station-days**: HRRR MAE **1.92** / bias -0.32 against NBM **2.23** / -1.08,
+HRRR closer on 275 station-days to NBM's 222 with 16 ties. The verdict that shipped on 09-21 still holds, by a wider
+margin. Mention shadow (task disabled, file static since 09-25): 182 graded, base Brier **0.2441** against the
+market's **0.1551**, counterfactual 15c-gap taker **-2.17c/contract** over 54 trades - the market is better than the
+base rate and the arm is not built. Polymarket consensus: the duplication BACKLOG 250 recorded is **still growing** -
+"graded" now prints **817,995** against 646,265 yesterday and 477,809 on 09-24, from 20,232 signals. The de-duplicated
+executable leg is unchanged (+4.63c at the Kalshi ask net of fee over n=1,436). **Do not read the headline count**;
+build-queue 13's trigger remains unreadable until the writer is fixed.
+
+**Gates.** `btc-gate.mjs`: 440 events (bar 200), event-clustered lower bound **-2.25c** against the +1c required,
+day lower bound -1.33c - FAIL, and convergence is already retired on it. `quoter-shadow-gate.mjs`: ALLOWED 64 settled
+proxy fills over 34 events at **+0.72c** (needs 30 fills over 40 events, so insufficient), BLOCKED 1,418 fills at
+**-4.95c**, 95% [-7.27, -2.63] - the gates are refusing quotes that would have lost.
+
+**Quoter, and why its line reads worse than it is.** `[quoter] disabled: 32 candidates, would quote 0 (4 gated)
+— shadow meter on`. That is not a silence: `quoter.ts:869` prints `cands.length` for the first number but computes
+`quotable` and `gated` over the smaller `chosen` set, so the true reading is **4 chosen, all 4 gated**, not 0 of 32.
+The arm is off on an operator hold and its shadow meter is running (q4845 f1553, markout -2.49c on n=1515). New
+backlog item: the line mixes two population sizes and invites exactly the misreading the maintenance prompt warns
+about.
+
+**Sharp anchor.** `gradedN` **1305**, Brier **0.1197**; `ruleN` **668**, `ruleNet` **+$30.31** = **+4.54c/contract**.
+`anchor-grades.jsonl` 1,309 rows, **+36 today**, +101 on 09-25. Odds API spend **320** today against the 645 ceiling;
+09-25 closed at 644.
+
+**Ladder against the venue ledger.** Stages and net since promotion: `kalshi-leadlag` live x2, 11 settled, -$6.35,
+checkpoint at 20; `kalshi-fade` tiny-live, 45 settled, +$0.42, checkpoint at 60; `kalshi-mean-reversion` tiny-live,
+21 settled, -$0.80, checkpoint at 40; `kalshi-dutch` tiny-live, 0 settled; `polyus-fade` disabled, cool-down expiring
+today; everything else disabled on an operator hold or a ladder stop, three retired by registration (convergence,
+cross-venue, polyus-lag). Venue-true for the last 24 h: Kalshi **69 settlements, -$1.54 after $1.05 fees**;
+Polymarket US **0 resolutions**. The 15-minute crypto ladders carry it both ways - KXSOL15M +$3.41 and KXXRP15M
++$0.64 against KXBTC15M -$4.17 and KXETH15M -$4.09.
