@@ -3021,6 +3021,15 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   disabled also print the fair-value count the live line carries, since "fair-value on 0 of M" is half of the
   registered silence check and is invisible while the arm is off. Log-only; no behaviour. Trigger: any day
   `quoter.ts` is touched.
+- **253. Nothing compares the running bundle against HEAD, so a rebuild without a restart is invisible (2026-09-26,
+  section 170).** A second headless session committed `8b83935` at 11:27:27Z and rebuilt `out/main/index.js` at 11:26Z
+  without restarting, so the running app was on a 10-minute-old bundle that did not contain a protective change to an
+  arm whose cool-down expired the same day. `[app] start` already logs `main bundle built <ISO>`, and the sentinel
+  already reads `main.log`, so the check is cheap: flag it when the newest `[app] start` line's bundle timestamp is
+  older than `out/main/index.js`'s mtime. Second, smaller half: two maintenance-class sessions ran against this repo
+  inside twenty minutes and neither knew about the other; a lock file or a `git log` check at session start would have
+  said so. Trigger: the next time `sentinel.mjs` is touched, with 249.
+
 
 - **248. The consensus shadow's grades are 43x duplicated, and build-queue 13 must not read them (2026-09-24,
   section 168).** `data/polymarket-consensus/grades.jsonl` has 480,107 rows and 11,041 distinct

@@ -6908,6 +6908,31 @@ net is above zero), (ii) fails (VETO is 1.6c ABOVE the rest, not 2c below), (iii
 `intelligenceEnabled: false` clause is not reached: skill is not absent, it is composition-dependent. `due` moves to
 2026-09-27.
 
+### A second session committed mid-run, and it bears on read 235
+
+At **11:27:27Z**, between this session's build and its commit, another headless session committed `8b83935`
+*"Polymarket US fade: eBattles (simulated football) blocked; mini-arm evidence clustered by day"* - five files
+(`classify.ts`, `ladder.ts`, `PREREGISTERED-polyus-fade.md`, two test files). It rebuilt the bundle at 11:26Z but did
+**not** restart, so for twenty minutes the running app was on the 11:15:36Z bundle and did not carry it. Handled rather
+than ignored: `tsc` clean on the combined tree, **review-fixes 633/0, ladder 177/0, adversarial 97/0** (their two new
+assertions included), ibkr-lab and ibkr suites pass, rebuilt at 11:46:56Z with both markers in `out/main/index.js`
+(`SAVE FAILED` and `esports-sim`), and restarted onto it. Nothing of theirs was reverted and nothing of theirs was
+left undeployed - their change blocks a market family the fade was losing on, and this arm's cool-down expires
+**today**, so leaving it built-but-not-running was the one outcome that could cost money.
+
+**It also corrects something in read 235 above.** Their second fix is that `Ladder` clustered Polymarket US closes by
+**market** rather than by UTC day, so the fade's eight closes from a single afternoon were read as *"8 day-clusters"*.
+That is the band the ladder used when it stopped the arm on 09-23 at 8 trades - the stop that froze the cohort BACKLOG
+247 is about. So 247's instance has two reasons not to be permanent now: the cool-down expires today, and the stop that
+started it rested on a clustering error that no longer exists. The registered read's own statistic was never affected -
+`miniArmStats` has always clustered on `ts.slice(0,10)`, which is why today's read honestly reported
+`80% [-Infinity, Infinity]` from its one real day cluster instead of a false eight.
+
+**Worth saying plainly for the next reader:** two sessions committed to this repo inside twenty minutes, and only the
+git log showed it. Nothing collided because both trees were coherent when committed, but a concurrent session that
+rebuilds without restarting leaves the app on older code than HEAD, and no liveness check in this prompt compares the
+running bundle's build time against HEAD. Filed as **BACKLOG 253**.
+
 ### The rest of the day, briefly
 
 **Liveness.** App up; `main.log` current; `ladder.json` lastRunAt 10:57:20Z then 11:22Z, inside the 2 h bar; BTC
