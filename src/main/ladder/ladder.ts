@@ -1471,7 +1471,9 @@ export class Ladder {
           // arm's n, mean and netDollars with nothing to separate them (audit B-48). Rows written before the
           // mode field existed carry none and are skipped rather than guessed at: a stage that began before
           // this build re-baselines on its next capture, which costs evidence once instead of trusting it.
-          if (r.type === 'closed' && r.mode === 'live' && r.strategy === strategy && typeof r.pnl === 'number' && Date.parse(r.ts ?? '') >= since) out.push({ v: r.pnl, g: r.marketId ?? r.ts ?? String(out.length) })
+          // Clustered by UTC day, as every other arm and the stop message say: by market, the fade's eight closes
+          // from one afternoon read as "8 day-clusters" (2026-09-23; PREREGISTERED-polyus-fade.md amendment 1).
+          if (r.type === 'closed' && r.mode === 'live' && r.strategy === strategy && typeof r.pnl === 'number' && Date.parse(r.ts ?? '') >= since) out.push({ v: r.pnl, g: (r.ts ?? '').slice(0, 10) || String(out.length) })
         } catch {
           // skip bad line
         }

@@ -634,6 +634,11 @@ eq('fade v3: every commodity series fade traded is blocked',
   ['KXWTI', 'KXWTIW', 'KXBRENTD', 'KXNATGASD', 'KXNATGASMON', 'KXCOPPERD', 'KXCOPPERW', 'KXGOLDD', 'KXGOLDW', 'KXSILVERD', 'KXSILVERW', 'KXSILVERMON', 'KXAAAGASD', 'KXAAAGASDCA', 'KXAAAGASW', 'KXDIESELD']
     .map((s) => fadeCategoryBlock({ id: `${s}-26SEP2217-T1` }, 12 * 60)),
   new Array(16).fill('commodities'))
+eq('Polymarket US eBattles (simulated football) are blocked from the fade, by question or by slug',
+  [fadeCategoryBlock({ id: 'atc-ebfsa-sas-bol-2026-09-23-dh5-bol', question: 'Will the Sassuolo vs Bologna eBattles: Serie A match scheduled for Sep 23, 2026 end in a draw?' }, 5 * 60),
+    fadeCategoryBlock({ id: 'atc-ebfwcb-por-bel-2026-09-23-dh4-bel' }, 5 * 60),
+    fadeCategoryBlock({ id: 'aec-nfl-atl-gb-2026-09-24', question: 'Falcons vs. Packers' }, 5 * 60)],
+  ['esports-sim', 'esports-sim', null])
 eq('fade v3: a GOLD-prefixed non-commodity series is not a commodity', fadeCategoryBlock({ id: 'KXGOLDENGLOBES-27JAN-X', question: 'Golden Globes best picture?' }, 12 * 60), null)
 eq('fade v3: politics and crypto are unchanged',
   [fadeCategoryBlock({ id: 'KXTRUMPAPPROVE-26SEP22-B42', question: 'Trump approval above 42?' }, 12 * 60),

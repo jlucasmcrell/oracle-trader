@@ -20,6 +20,10 @@ const WEATHER_WORDS = /\b(temperature|temp|rain|rainfall|snow|snowfall|precipita
 const FINANCE_WORDS =
   /\b(cpi|inflation|fed|interest rate|unemployment|gdp|jobless|nasdaq|s&p|dow jones|treasury|natural gas|oil price|earnings|stock|share price|market close|ticker)\b/i
 const ENTERTAINMENT_WORDS = /\b(oscar|grammy|emmy|box office|billboard|album|rotten tomatoes|spotify|netflix)\b/i
+// Polymarket US "eBattles" - simulated-football esports (slugs atc-ebfsa-, atc-ebfwcb-, ...). The re-armed fade's first
+// afternoon lost 3 of 7 there at 93-94c favourites (2026-09-23; PREREGISTERED-polyus-fade.md amendment 1), against 0.45 expected.
+const ESIM_WORDS = /\bebattles?\b/i
+const ESIM_SLUG = /^[a-z]+-ebf/
 
 export interface ClassifiableMarket {
   category?: string
@@ -118,6 +122,7 @@ export function fadeCategoryBlock(
   const q = m.question ?? ''
   const near = horizonMin < 48 * 60
   const weather = /weather|climate|temperature/.test(c) || isWeatherSeries(m) || WEATHER_WORDS.test(q)
+  if (ESIM_WORDS.test(q) || ESIM_SLUG.test(m.id ?? '')) return exceptions.includes('esports-sim') ? null : 'esports-sim'
   const group =
     /crypto/.test(c) || CRYPTO_WORDS.test(q)
       ? 'crypto'

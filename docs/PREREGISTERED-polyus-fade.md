@@ -29,3 +29,15 @@ with the review's terms:
   rules. FAIL: upper bound below zero - the app retires the arm (`Ladder.retire`).
 - Otherwise continue to 30 losses or 500 settled, or 2026-12-31: then INCONCLUSIVE, and the arm stops.
 - The maintenance session checks the same entries against the venue record (`scripts/venue-pnl.py --by-arm`).
+
+## Amendment 1 (2026-09-26, before the second trade-small test)
+
+- **Polymarket US eBattles (simulated-football esports) are blocked** (`fadeCategoryBlock` group `esports-sim`, matched
+  on "eBattles" in the question or an `ebf` league code in the slug). The first afternoon (2026-09-23) filled 7 of them
+  at 93-94c favourites and lost 3 (about 0.45 losses expected at those prices; p about 0.01), all within four hours.
+  The old fade record had none of these markets.
+- **The cohort is unchanged**: the read still counts every live fade close from 2026-09-23 09:00Z, those three losses
+  included, so the block cannot make the verdict easier to pass.
+- The ladder stopped the arm on 2026-09-23 at 8 closes (-$3.50). Its stop message said "8 day-clusters" for one
+  afternoon: Polymarket US evidence was clustered by market. It is clustered by UTC day from this build. The stop
+  itself stands (one day is floored at the plain per-trade band, which was also wholly below zero).

@@ -510,6 +510,8 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     writeFileSync(join(dir4, 'mini-auto-polymarket-us.json-research.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ type: 'closed', mode: 'live', strategy: 'fade', ts: new Date(Date.now() - (i % 4) * 86_400_000).toISOString(), marketId: `pm-${i}`, pnl: i % 5 === 4 ? -0.5 : 0.35 })).join(String.fromCharCode(10)))
     await ladder.run()
     eq('G: Polymarket US fade scales on its research log', { stage: st('polyus-fade').stage, mult: (mcfg.strategySizeMult as Record<string, number>)?.fade }, { stage: 'live', mult: 2 })
+    eq('G: Polymarket US evidence clusters by day, not by market (20 closes on 4 days)',
+      (ladder as unknown as { miniEvidence: (s: string, since: number, notch: number) => { clusters: number } }).miniEvidence('fade', 0, 1).clusters, 4)
     // lead-lag: 20 swept markets settled at +$0.05 through the venue ledger -> 2 contracts
     const now = Date.now()
     ;(L.state.strategies['kalshi-leadlag'] as { since?: number }).since = now - 6 * 86_400_000
