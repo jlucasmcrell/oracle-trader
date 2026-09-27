@@ -6975,3 +6975,119 @@ today; everything else disabled on an operator hold or a ladder stop, three reti
 cross-venue, polyus-lag). Venue-true for the last 24 h: Kalshi **69 settlements, -$1.54 after $1.05 fees**;
 Polymarket US **0 resolutions**. The 15-minute crypto ladders carry it both ways - KXSOL15M +$3.41 and KXXRP15M
 +$0.64 against KXBTC15M -$4.17 and KXETH15M -$4.09.
+
+## §171 - 2026-09-27 11:30Z: the fill-window guard could not see its own worst case, and the ladder's "wrong" P&L was a proven-coin filter
+
+Six pre-registered reads came due and all six were performed; none earned a PASS, so no setting changed. One
+behavioural change shipped. One open question from §170 is closed, and closed as *not a defect*.
+
+### The change: `pendingFillOutcome`, and why read 202 found nothing for a month
+
+Backlog 202 (audit B-53, "likely", never observed) says a maker slice can be lost when the reconcile window - the
+newest **200** account fills (`autoTrader.ts:3420`, `adapter.getFills(200)`) - no longer reaches an order's earlier
+partial fill, so the remainder is never promoted and the pending row is deleted. Its registered read is
+`main.log` warnings of `fill window too short`. **There are zero in the entire 54 MB log**, and the string is
+present at `autoTrader.ts:3607`, so the read's own evidence had to mean one of two things. It means both, and the
+second one is the defect.
+
+`reconcilePending` classified a row that had left the venue's resting list in this order:
+
+    if (newlyFilled > 0.005) { promote }
+    else if (filledTotal <= 0.005) { emit autoexpired }
+    else if (filledTotal < p.promoted) { warn 'fill window too short' }
+
+When the window reaches **part** of the order, `0 < filledTotal < promoted` and the warning fires. When it misses
+the order **entirely** - the worse case, and the one the audit actually described - `filledTotal` is 0, so
+`filledTotal <= 0.005` catches it one branch earlier and the row is reported as an ordinary unfilled expiry: no
+warning, no episode row, and the slice still never promoted. **The guard could only ever observe the milder half
+of its own defect**, which is why a month of logs is silent about it.
+
+Fix: one exported pure classifier next to `shouldRepriceMaker`,
+
+    export function pendingFillOutcome(filledTotal, promoted): 'promote' | 'window-short' | 'expired' | 'none'
+
+with `window-short` tested before `expired`. Exactly one input changes verdict - `promoted > 0, filledTotal = 0`
+moves from `expired` to `window-short`. The fourth value is not decoration: the case `filledTotal === promoted`
+(fully promoted, nothing new) previously fell through all three branches and emitted nothing, and a plain two-way
+branch swap would have started emitting a spurious `autoexpired` for every completed maker order. `none` keeps that
+path silent.
+
+**The window itself was measured and left alone.** On the fresh dump the newest 200 fills span at least **26 h**
+over the last seven days (median 58 h, whole-month minimum 5.75 h) against a p99 filled-order lifetime of **6.8 h**
+and a maximum of 23.8 h, with 0 of 3,374 filled orders currently part-filled with size remaining. The code
+comment's premise - "356-687 fills a day" - is stale: the account now averages about **127 a day** (3,814 fills over
+30 days), so the window covers more wall clock than when the audit was written. Widening 200 to 500 would cost a
+larger fetch on every reconcile to buy margin the measurement says is already there; the honest change is to make
+the diagnostic able to report the failure, and to record the measurement in the comment instead of the old rate.
+Item 202's trigger is rewritten accordingly: the log line is now capable of firing, and the standing check is the
+measured window span rather than a warning that could not appear.
+
+Verified: `review-fixes.test.ts` gains a six-case assertion over all four verdicts including the changed one;
+**review-fixes 634/0, ladder 177/0, adversarial 97/0**; `tsc --noEmit` clean; `electron-vite build` clean with the
+markers in `out/main/index.js`; restarted 11:20:40Z (pid 57776) and confirmed in `main.log` - lead-lag 11:21:14Z,
+ibkr-lab 11:21:30Z, quoter shadow 11:21:36Z, dutch 11:21:21Z, Kalshi balance read $82.02. Backup
+`MAINT-2026-09-27`.
+
+### §170's open question 251 is closed: the ladder was right and the comparison was wrong
+
+§170 filed the ladder's lead-lag evidence as unsound: at the same instant `ladder.json` read *11 settled,
+-$6.35* against `venue-pnl --by-arm`'s `leadlag -$1.68`, a figure for one arm larger than the whole account's loss,
+and it was going to decide a promotion at 20 settled. Re-measured today at the same instant (ladder `lastEval`
+10:47:06Z, dump 11:11Z, settlement count identical to the 11:03Z dump so nothing landed between them):
+
+| source | settled | net |
+|---|---|---|
+| `ladder.json` kalshi-leadlag | 46 | **+$16.14** |
+| `venue-pnl --by-arm`, all coins | 90 markets | **+$20.77** |
+| settlement ledger, **BTC/ETH only** | **47 markets** | **+$15.60** |
+
+`leadLagEvidence` builds its cohort from `leadlag-dislocations.jsonl` via `leadLagRowCounts`, which **drops every
+unproven coin on purpose** - `ladder.ts:120-122`, verbatim: *"An unproven coin's fills are judged by the
+pre-registered per-coin gate, not by this pool: the stage baseline was earned by BTC/ETH and a pool cannot stop a
+subset (round 93, backlog 91)."* `venue-pnl --by-arm` has no such filter, so the two were never measuring the same
+cohort. Restricted to the proven coins they agree to **one market and 54 cents** across 46-47 settlements - the
+residual expected from the app's `realizedPnl` tracker against the settlement formula, plus `swept` requiring a
+dislocation row inside the stage window.
+
+The six unproven coins are the rest of the difference, and this week they are earning: KXHYPE15M +$8.06/10 markets,
+KXBNB15M +$1.23/13, KXSOL15M +$0.54/5 against KXXRP15M -$1.38/12 and KXDOGE15M -$3.28/3, with the ladder's own
+cohort at KXBTC15M +$13.43/32 and KXETH15M +$2.17/15. That split is exactly what read 72b/161 exists to judge.
+
+§170's proposed first checks - positions exited by sale before settlement, entry fees charged twice - were the wrong
+hypothesis, and are recorded as wrong. **The lasting correction is procedural: when checking the lead-lag arm
+against the ledger, restrict the ledger to the proven coins, or the comparison means nothing in either direction.**
+No code changed.
+
+### The reads, in one line each
+
+- **233 lead-lag at event speed**: app CONTINUE at 00:47:15Z (+0.19c, 80% [-0.71, 1.09], n=1943/6d); the grader on a
+  longer window now agrees (+0.18c, 80% [-0.62, +0.99], n=2175/6d) where yesterday the two differed in sign.
+  `leadLagFastLive` stays absent from config, i.e. off. At the 6c floor: 5,530 gaps over 109 h, median life 0.5 s,
+  90% gone inside 5 s - the speed is real and the edge is not, for the sixth day.
+- **235 Polymarket US fade**: app WAIT at 00:47:15Z (14 settled, 4 losses, -22.71c); the cohort **now** reads 28
+  settled, 6 losses over 3 days, **-15.66c/contract, 80% [-28.18, -3.14]**, and the venue's `mini:fade n=28 -$4.42`
+  equals the research file's -$4.4166 to the cent. The upper bound is already below zero - the registration's FAIL
+  shape - but the registration reads at **15 losses or 250 settled** and the arm is at 6 and 28, so it was not
+  front-run. The ladder's -$5 stage stop sits against -$4.42 and will likely act first, which is the design working.
+- **72b/161 lead-lag coin cohort**: new coins 286.03 of 400 contracts, 9 day-clusters, +2.72c 95% [-4.73, +10.18];
+  established BTC/ETH +8.21c [+5.26, +11.15]. NOT YET; `leadLagCoins` and `leadLagProvenCoins` untouched; final
+  10-04.
+- **2 WebSocket order book**: `wsStats.dayLog` 09-21 0.9915, 09-22 0.9972, 09-23 0.9939, 09-24 0.9961, 09-25 0.9948,
+  09-26 0.9952 - **six consecutive days** at or above 0.99 (09-20's 0.98950 broke the previous run). The seventh day
+  can first close tomorrow, so this is the one build trigger that may fire on 09-28.
+- **202 maker slice / 200-fill window**: not reproducible, and the reason was a defect - above.
+- **1 critic skill**: raw VETO -0.040/contract against the rest at +0.033, skilled in 1 of 2 shared enabled
+  strategies; the script's own last line reads "KEEP veto mode OFF". `intelligenceMode` stays `shadow`.
+
+### The day's numbers, for the record
+
+Venue-true since 2026-09-26T11:00Z: Kalshi **82 settlements, +$24.51 after $3.18 fees** - the best day in the
+record, carried by KXBTC15M +$18.91/26, KXHYPE15M +$6.66 and KXETH15M +$5.81 against KXDOGE15M -$3.28 and
+KXSOL15M -$1.94. Polymarket US 18 resolutions, -$1.03. Kalshi cash $82.02 (shards $7.03 / $5.00 / $50.94 / $19.06)
+plus 13 positions at cost $13.01; Polymarket US $39.26. Sharp anchor out of sample `gradedN` 1444, Brier 0.1178,
+`ruleN` 718, `ruleNet` +$30.41 = +4.24c/contract, `anchor-grades.jsonl` 1,448 rows (+16 today). Odds API 322/645.
+HRRR vs NBM at 540 graded station-days: MAE 1.90 / -0.33 against 2.23 / -1.07, closer on 293 to 231 with 16 ties.
+ECMWF ENS shadow 54 rows after today's pull, 0 graded until tonight's day completes. `btc-gate` FAIL (452 events,
+LB -2.21c), `quoter-shadow-gate` ALLOWED 65/35 at -0.65c (insufficient) against BLOCKED -4.25c, `hunch-gate` FAIL
+(169 events, best cell -7.07c). Consensus shadow's phantom "graded" count grew another 176k to **993,898** -
+BACKLOG 250 is the one measurement defect getting worse on a schedule.

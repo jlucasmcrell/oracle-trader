@@ -11,7 +11,7 @@ import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyus
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
-import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
+import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter, resolvedLongPrice } from '../../src/main/venues/polymarketUs'
 import { isPinnedQuote, refreshedCloseTime, settlementProbeDue, statsBand, stuckSettlements } from '../../src/main/strategies/ledgerAudit'
@@ -896,6 +896,13 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('maker reprice: 1c and 2c moves hold the queue slot, 3c repriced',
     [shouldRepriceMaker(0.41, 0.40), shouldRepriceMaker(0.42, 0.40), shouldRepriceMaker(0.43, 0.40), shouldRepriceMaker(0.37, 0.40)],
     [false, false, true, true])
+  // Backlog 202 / audit B-53. The reconcile window is the newest 200 account fills; when it no longer reaches an
+  // order's earlier slice the shortfall must be reported, not mistaken for an unfilled expiry. Until 2026-09-27 the
+  // total miss (nothing visible against a promoted slice) hit the `filledTotal <= 0.005` expiry branch first, so the
+  // diagnostic could only fire on a PARTIAL miss and the read found zero warnings in the whole log.
+  eq('pending fill outcome: a promoted slice the window can no longer see is window-short, not an expiry',
+    [pendingFillOutcome(0, 1), pendingFillOutcome(0.5, 1), pendingFillOutcome(0, 0), pendingFillOutcome(1, 0), pendingFillOutcome(1, 1), pendingFillOutcome(0.003, 0)],
+    ['window-short', 'window-short', 'expired', 'promote', 'none', 'expired'])
   eq('leadlag: book top is best YES bid and 1 - best NO bid, unsorted levels and empty sizes ignored',
     [kalshiBookTop({ orderbook_fp: { yes_dollars: [['0.7900', '5'], ['0.8000', '3'], ['0.8100', '0']], no_dollars: [['0.1900', '4'], ['0.1800', '9']] } }),
       kalshiBookTop({ orderbook_fp: { yes_dollars: [['0.5', '1']], no_dollars: [] } }), kalshiBookTop(null)],

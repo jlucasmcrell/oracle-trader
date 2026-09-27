@@ -648,6 +648,27 @@ export function shouldRepriceMaker(desiredYes: number, restingYes: number): bool
   return Math.abs(desiredYes - restingYes) >= 0.03 - 1e-9
 }
 
+/**
+ * What became of a pending maker row once it left the venue's resting list, given the shares the reconcile window
+ * can still see for its order (`filledTotal`) against the shares we have already promoted into a position.
+ *
+ * The order of the tests is the whole point. `window-short` is audit B-53's diagnostic: the newest-200-fills window
+ * no longer reaches this order's earlier slice, so the remainder is invisible and nothing may be promoted on it.
+ * Until 2026-09-27 the caller tested `filledTotal <= 0.005` FIRST, which meant the diagnostic could only ever fire
+ * when the window reached PART of the order - the worse case, where the window misses it entirely, was reported as
+ * an ordinary unfilled expiry and logged nothing. That is why backlog 202's registered read found zero warnings in
+ * the whole log: not because the window was wide enough, but because the guard could not see its own failure mode.
+ * (The window itself measures adequate as of 2026-09-27: the newest 200 fills span at least 26 h over the last
+ * seven days against a p99 filled-order lifetime of 6.8 h. The code comment's "356-687 fills a day" is stale; this
+ * account now averages about 127 a day.)
+ */
+export function pendingFillOutcome(filledTotal: number, promoted: number): 'promote' | 'window-short' | 'expired' | 'none' {
+  if (filledTotal - promoted > 0.005) return 'promote'
+  if (filledTotal < promoted) return 'window-short'
+  if (filledTotal <= 0.005) return 'expired'
+  return 'none'
+}
+
 /** A resting limit is stale by this much of the mid before it is pulled, in probability units. */
 export const STALE_REST_CENTS = 0.02
 
@@ -3584,7 +3605,8 @@ export class AutoTrader {
       const mine = fills.filter((f) => f.orderId === p.orderId)
       const filledTotal = mine.reduce((s, f) => s + f.shares, 0)
       const newlyFilled = filledTotal - p.promoted
-      if (newlyFilled > 0.005) {
+      const outcome = pendingFillOutcome(filledTotal, p.promoted)
+      if (outcome === 'promote') {
         const vwap =
           mine.reduce((s, f) => s + f.price * f.shares, 0) / Math.max(filledTotal, 0.01)
         this.promoteFill(p.marketId, p.question, p.outcome, newlyFilled, vwap > 0 ? vwap : legOf(p.yesPrice), p.closeTime, p.eventTicker, p.modeledWinProb, p.makerFeeRate ?? 0, p.strategy, p.perfKey)
@@ -3597,15 +3619,17 @@ export class AutoTrader {
           shares: round2(newlyFilled),
           question: (p.question ?? '').slice(0, 80)
         })
-      } else if (filledTotal <= 0.005) {
-        this.emit('autoexpired', { marketId: p.marketId, question: (p.question ?? '').slice(0, 80) })
-      } else if (filledTotal < p.promoted) {
-        // The venue reports FEWER fills than we have already promoted. That means the window we reconciled
-        // against (the newest 200 account fills, 356-687 a day) no longer reaches this order's earlier slice, so
-        // the remainder is invisible and neither branch above fires: the row is dropped silently (audit B-53).
-        // Nothing is promoted on a number we cannot trust - it stays a diagnostic until the window is widened.
+      } else if (outcome === 'window-short') {
+        // The venue reports FEWER fills than we have already promoted: the window we reconciled against (the
+        // newest 200 account fills) no longer reaches this order's earlier slice, so the remainder is invisible
+        // and the row would otherwise be dropped silently (audit B-53). Nothing is promoted on a number we
+        // cannot trust - it stays a diagnostic until the window is widened. This is tested BEFORE the unfilled
+        // expiry below, because the total miss (filledTotal 0 against a promoted slice) is the worse case, not
+        // an expiry: see pendingFillOutcome.
         console.warn(`[auto-trader] fill window too short for ${p.marketId}: venue reports ${filledTotal} against ${p.promoted} already promoted`)
         this.episodes?.record('kalshi', 'pull', { marketId: p.marketId, strategy: p.strategy, orderId: p.orderId, reason: 'fill-window-short', filled: filledTotal, promoted: p.promoted, ageMin: Math.round((Date.now() - p.createdAt) / 60_000) })
+      } else if (outcome === 'expired') {
+        this.emit('autoexpired', { marketId: p.marketId, question: (p.question ?? '').slice(0, 80) })
       }
       this.removePending(p.orderId)
     }

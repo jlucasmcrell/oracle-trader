@@ -345,6 +345,11 @@ the report section. One item per day unless trivial. Record the trigger check in
    have 50+ settled candidates: vetoes below the rest by 2c or more → set `intelligenceMode` to `veto`; no skill
    after 200 settled decisions → set `intelligenceEnabled` to false and note the saving. Shadow already runs on
    the free local models (2026-09-07).
+   **2026-09-27 - trigger MET, action DECLINED, and for the second time the script's own verdict line agrees.**
+   Raw aggregate: VETO **-0.040/contract** against the rest at **+0.033** (conditions i and ii pass), skilled in
+   **1 of 2** strategies present in both cohorts among currently enabled arms (condition iii fails). The script's
+   last line reads "KEEP veto mode OFF - veto -0.040 vs rest +0.033; skilled in 1 of 2 shared enabled strategies".
+   `intelligenceMode` stays `shadow`; `intelligenceEnabled` stays true (skill is composition-dependent, not absent).
    **2026-09-09 - trigger MET, action DECLINED, rule revised.** `critic-skill.py` on a fresh dump:
    771 decisions, settled 63 ABSTAIN / 82 VETO / 47 ERROR. Aggregate net per contract: ABSTAIN
    +$0.046, VETO +$0.020 - a 2.6c gap, so the letter of the rule says switch `intelligenceMode`
@@ -449,6 +454,11 @@ the report section. One item per day unless trivial. Record the trigger check in
    Trigger: `wsStats.agreed / compared` ≥ 0.99 on seven consecutive daily
    checks (log the ratio daily). Daily checks: 2026-09-07 3762/3770 = 0.9979 PASS (1 of 7); 2026-09-08 2566/2570 = 0.9984 PASS (2 of 7); 2026-09-09 249/250 = 0.9960 PASS (3 of 7, counter reset at the overnight outage); 2026-09-10 10946/11021 = 0.9932 PASS (4 of 7). Build: serve `data.books` from the socket when its book is under 5 s old,
    REST otherwise; tests on the promotion rule; no ladder change.
+   **Daily checks from the persisted `dayLog` (the only valid series):** 2026-09-19 0.99480 PASS, 2026-09-20
+   0.98950 **FAIL**, 2026-09-21 0.99153 PASS (1 of 7), 2026-09-22 0.99720 PASS (2), 2026-09-23 0.99393 PASS (3),
+   2026-09-24 0.99608 PASS (4), 2026-09-25 0.99482 PASS (5), 2026-09-26 0.99518 PASS (**6 of 7**). **2026-09-27:
+   six consecutive days; the seventh closes tonight, so this trigger can first fire 2026-09-28** - and it is the
+   only build-queue trigger with a near-term date.
 3. **HRRR forecast source - DONE 2026-09-21 (section 153); the shadow keeps running.** Reading 2026-09-12: **135** graded station-days, HRRR MAE 1.95 /
    bias -0.01 vs NBM MAE 2.29 / bias -1.64, closer on 72 vs 58 (5 ties). Count half MET; the
    2026-09-21 date still binds. Reading 2026-09-11: **108** graded station-days, HRRR MAE 1.97 / bias
@@ -1209,8 +1219,23 @@ incident file lists more than ~5 near-identical signatures.
   (356-687 fills/day observed) yields `filledTotal - p.promoted < 0`, so the last slice is never promoted and the
   row is deleted; the orphan sweep does not compare share counts. The fix is either a wider window or a
   share-count comparison in the sweep, and it needs a reproduction against the real fill stream first - it was
-  never observed, only derived. Trigger: **2026-09-27**, or the first `vanished maker order` line whose promoted
-  total exceeds the window.
+  never observed, only derived.
+  **2026-09-27 - READ PERFORMED, and the read's own silence was the defect (section 171). Detector FIXED; window
+  left at 200 on measurement.** Zero `fill window too short` lines exist in the whole 54 MB log, and the string is
+  present at `autoTrader.ts:3607`, so either the window was wide enough or the guard was blind. Both. The branch
+  order was `promote` / `filledTotal <= 0.005 -> autoexpired` / `filledTotal < promoted -> warn`, so the case the
+  audit actually described - the window missing the order **entirely**, `filledTotal` 0 against a promoted slice -
+  hit the expiry branch first and logged nothing; only a PARTIAL miss could ever warn. Now classified by one
+  exported pure function, `pendingFillOutcome(filledTotal, promoted)` -> `promote|window-short|expired|none`, with
+  `window-short` tested first; exactly one input changes verdict, and the fourth value keeps a fully-promoted order
+  from emitting a spurious `autoexpired`. Six-case assertion in `review-fixes.test.ts`.
+  **The window measures adequate and was NOT widened:** the newest 200 fills span at least **26 h** over the last
+  seven days (median 58 h, whole-month minimum 5.75 h) against a p99 filled-order lifetime of **6.8 h** (max 23.8 h),
+  and 0 of 3,374 filled orders are part-filled with size remaining. This account now averages about **127 fills a
+  day** (3,814 over 30 days), not the 356-687 the old comment assumed, so the window covers more wall clock than
+  when the audit was written. Trigger, rewritten because the old one could not fire: **the first
+  `fill window too short` warning** (now reachable), **or** a maintenance run measuring the newest-200-fills span
+  below 12 h - then widen the fetch. No standing date.
 - **203. Lead-lag's running guard is held for the full 45 s HTTP timeout (2026-09-20, audit B-56, "likely").**
   A POST that neither returns nor errors keeps `running` set until the wall clock expires, so poll ticks inside
   that window no-op. Read and NOT fixed today: the guard is doing its job (one sweep at a time) and shortening it
@@ -2993,6 +3018,11 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   `getQuantStatus()`'s per-engine `lastScanAt` (it is already exposed) and flag a task whose lastResult is
   267014 with no matching process. Trigger: the next time `sentinel.mjs` is touched, or 2026-10-02, whichever
   is first.
+- **250 update 2026-09-27: another +176k overnight.** `report` prints **993,898** graded against 817,995 on 09-26,
+  646,265 on 09-25 and 477,809 on 09-24. The de-duplicated executable leg is unchanged (+4.63c at the Kalshi ask net
+  of fee, n=1,436; matched Kalshi 3,546). This is the one measurement defect in the project that is getting worse on
+  a schedule rather than holding still, and it blocks its own go-live trigger (build queue 12) by construction.
+
 - **250. The consensus shadow is still duplicating, and the count is still growing (2026-09-25).** Item 248
   recorded 477,809 "graded" on 09-24 against 11,041 distinct signals; today `report` prints **646,265**. The
   frozen `state.json` from the 09-21 power loss is still being re-graded every hour, so the file grows without
@@ -3000,6 +3030,21 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   stop producing it. Fix: repair or rebuild `data/polymarket-consensus/state.json` so grading resumes from the
   last real cursor, and de-duplicate `grades.jsonl` on `(title, market, ts)`. Trigger: next build-queue slot;
   it is a measurement defect, not a money one, which is why it did not take today's slot.
+- **251 - CLOSED 2026-09-27 (section 171): the ladder was right and the comparison was wrong.** Re-measured at the
+  same instant (ladder `lastEval` 10:47:06Z, dump 11:11Z, identical settlement count so nothing landed between them):
+  `ladder.json` **46 settled, +$16.14**; `venue-pnl --by-arm` all coins **90 markets, +$20.77**; the settlement
+  ledger restricted to **BTC/ETH only, 47 markets, +$15.60**. `leadLagEvidence` builds its cohort through
+  `leadLagRowCounts`, which **drops every unproven coin on purpose** (`ladder.ts:120-122`: "an unproven coin's fills
+  are judged by the pre-registered per-coin gate, not by this pool ... a pool cannot stop a subset", round 93 /
+  backlog 91); `venue-pnl --by-arm` has no such filter, so the two were never measuring the same cohort. On the
+  proven coins they agree to **one market and 54 cents** over 46-47 settlements - the residual expected from the
+  app's `realizedPnl` tracker against the settlement formula plus `swept` needing a dislocation row inside the stage.
+  The six unproven coins are the difference and are earning this week (KXHYPE15M +$8.06/10, KXBNB15M +$1.23/13,
+  KXSOL15M +$0.54/5 against KXXRP15M -$1.38/12, KXDOGE15M -$3.28/3), which is read 72b/161's business, not the
+  pool's. The 09-26 hypotheses (sales before settlement, double-charged entry fees) were **wrong**. Lasting
+  correction, procedural: **when checking the lead-lag arm against the ledger, restrict the ledger to the proven
+  coins, or the comparison means nothing in either direction.** No code changed. Original text follows.
+
 - **251. The ladder's P&L for the one live arm is 3.8x the venue ledger's over the same window (2026-09-26, section
   170).** Read at the same instant - `ladder.json` and a fresh read-only Kalshi dump taken together - `kalshi-leadlag`
   reports *11 settled since stage start, net -$6.35* while the settlement ledger since that stage start
@@ -3083,3 +3128,32 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
     one build, not two, and they are **the next build** rather than today's: today's behavioural change budget went to
     five registered retirements and the 198 bracket they could not be judged without. Trigger: **2026-09-25**, ahead
     of anything undated.
+
+## 2026-09-27 daily maintenance: dated trigger checks (see docs/reports/2026-09-27.md, section 171)
+
+Every build-queue trigger was checked and **none is met**, so the rule pointed at item 9 (SportsGameOdds role, the
+next untriggered build). It was not taken: read 202 came due today, performing it surfaced a real defect in the code
+that decides whether a filled contract becomes a tracked position, and the prompt allows one behavioural change per
+run. Item 9 has no trigger and no deadline and carries forward.
+
+- **1 critic skill** - MET daily, declined by the amended rule (above).
+- **2 WebSocket book** - 6 of 7 consecutive days >= 0.99; can first fire **2026-09-28**.
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** - not met: quoter notch 1, off on an operator hold,
+  and its shadow ALLOWED cohort is 65 settled proxy fills over 35 events (needs 30 over 40) at -0.65c.
+- **6 sports anchor on Polymarket US** - not met: `kalshi-sports-anchor` is disabled on an operator hold, so it has
+  no checkpoint to be positive.
+- **7 player props** - not met (anchor notch 1).
+- **8c market-maker rest patterns** - not met: mean-reversion has fills but no positive checkpoint (21 settled,
+  -$0.80, checkpoint at 40).
+- **9 SportsGameOdds role** - no trigger; next untriggered build, deferred with the reason above.
+- **10 Metaculus** - not met: 189 pairs on file, **0 graded**.
+- **11 forecaster v2** - not met: `hunch-gate.mjs` reads 169 settled events against the 200 the trigger needs (it
+  does read FAIL / NOT YET on the other half: Brier 0.0786 vs mid 0.2211, but the best trading cell is -7.07c).
+- **12 mention-market base rates** - **counter-indicated**, not merely unmet: 182 graded, base Brier **0.2441**
+  against the market's **0.1551**, counterfactual taker -2.17c over 54.
+- **13 consensus arm** - built and on the ladder.
+
+Registered reads due today and performed: **233** (CONTINUE, app and grader now agree at +0.19c / +0.18c),
+**235** (WAIT at the app's 00:47Z read; cohort now 28 settled / 6 losses / -15.66c, 80% [-28.18, -3.14], and the
+registered bar is 15 losses or 250 settled), **72b/161** (NOT YET, 286.03 of 400 new-coin contracts),
+**2** (6 of 7), **202** (not reproducible; detector fixed), **1** (KEEP veto off). `docs/reads.json` advanced.
