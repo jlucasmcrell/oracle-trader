@@ -5827,3 +5827,357 @@ to Ollama, so nothing is down - it is the operator's to top up when he wants the
 
 `SendUserFile` and `PushNotification` are not available in this headless session, as designed. The report is written
 to `docs/reports/2026-09-27.md` for the 08:30 desktop task to deliver.
+
+## Repair 2026-09-28T04:20Z
+
+**Incident `2026-09-28T03-50-log-warn-ibkr-lab-Error-Gateway-API-not` — NEEDS-OPERATOR.** The sentinel dispatched on
+`[warn] [ibkr-lab] Error: Gateway API not available yet.`, x10 in the 03:35-03:50Z window. It is the real thing and it
+is not ours: IBKR expired the security tokens its **daily** auto-restart re-authenticates with, so tonight's
+23:45-local gateway restart came back to a login dialog instead of an API listener. BACKLOG **232**, whose trigger
+reads "the next time the page fires", has now fired. Nothing was changed in the app.
+
+**The gateway said so itself** — `C:/Jts/ibgateway/1051/launcher.20260927.log:149,152` at 23:45:07 local
+(2026-09-28T03:45:07Z): `Session expired [sessionId=2,softToken=0,connInfo=cdc1.ibllc.com:4001 (SSL)]`, then
+`Authorization failed: The security tokens associated with your login credentials have expired (routinely) in
+accordance with our security protocols. Please manually enter your username and password to access IB Gateway.`
+`loginFailFrequency.txt` holds the same instant. The relaunched process (PID 52824, started 23:45:03 local,
+Responding, window title `Gateway`) owns **no listening socket at all** — 4001 and 4002 both closed — and its live
+`launcher.log` repeats `instance of control is not created yet` every five minutes: up, but pre-login. So
+`detectIbkrGateway` (`ibkrGateway.ts:31`) is literally right and `IbkrReader.run` throws before connecting
+(`ibkr.ts:26`).
+
+**Tonight's evidence settles the open question in 232: the daily auto-restart really does work unattended, six nights
+in seven.** `launcher.20260923..26.log` each reach `Daily auto-restart is enabled.` at 23:45:07-08 and cost the lab
+one or two warn lines (09-24 x4, 09-27 x2); only the **weekly** token expiry needs hands, and it announces itself in
+`launcher.<date>.log` with `Session expired` / `Authorization failed`. Blast radius is the paper lab alone:
+`ibkr-lab.json` `mode: paper`, `liveStrategies: []`, `live: []`, stopped at scan 20577 / 03:44:33Z;
+`fill-reconciler-ibkr.json` `ingested: 0`, `seenFillIds: 0`; no `ibkr` arm or key in `config.json`; and the throw is
+at the quotes call (`ibkrLab.ts:202`) before `fillOrders`/`closePositions` (`219-220`), so nothing is decided on a
+stale price. The 10-minute `[reconciler] run failed: Gateway API not available yet` line is the same cause at `[log]`
+level on a venue with zero fills.
+
+**No defect to fix, and no restart would help.** The electron processes running when the incident opened started
+2026-09-27 07:20 local, sixteen hours before the first warn; the missing thing is a credential outside the app. The
+2026-09-17 discovery back-off held under exactly the condition it was written for — **2 `[ibkr-lab]` lines a minute**
+from 03:45 to 04:10 with **one** 83-line discovery walk at 04:01, against 164/min the night it was a defect.
+
+**What changed: one line of policy, no code.** `data/sentinel/suppressions.json` gained
+`\[ibkr-lab\] Error: Gateway API not available yet` until **2026-10-01T00:00:00Z** — three days, not the permitted
+seven — superseding the identical pattern repair 2026-09-17T03-50 had set to 2026-09-24, so the file keeps one entry
+per pattern. Three days covers tonight and the next two harmless daily restarts and lapses before the next weekly
+expiry (~2026-10-05T03:45Z), so a repeat raises its own incident. Checked with the sentinel's own
+`new RegExp(pattern,'i')`: it matches the finding key, the signature and the raw sample, and does not match
+`Gateway disconnected`, `IBKR request timed out`, the `[reconciler]` variant, `IBKR 200: No security definition`,
+`[ibkr-lab] SAVE FAILED` or `Error occurred in handler for ibkr:markets`.
+`node scripts/sentinel.mjs --dry --since=2026-09-28T03:40:00Z` exits 0 with the repair finding gone and the
+sentinel's own `ibkr-gateway-down` **notify** finding still standing ("No API listener on 127.0.0.1:4001 or :4002 for
+25 min (3 checks)") — so the operator is still told by the check built for it, on the 3-hourly delivery task, while
+the suppression only stops a second repair session being spent on a password this app does not hold. Nothing was
+typechecked, built, deployed or backed up, because nothing in `src/` or `scripts/` changed.
+
+**For the operator.** Log in to IB Gateway (paper, 4002) on this box and the lab resumes inside 30 s by itself
+(`detect()` runs per request). Until then the 23-arm paper laboratory records nothing — read `ibkr-lab.json`
+`lastScanAt`/`scans`, never this signature's silence, while the suppression holds. The durable choice is his: IBC with
+the IBKR username and password in its config file, or one manual login a week plus the lost overnight scans when it
+lands at 23:45.
+
+---
+
+# Oracle Trader — maintenance, 2026-09-28
+
+Headless run (Windows task `OracleTrader-Maintenance`), started 07:00 local / 11:00Z. All nine DUE registered reads
+were performed, and the build-queue item that has been parked since 2026-09-07 **fired its trigger today** and was
+built: the WebSocket book is now served to the scan.
+
+## 1. Liveness
+
+Everything that should have been running was running; nothing had to be revived.
+
+| check | state |
+|---|---|
+| app process | up, PID 57776, started 2026-09-27T11:20:43Z — restarted by this session at 11:21:59Z, PID 25628 |
+| `main.log` | written 0 min ago |
+| `ladder.json` `lastRunAt` | 2026-09-28T10:20:44Z (59 min, inside the 2 h bar) |
+| BTC collector | up, `node scripts/btc-collector.mjs` |
+| nightly review | `reviews/2026-09-28.md` present, deepseek-v4-flash, 1 attempt, no error |
+| sentinel | `status.json` at 11:20:02Z, task Ready, 1 repair session today |
+| `OracleTrader-HrrrShadow` | `forecasts.jsonl` 10:20:09Z |
+| `OracleTrader-MetaculusShadow` | ran 10:35Z |
+| `OracleTrader-PolyConsensus` | `run.log` 10:58Z |
+| `OracleTrader-MentionShadow` | **Disabled, correctly** — read 12/68b FAILed on 2026-09-25 and its registration's action is "close the line and disable the task" (`scripts/lib/task-watch.mjs`). Not a bug; not to be re-enabled on a freshness signal. |
+| `OracleTrader-SportsBooks`, `-SpotShadow` | Disabled for the same kind of reason (reads 163 and 157) |
+| running bundle vs HEAD | **matched** — `[app] start … main bundle built 2026-09-27T11:20:22.316Z` against `out/main/index.js` mtime 2026-09-27T11:20:22.316Z. This is BACKLOG **253**'s check, done by hand; it passed. |
+
+**The IBKR lab came back on its own at 11:02:37Z**, 7 h 18 m after the weekly token expiry stopped it at 03:44:33Z
+(the 03:50Z repair session's incident, closed NEEDS-OPERATOR). The gateway has a listener again, `[ibkr-lab] paper;
+scan 20578` follows 20577 with **no gap in the numbering** — the lab lost wall-clock, not state — and the sentinel's
+`gateway` field reads `up`. All 874 `Gateway API not available yet` warns in the window fall inside that outage; the
+last is 11:01:50Z. The suppression to 2026-10-01 stays as the repair session set it, and **BACKLOG 232 is still the
+operator's**, because this recurs weekly.
+
+## 2. Evidence
+
+**Venue-true, last 24 h** (`venue-pnl.py` on fresh read-only dumps taken 11:00:44Z):
+
+- **Kalshi +$18.16** over 66 settlements after $1.96 fees. KXBTC15M +$17.40 (19) and KXBNB15M +$3.85 (6) carry it;
+  KXETH15M -$4.08 (7), KXDOGE15M -$1.26 (3) and KXSOL15M -$1.16 (3) run against it.
+- **Polymarket US -$0.09** over 24 resolutions.
+- Balances: Kalshi cash **$100.22** + open positions at cost $13.02 = $113.24 (at market $112.34), by shard
+  **0: $7.08 · 1: $5.00 · 2: $69.09 · 3: $19.06**; Polymarket US **$39.17** (buying power $31.44 — the cost of open
+  positions is already netted there). 13 Kalshi positions, 2 resting orders, 13 open trades in the engine.
+- **Shard 0 is thin at $7.08**, and shard 0 is the weather shard. No weather arm is armed (weather-morning and the
+  quoter are both on operator holds), so nothing is blocked today; it would block the moment either is re-armed.
+
+**Gates.** `btc-gate.mjs` FAIL / NOT YET — 469 events, Bonferroni LB **-2.24c** against the +1c required, day LB
+-1.33c. `quoter-shadow-gate.mjs` insufficient sample — ALLOWED 67 settled proxy fills over **37** events (the bar is
+30 over 40) at -1.70c; BLOCKED 1,507 at -4.39c, band [-6.66, -2.13], so the gates are still refusing quotes that
+would have lost.
+
+**Quoter silence check.** Last line, verbatim:
+`[quoter] disabled: 37 candidates, would quote 0 (4 gated) — shadow meter on | … shadow q5323 f1645 mo-2.62c(n1605)`.
+Read with BACKLOG **252** in hand that is **4 chosen and all 4 gated**, not 37 candidates with nothing quotable:
+`quoter.ts:869` prints `cands.length` for the first number and computes the rest over the smaller `chosen` set. Not a
+silence. The other half of 252 still bites — the disabled line carries no fair-value count, so half of the registered
+silence check is invisible while the arm is off.
+
+**Odds API spend.** `__spentDay:2026-09-28` = **316** at 11:00Z against the 645 ceiling (09-27 642, 09-26 644,
+09-25 644). Under budget.
+
+**Sharp anchor, out of sample.** `gradedN` **1652**, `gradedBrier` **195.2154** (a running SUM, so mean Brier
+**0.1182**), `ruleN` **808**, `ruleNet` **+31.2475**. `anchor-grades.jsonl` gained **208 rows** in the last 24 h
+(1,656 total). The arm is disabled on an operator hold, so this is a shadow record only.
+
+**Shadows.** HRRR-vs-NBM (`hrrr-shadow.mjs report`): n=**567** station-days, **HRRR MAE 1.90 / bias -0.35** against
+**NBM MAE 2.23 / bias -1.06**, closer on 309 days to NBM's 242 with 16 ties — HRRR ahead on every column, as it has
+been all series. Metaculus: **199 rows but only 10 distinct pairs, 0 graded** — see below. Polymarket consensus: the report
+prints "graded 1,170,278", which is BACKLOG **248**'s duplication, up from 480,107 on 09-24 — while the executable
+Kalshi-ask leg is **still n=1,436**, exactly where it was four days ago. The duplication inflates the headline and
+the only cohort that could ever promote is not growing at all. **Build-queue 13's trigger is NOT met.**
+
+**Errors in the last 24 h** — 5 distinct signatures in 17,411 lines: 874× the IBKR gateway warn above; 1×
+`[ibkr-lab] Error: Gateway disconnected before the request completed` at the instant of the restart; 2× `Error
+occurred in handler for 'ibkr:markets': {}` and 1× for `'ibkr:snapshot'` (the panel asking a dark gateway); and 1×
+the lead-lag WS client announcing `price convention detected: yes-leg (direct) (0/10 flip votes)`. **No** `fill
+window too short`, no `SAVE FAILED`, no `unbooked`, no kill switch, no disarm. Nothing else at `[error]` or `[warn]`.
+
+**Metaculus, and a count that has been lying.** `metaculus-shadow.cjs report` says "no graded pairs yet; pairs on file:
+199". Both halves needed checking and both are worse than they read. `pairs.jsonl` holds **199 rows and exactly 10
+distinct `(mcId, ticker)` pairs** - the hourly task re-appends the same matches, the same shape as BACKLOG 248's
+duplication - and **not one pair has a resolution date in the past**: the earliest resolves **2026-11-04**, five more
+on 2027-01-01..06, and the rest in 2029 and 2030. So build-queue 10's trigger (>= 100 graded) is **unreachable on this
+matcher**, not "not yet": the matcher only finds long-horizon Metaculus questions, which is the same class Kalshi
+prices furthest from resolution. Raised as **BACKLOG 256** with the three honest options (de-duplicate the append,
+re-point the matcher at questions resolving inside 90 days, or retire item 10 and stop the task as reads 12/68b and
+163 retired their own recorders). Nothing changed today - today's behavioural budget went to build-queue 2 - but
+"N pairs on file" must never be reported as progress again without the distinct count beside it.
+
+## 3. Ladder against the ledger
+
+The ladder ran at 10:20Z and again after the restart. No promotion, demotion, stop or scale-up in the window — 24
+`[ladder]` status lines, none carrying a verdict word.
+
+| arm | stage | notch | the ladder's own evidence |
+|---|---|---|---|
+| `kalshi-leadlag` | **live** | 2 | checkpoint 72 trades, net **+$29.45**, mean $0.41, 80% band 0.13..0.69 |
+| `kalshi-fade` | tiny-live | 1 | 69 settled since stage start, **-$0.82**, checkpoint at 80 |
+| `polyus-fade` | tiny-live | 1 | 41 settled since stage start, **-$1.16**, checkpoint at 60 |
+| `kalshi-mean-reversion` | tiny-live | 1 | 24 settled, **+$0.73**, checkpoint at 40 |
+| `kalshi-dutch` | tiny-live | 1 | 0 settled, nothing to judge |
+| the other 17 | disabled | 1 | operator holds, two-strike stops, or retired by their own registrations |
+
+**Ledger check on the one arm that decides anything.** Since `kalshi-leadlag`'s stage start (2026-09-26T02:57:26Z)
+`venue-pnl --by-arm` reads `leadlag` **n=139 contracts, +$37.41**, against the ladder's 72 trades / +$29.45. The
+units differ by construction — the ladder counts TRADES, the ledger counts CONTRACTS — so 72 vs 139 is expected.
+What is worth recording is the **direction**: BACKLOG **251** caught the ladder at 3.8× the ledger on 09-26, and
+today the ledger is the LARGER of the two. A tracker that is above the ledger one day and below it the next is not
+systematically overstating, which is the specific worry 251 was written about. Both numbers are positive and of the
+same sign, so no verdict turns on the gap today either. 251 stays open with that added.
+
+## 4. Registered reads due today — all nine performed
+
+**233 — lead-lag at event speed: CONTINUE, seventh day, and the two instruments still agree.** The app's own
+`fastLeadLagRead` at 00:20:54Z: `+0.23c/contract, 80% [-0.49, 0.95], n=2483 over 7 days`. The maintenance grader
+`leadlag_fast_shadow.py --since 2026-09-22T21:48Z` at the registered 6c floor: **-0.01c, 80% [-0.78, +0.75], n=2690
+over 7 days**. PASS needs n ≥ 150 **and** lo80 > 0; the lower bound is negative on both, so this is the
+registration's non-PASS branch and **`leadLagFastLive` stays absent from config, i.e. off**. Speed as registered:
+6,922 gaps at the 6c floor over 133.2 h (52.0/hour), median life 0.5 s, p90 5.0 s, 89% gone inside 5 s. The speed is
+real and the edge is not, for the seventh day running. Reads daily to 2026-10-03.
+
+**235 — Polymarket US favourite fade: WAIT, no retirement, and the ledger matches the app to four cents.** The app
+read at 00:20:54Z: 43 settled, 8 losses, -11.59c, 80% [-21.81, -1.38]. Recomputed at 11:05Z on the same rows with
+the same `miniArmStats` formula: **51 settled, 8 losses over 4 days, -8.86c/contract, 80% [-17.34, -0.39]**. The
+research file sums to **-$4.5516**; `venue-pnl --by-arm --since 2026-09-23T09:00:00Z` reads `mini:fade` **n=52,
+-$4.51** (52 resolutions against 51 closed entries — one row's worth of timing). The upper bound is below zero,
+which is the registration's FAIL SHAPE, **but the registered bar is 15 losses or 250 settled and the arm is at 8 and
+51**. Reading early is the thing the registration exists to prevent. No retirement; `polyus-fade` stays tiny-live.
+
+**72b/161 — lead-lag coin cohort: NOT YET, neither branch fires.** `leadlag-coins.mjs --json --since
+2026-09-19T00:00:00Z` on the 11:00Z dump: 387 settlements, 692.08 contracts. New coins **334.03 of the required
+400**, +3.33c, 95% [-3.70, +10.36] over 10 day-clusters; established BTC/ETH +10.00c [-1.18, +21.18]; pooled +6.78c
+[-1.62, +15.18]. Per coin: BTC +13.95c (n=104, band [+5.64, +22.25] — the only one clear of zero), HYPE +13.94c
+(44), BNB +8.90c (56), XRP -0.05c (50), SOL -0.57c (51), ZEC -1.25c (7), ETH -2.11c (56), DOGE -16.99c (19). The
+contract count grew 286.03 → 334.03 in a day, so 400 is reachable before the 2026-10-04 final if the cadence holds.
+`leadLagCoins` keeps the eight, `leadLagProvenCoins` stays absent. Due moved to 2026-09-29.
+
+**2 — WebSocket order book: TRIGGER MET for the first time, and the build was taken.** Section 5.
+
+**86b — weekly lead-lag settlement basis: performed in full, and NO GATE is built.** `leadlag_settlement_basis.py 7`
+walked 4,648 matched 15-minute windows across seven coins on both venues' public results (~23 min of API paging).
+Kalshi's CF Benchmarks 60 s average and Polymarket's Chainlink 60 s TWAP **disagree on 47 windows, 1.01%** — BNB 12
+and HYPE 14 are the worst, ETH 2 the best — and every disagreeing window landed within **4.6 bp of the strike**,
+most inside 1 bp. Then `leadlag_basis_cells.py` on the registered cell:
+
+> `mtc<3 & dist<5bp: 7 days, 105 fills, mean +2.11c/contract, day-clustered CI95 [-7.35, +11.57] -> no gate: upper band >= 0`
+
+Same answer on both alternatives (`mtc<2 & dist<5bp` +0.86c [-9.34, +11.05]; all 367 matched fills +1.42c [-7.08,
++9.92]). The registered rule builds a gate only if a cell's day-clustered **upper** band is below zero over ≥ 7 days.
+None is. **No gate, and the near-strike cell is the wrong sign for one** — those fills are net POSITIVE.
+
+The finding worth carrying is the one the gate rule does not capture. **Our fills disagree five times as often as
+the market at large: 13 of our 259 windows (5.0%) against the 1.01% base rate**, and all 13 settled worthless
+(revenue 0 on every one), for roughly **-$8.42 of cost plus $0.27 of fees ≈ -$8.69** against the arm's +$37-46 over
+the same window — a fifth of gross. That is not a surprise and it is not (yet) a defect: lead-lag fires precisely
+when Polymarket has moved and Kalshi has not, which selects close calls, which is exactly where two different index
+methodologies can settle differently. It is recorded as **BACKLOG 255** because the concentration is large, is
+measurable, and the dollar cost is real even though the registered cell test says the cell earns money on net.
+
+**221 — lead-lag markout on the per-scan rows: reported; the signal loses about half its edge to execution.**
+`leadlag_executable_bound.py` over 2,120 orderbook rows (2026-09-17T09:42Z .. 2026-09-28T09:59Z): signal edge after
+the row's own fee is **+8.49c at the mid and +7.40c at the adverse bound**, positive on 98.3% of rows; ~42% of rows
+are executable at all. The forward Kalshi markout at +5 min, on the 288 rows that have a later same-ticker orderbook
+row, is **+3.55c, SE 1.57** (+3.74c, SE 1.59 restricted to the 284 whose adverse-bound edge clears the fee) — so the
+edge survives to execution with the right sign, at roughly **half** the size the signal advertises. By spread: 1-2c
++7.95c (n=122), 4-8c +1.40c (82), **2-4c -0.73c (84)** — the middle bucket is the one that does not pay, on a sample
+too small to act on. Report only; no action registered.
+
+**1 — critic skill check: trigger MET, action DECLINED, and the script's own verdict agrees for the third day.**
+`critic-skill.py` on the 11:00Z dump: VETO **-0.040/contract** (n=314) against the rest at **+0.034**, so amended
+conditions (i) and (ii) pass; skilled in **1 of 2** strategies present in both cohorts among currently enabled arms,
+so (iii) fails. Its last line: *"KEEP veto mode OFF - veto -0.040 vs rest +0.034; skilled in 1 of 2 shared enabled
+strategies"*. `intelligenceMode` stays `shadow`, `intelligenceEnabled` stays true. Due moved to 2026-09-29.
+
+**40/75b — anti-flood cap (weekly): not met, nowhere near.** `openTrades` = **13** against the
+60-on-three-consecutive-days rule. Due moved to 2026-10-05.
+
+**11 — forecaster v2 (weekly): NOT YET, and the trading half is still clearly negative.** `hunch-gate.mjs`: **176 of
+the 200 settled events** the gate needs. The Brier half passes handsomely (model 0.0770 vs mid 0.2199, diff -0.1429,
+CI95 [-0.1550, -0.1309] over 176 events); the trading half fails at every threshold — best cell |p-mid| ≥ 0.25 is
+**-6.78c**, Bonferroni LB -8.76c, day-CI [-8.85, -4.71]. A model that knows more than the mid and still cannot trade
+it is the same reading as the last four weeks. No v2 built. Due moved to 2026-10-05.
+
+## 5. Today's build: the socket book now serves the scan (build-queue 2)
+
+**The trigger fired.** `wsStats.dayLog` closed its ninth day overnight: 2026-09-21 0.99153, 09-22 0.99720, 09-23
+0.99393, 09-24 0.99608, 09-25 0.99482, 09-26 0.99518, **09-27 0.993808** — **seven consecutive UTC days at or above
+0.99**, the first seven-day run since the persisted per-day pair was built on 09-19 (09-20's 0.98950 is the break,
+and it is now outside the window). Registered build: *"serve `data.books` from the socket when its book is under 5 s
+old, REST otherwise; tests on the promotion rule; no ladder change."*
+
+**Built as a rule, not as a decision.** `wsBookPromoted(stats, nowMs)` in `src/main/venues/kalshiWs.ts` is a pure
+function that re-reads the trigger from the persisted day log on **every scan**, so a decayed streak demotes the
+socket by itself — no config change, no session in the loop, the same shape as the registered reads that run
+themselves. It requires, in order: the structural guard clear (`guardTripped`), the price convention detected, seven
+closed days with comparisons on file, the newest of them no more than two days old (a frozen log must not keep a
+dead streak alive), and none of the seven under 0.99.
+
+`KalshiWsClient.serveFresh(books, now)` then replaces REST books in place with socket books that are `LIVE`,
+interpretable and **younger than 5,000 ms**, and returns the count. One-sided socket books are refused even when
+fresh: the fade EV math and the execution limits both need two sides, and a half-built book after a re-snapshot
+looks exactly like a market with no offers.
+
+**Order matters, and is commented as load-bearing.** `updateWs` grades the socket against this scan's REST books
+*first* and serves *second*, so the substitution can never become its own grader. Counts are carried
+(`servedLastScan`, `served`) rather than inferred from a ratio, and the reason is carried in words (`promotion`),
+because "the promotion fired and nothing was actually served" is exactly the silence this house has been bitten by.
+
+**Tests: 24 new assertions** in `scripts/tests/review-fixes.test.ts`, written against the rule rather than against
+today. The real nine-day series passes; one day under the bar anywhere inside the window demotes (oldest and newest
+both tested); exactly 0.99 passes; six perfect days are not seven; a zero-comparison day does not pad the window; a
+log gone stale demotes, and one day of staleness does not; a tripped guard and an undetected convention each outrank
+a perfect streak. Then on `serveFresh` itself: of five markets only the fresh two-sided LIVE one is served; a book at
+**exactly** the 5 s ceiling is not; a one-sided book is not; a STALE book is not; a market the socket does not hold
+keeps its REST book; and a tripped guard serves nothing and leaves every REST book untouched.
+
+**Verified.** `npx tsc --noEmit` clean. `electron-vite build` clean. **review-fixes 656 passed / 0 failed**
+(deliberately broken once first, to prove the new block actually executes), **ladder 177 / 0**, **adversarial 97 /
+0**. Backup `oracle-trader-MAINT-2026-09-28-20260928-071946.zip` (2,270 files, 1,212 MB). App restarted visibly at
+11:21:59Z, PID 25628, `main bundle built 2026-09-28T11:19:44.370Z`. First live line, 11:22:58Z:
+
+```
+[2026-09-28T11:22:58Z] [ws] books: 0 of 251 served from the socket (< 5s old), 0 this process - price convention not detected yet
+[2026-09-28T11:33:23Z] [ws] books: 22 of 277 served from the socket (< 5s old), 517 this process - 7 consecutive days >= 0.99 (worst 0.99153), serving books under 5s
+```
+
+**Both lines are the design working.** The first zero is correct: `convention` is per-process and needs ten
+discriminating REST samples after every boot, so a freshly started app serves nothing until the socket has proved
+which price convention it is speaking — the promotion is re-earned on each boot rather than assumed from a stored
+flag. Ten minutes later the rule had passed on its own evidence (`7 consecutive days >= 0.99 (worst 0.99153)`) and
+**22 of 277 books came from the socket instead of REST**, 517 across that process. That is the build verified
+end to end in production, not in a test.
+
+**One honest ceiling, now measured rather than argued.** The socket subscribes to `tickers.slice(0, 50)` while that
+scan fetched 277 books, so the hard cap is 18% of the map and the observed rate was **8%** (22/277) — the rest is the
+5 s freshness bar doing its job. Widening the subscription is a separate change with its own cost (a wider universe
+cycles the socket more often, and cycling discards every cached book) and is not part of the registered build —
+**BACKLOG 254**, with the ratio now instrumented.
+
+A second restart at 11:33:37Z (PID 26816, `main bundle built 2026-09-28T11:33:13.905Z`) followed a comments-only
+correction to two stale doc-comments; `tsc`, the build and all three suites were re-run clean before it, and it keeps
+BACKLOG 253's invariant true — the running app is never left on a bundle older than `out/main/index.js`.
+
+**And one correction.** BACKLOG 2 has carried "`wsStats.lastError` still reads `universe drift 32%`, unexplained"
+since 09-11, and it was treated as a reason to distrust the counter. It is **not an error**: `kalshiWs.ts:159` calls
+`cycle('universe drift N%')` deliberately when ≥ 30% of the desired ticker set has drifted and more than five
+minutes have passed, and `cycle()` records its reason in `lastError` (line 440). It is a planned resubscribe, the
+string is stale (it does not appear once in the last 24 h of `main.log`), and it never had any bearing on the
+agreement ratio.
+
+## 6. Build-queue trigger checks — every item, as the rule requires
+
+- **1 critic skill** — MET daily, declined by the amended rule (section 4).
+- **2 WebSocket book** — **MET, 7 of 7. Built today.**
+- **3 HRRR** — done 2026-09-21; the shadow keeps running and keeps favouring HRRR (section 2).
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** — not met: quoter notch 1, off on an operator hold,
+  ALLOWED cohort 67 settled proxy fills over 37 events (needs 30 over 40) at -1.70c.
+- **6 sports anchor on Polymarket US** — not met: `kalshi-sports-anchor` is disabled on an operator hold and so has
+  no checkpoint that could be positive.
+- **7 player props** — not met (anchor notch 1).
+- **8c market-maker rest patterns** — not met: mean-reversion 24 settled at +$0.73, checkpoint at 40.
+- **9 SportsGameOdds role** — no trigger; still the next untriggered build, deferred again because item 2 fired.
+- **10 Metaculus** — **UNREACHABLE, not merely unmet (BACKLOG 256):** 199 rows are 10 distinct pairs re-appended hourly, and the earliest resolution date is 2026-11-04 against a trigger of 100 graded.
+- **11 forecaster v2** — not met: 176 of 200 settled events, best trading cell -6.78c (section 4).
+- **12 mention base rates** — counter-indicated and closed: the read FAILed on 09-25 and the task is disabled.
+- **13 consensus arm** — built and on the ladder; its shadow's trigger is **NOT met** (BACKLOG 248, section 2).
+
+## 7. Sentinel
+
+**One incident opened in the window, and it is closed.**
+`2026-09-28T03-50-log-warn-ibkr-lab-Error-Gateway-API-not`, dispatched 03:50:01Z, repair session
+`logs/repair-20260927-2350.log` exit 0, closed **NEEDS-OPERATOR** with the gateway's own `Session expired` /
+`Authorization failed` lines as evidence. Nothing was left for this session to finish, and the condition has since
+cleared by itself (section 1). **No incident file is `Status: OPEN`** except the 2026-09-08 drill, which is
+deliberate.
+
+Sentinel liveness: `status.json` at **11:20:02Z**, task Ready, last result 0, 1 repair session today of the 3
+allowed, disk 969 GB free, Ollama up, IB gateway **up** again. Standing notifies: the KXNCAAMBUAC-27-EKY position
+closing 2027-04-04 (a known long-horizon hold) and **OpenRouter credit $9.29** — the eighth day of that one; the
+nightly review falls back to Ollama, so nothing is down.
+
+**Suppressions.** Five entries; three are already expired and inert (2026-09-18, 2026-09-25, and the LPGA horizon
+one at **2026-09-28T12:00Z, i.e. within the hour**), and two are live: `[ratchet] refused` to 2026-12-02 and the
+IBKR gateway warn to 2026-10-01. None renewed by this session. When the LPGA entry lapses its notify reappears; it
+is a matched box worth a guaranteed penny and selling it would pay two spreads to escape, so the right answer stays
+"hold" — written here so tomorrow's run does not re-derive it.
+
+## 8. Open questions for the operator — none blocking
+
+**(a) BACKLOG 232 — IB Gateway logins.** The page fired for real overnight and cost the paper lab 7 h 18 m. It
+recurs weekly (next ~2026-10-05T03:45Z). His choice: IBC with the login in its config file, or one manual login a
+week and the lost overnight scans when it lands at 23:45.
+**(b) OpenRouter $9.29**, eighth day; the premium reviewer runs on Ollama until he tops it up.
+**(c) Kalshi shard 0 is $7.08.** Harmless while every weather arm is on hold; blocking the day one is re-armed.
+**(d) BACKLOG 248** — the consensus shadow's grades are 1.17 M rows for 1,436 usable ones. Its repair is a build,
+not a decision, and is queued.
+
+`SendUserFile` and `PushNotification` are not available in this headless session, as designed. The same section is
+in `docs/MAINTENANCE-LOG.md`, and this file is what the 08:30 desktop task delivers.

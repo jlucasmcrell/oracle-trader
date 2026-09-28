@@ -7091,3 +7091,137 @@ ECMWF ENS shadow 54 rows after today's pull, 0 graded until tonight's day comple
 LB -2.21c), `quoter-shadow-gate` ALLOWED 65/35 at -0.65c (insufficient) against BLOCKED -4.25c, `hunch-gate` FAIL
 (169 events, best cell -7.07c). Consensus shadow's phantom "graded" count grew another 176k to **993,898** -
 BACKLOG 250 is the one measurement defect getting worse on a schedule.
+
+## §172 - 2026-09-28 11:30Z: the socket book earned its promotion after seven clean days, and the settlement basis costs lead-lag a fifth of its gross
+
+Two things settled today, one of them the oldest parked item in the build queue.
+
+### The WebSocket book now serves the scan (build-queue 2)
+
+`wsStats.dayLog` closed its ninth persisted UTC day overnight and the streak reached the bar the trigger has been
+waiting for since the per-day pair was built on 09-19: **09-21 0.99153, 09-22 0.99720, 09-23 0.99393, 09-24 0.99608,
+09-25 0.99482, 09-26 0.99518, 09-27 0.993808** - seven consecutive days at or above 0.99 agreement between the
+socket's top-of-book and REST's, at the 2c tolerance. (09-20's 0.98950 is the break, and it has now fallen out of the
+window.) The registered build is *"serve `data.books` from the socket when its book is under 5 s old, REST otherwise;
+tests on the promotion rule; no ladder change."*
+
+It was built as a **rule that re-reads itself**, not as a switch someone flipped once. `wsBookPromoted(stats, nowMs)`
+(`src/main/venues/kalshiWs.ts`) is pure and is evaluated on every scan. It requires, in order: the structural guard
+clear (`guardTripped`), the price convention detected, seven closed days with comparisons on file, the newest of those
+no more than two days old, and none of the seven under 0.99. The staleness clause is there because `dayLog` only rolls
+when a comparison is actually made, so a frozen log would otherwise keep a dead streak alive indefinitely - the same
+failure shape as the frozen `state.json` behind BACKLOG 248. A decayed streak therefore demotes the socket by itself,
+with no config knob and no maintenance session in the loop.
+
+`KalshiWsClient.serveFresh(books, now)` then replaces REST books **in place** with socket books that are `LIVE`,
+interpretable and younger than **5,000 ms**, and returns the count. A one-sided socket book is refused even when
+fresh: the fade EV math and the execution limits both need two sides, and a half-built book just after a re-snapshot
+is indistinguishable from a market with no offers.
+
+The ordering inside `updateWs` is load-bearing and is commented as such: **grade first, serve second.** `compare()`
+reads the REST array that was just fetched; the substitution writes into `data.books`. If those ever swapped, the
+shadow comparison would start grading the socket against itself and the agreement ratio - the only evidence this
+promotion rests on - would become meaningless while still reading 0.99+. Counts (`servedLastScan`, `served`) and the
+reason in words (`promotion`) are carried on `wsStats` rather than inferred from a ratio, because "the promotion fired
+and nothing was actually served" is precisely the kind of silence that has cost this project days before.
+
+**24 new assertions** in `scripts/tests/review-fixes.test.ts`, written against the rule rather than against today's
+numbers: the real nine-day series passes; one day under the bar anywhere inside the window demotes (oldest and newest
+tested separately); exactly 0.99 passes, because the trigger reads ">="; six perfect days are not seven; a
+zero-comparison day does not pad the window; a log gone stale demotes and one day of staleness does not; a tripped
+guard and an undetected convention each outrank a perfect streak. Then on `serveFresh` itself: of five markets only
+the fresh two-sided LIVE one is served; a book at **exactly** the 5 s ceiling is not; a one-sided book is not; a
+STALE book is not; a market the socket does not hold keeps its REST book; and a tripped guard serves nothing and
+leaves every REST book untouched.
+
+`tsc --noEmit` clean, `electron-vite build` clean, **review-fixes 656/0** (broken once on purpose first, to prove the
+new block executes), **ladder 177/0**, **adversarial 97/0**. Backup `MAINT-2026-09-28`. App restarted visibly at
+11:21:59Z on `main bundle built 2026-09-28T11:19:44.370Z`. First live line, 11:22:58Z:
+
+```
+[2026-09-28T11:22:58Z] [ws] books: 0 of 251 served from the socket (< 5s old), 0 this process - price convention not detected yet
+[2026-09-28T11:33:23Z] [ws] books: 22 of 277 served from the socket (< 5s old), 517 this process - 7 consecutive days >= 0.99 (worst 0.99153), serving books under 5s
+```
+
+**Both lines are the design working.** The zero is correct: `convention` is per-process and needs ten discriminating
+REST samples after every boot, so a freshly started app serves nothing until the socket has proved which of the two
+price conventions it is speaking - the promotion is re-earned on each boot instead of being assumed from a stored
+flag. Ten minutes later the rule had passed on its own evidence and **22 of 277 books came from the socket instead of
+REST**, 517 across that process. That is the build verified in production, not only in a test. (A second restart at
+11:33:37Z on `main bundle built 2026-09-28T11:33:13.905Z` followed a comments-only correction to two stale
+doc-comments, with `tsc`, the build and all three suites re-run clean first - BACKLOG 253's invariant says never leave
+the running app on a bundle older than `out/main/index.js`, and a comment change is no exception.)
+
+Two things left over. **BACKLOG 254**: `updateWs` starts the client with `tickers.slice(0, 50)` while that scan
+fetched 277 books, so the hard cap is 18% of the map and the observed rate was **8%** - now measured rather than
+argued - and the cap is not arbitrary, because
+a wider universe cycles the socket more often and cycling discards every cached book. It is now measurable
+(`servedLastScan / books.size`) and is left to be measured under the real cap for seven days before anyone argues for
+a bigger one. And a **correction**: BACKLOG 2 has carried "`wsStats.lastError` still reads `universe drift 32%`,
+unexplained" since 09-11, treated as a reason to distrust the whole counter. It is **not an error**.
+`kalshiWs.ts:159` calls `cycle('universe drift N%')` deliberately when >= 30% of the desired ticker set has drifted
+and five minutes have passed since the last cycle, and `cycle()` writes its reason into `lastError` (line 440). The
+string is stale - it does not appear once in the last 24 h of `main.log` - and it never had any bearing on the
+agreement ratio.
+
+### Read 86b: no gate, and a cost the gate rule cannot see
+
+The weekly settlement-basis read ran in full for the first time since 09-25 (~23 min of public API paging over 4,648
+matched 15-minute windows, seven coins, both venues). Kalshi's KX-COIN-15M settles on CF Benchmarks' 60 s average and
+Polymarket's coin-updown-15m on Chainlink's 60 s TWAP: they **disagree on 47 windows, 1.01%** - BNB 12 and HYPE 14
+are the worst, ETH 2 the best - and every disagreeing window landed within **4.6 bp of the strike**, most inside 1 bp.
+
+The registered gate test then says do nothing, clearly:
+
+```
+mtc<3 & dist<5bp: 7 days, 105 fills, mean +2.11c/contract, day-clustered CI95 [-7.35, +11.57] -> no gate: upper band >= 0
+mtc<2 & dist<5bp: 7 days,  88 fills, mean +0.86c/contract, day-clustered CI95 [-9.34, +11.05] -> no gate
+all matched fills: 7 days, 367 fills, mean +1.42c/contract, day-clustered CI95 [-7.08,  +9.92] -> no gate
+```
+
+The rule builds a gate only if a cell's day-clustered **upper** band is below zero over >= 7 days. None is, and the
+near-strike cell is the **wrong sign** for a gate anyway - it earns money.
+
+But the read surfaced something the gate rule is not shaped to catch, and it is now **BACKLOG 255**. **Our own fills
+disagree five times as often as the market at large: 13 of our 259 windows in the sample, 5.0%, against the 1.01%
+base rate** - and all thirteen settled worthless, about **-$8.42 of cost plus $0.27 of fees = -$8.69** against the
+arm's +$37-46 over the same window, a fifth of gross. The mechanism is not mysterious and is not a defect: lead-lag
+fires exactly when Polymarket has moved and Kalshi has not, which selects close calls, which is where two index
+methodologies can settle differently. Recording it rather than acting on it is deliberate - the registered cell test
+is the pre-registered instrument and it says the cell earns money - but the concentration is large enough, and the
+per-coin skew (BNB and HYPE carry 26 of the 47) specific enough, that it must not be re-derived from scratch next
+Monday.
+
+### A count that has been lying: the Metaculus shadow has ten pairs, not 199
+
+`metaculus-shadow.cjs report` reads "no graded pairs yet; pairs on file: 199", and both halves are worse than they
+look. `pairs.jsonl` holds **199 rows and exactly 10 distinct `(mcId, ticker)` pairs** - the hourly task re-appends the
+same matches, which is BACKLOG 248's duplication shape in a second place - so "189 pairs" yesterday and "199" today
+are both really *ten*. And the zero is not a grader defect: **not one pair has a resolution date in the past.** By
+distinct pair the earliest is **2026-11-04** (KXTRYFIRECOOK / Lisa Cook), then five on 2027-01-01..06, then SCOTUS
+2029, Abraham Accords 2029, SpaceX-Mars 2030 and KXNIREFCALL 2030. Build-queue 10's registered trigger is **>= 100
+graded**, so it is **unreachable on this matcher**, not pending - the matcher finds only long-horizon Metaculus
+questions, which is precisely the class Kalshi also prices furthest from resolution. Raised as **BACKLOG 256** with
+three options and none taken, because today's one behavioural change went to build-queue 2: de-duplicate the append so
+the count stops lying, re-point the matcher at questions resolving inside 90 days and find out whether any Kalshi
+market matches at all, or retire item 10 and stop the task the way reads 12/68b and 163 retired their own recorders.
+
+### The day's numbers, for the record
+
+Venue-true since 2026-09-27T11:00Z: Kalshi **66 settlements, +$18.16 after $1.96 fees**, carried by KXBTC15M
++$17.40/19 and KXBNB15M +$3.85/6 against KXETH15M -$4.08/7, KXDOGE15M -$1.26/3 and KXSOL15M -$1.16/3. Polymarket US
+24 resolutions, **-$0.09**. Kalshi cash $100.22 (shards $7.08 / $5.00 / $69.09 / $19.06) plus 13 positions at cost
+$13.02 = $113.24, at market $112.34; Polymarket US $39.17 (buying power $31.44). 2 resting orders, 13 open trades.
+Sharp anchor out of sample `gradedN` **1652**, Brier sum 195.2154 = mean **0.1182**, `ruleN` **808**, `ruleNet`
+**+$31.2475**; `anchor-grades.jsonl` 1,656 rows, **+208 today**. Odds API **316/645**. HRRR vs NBM at 567 graded
+station-days: MAE **1.90 / -0.35** against **2.23 / -1.06**, closer on 309 to 242 with 16 ties. `btc-gate` FAIL
+(469 events, Bonferroni LB -2.24c), `quoter-shadow-gate` ALLOWED 67 fills / 37 events at -1.70c (insufficient; needs
+30 over 40) against BLOCKED -4.39c [-6.66, -2.13], `hunch-gate` FAIL (176 events, best cell -6.78c). Metaculus 199
+pairs, **0 graded**. Consensus shadow's phantom "graded" count grew to **1,170,278** while its executable Kalshi-ask
+leg stayed at **n=1,436** for the fourth straight day - BACKLOG 248 is still the one measurement defect getting worse
+on a schedule.
+
+And the IBKR paper lab, dark since 03:44:33Z on IBKR's weekly token expiry (the 03:50Z repair session, closed
+NEEDS-OPERATOR), **came back by itself at 11:02:37Z** - 7 h 18 m lost, `scan 20578` following 20577 with no gap in
+the numbering, so wall-clock only and no state. BACKLOG 232 is unchanged and is still his: IBC with the login in its
+config file, or one manual login a week.

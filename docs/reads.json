@@ -4,12 +4,12 @@
   {
    "id": "233",
    "owner": "app",
-   "due": "2026-09-28",
+   "due": "2026-09-29",
    "what": "Lead-lag at event speed",
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-09-27: CONTINUE, and the two instruments now AGREE where yesterday they differed in sign. The app's own read at 00:47:15Z: +0.19c/contract, 80% [-0.71, 1.09], n=1943 over 6 days (band spans zero). The maintenance grader on the longer window: +0.18c, 80% [-0.62, +0.99], n=2175 over 6 days at the registered 6c threshold. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative, so leadLagFastLive stays absent from config, i.e. off, which is the registration's non-PASS branch. Speed reported as registered: at the 6c floor 5,530 gaps over 109.3 h (50.6/hour), median life 0.5 s, p90 5.0 s, 90% gone inside 5 s - the speed is real and the edge is not, for the sixth day running. Reads daily to 2026-10-03."
+   "note": "2026-09-28: CONTINUE, seventh day, and the two instruments still agree in sign. App read 00:20:54Z: +0.23c/contract, 80% [-0.49, 0.95], n=2483 over 7 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor: -0.01c, 80% [-0.78, +0.75], n=2690 over 7 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 6,922 gaps at the 6c floor over 133.2 h (52.0/hour), median life 0.5 s, p90 5.0 s, 89% gone inside 5 s. The speed is real and the edge is not, for the seventh day. Reads daily to 2026-10-03."
   },
   {
    "id": "234",
@@ -25,12 +25,12 @@
   {
    "id": "235",
    "owner": "app",
-   "due": "2026-09-28",
+   "due": "2026-09-29",
    "what": "Polymarket US favourite fade, re-armed 2026-09-23",
    "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
    "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
    "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
-   "note": "2026-09-27: WAIT, no retirement, and the venue record matches the app's cohort exactly. The app read at 00:47:15Z - 14 settled, 4 losses over 2 days, -22.71c/contract, 80% [-43.17, -2.26] - and it runs once a UTC day, so by this session it was 11 h stale. Recomputed on the same rows with the same miniArmStats formula: 28 settled, 6 losses over 3 days, -15.66c/contract, 80% [-28.18, -3.14]. venue-pnl --by-arm since 2026-09-23T09:00Z: mini:fade n=28 -$4.42, and the research file's sum is -$4.4166 - the ledger and the app agree to the cent. THE UPPER BOUND IS ALREADY BELOW ZERO, which is the registration's FAIL shape, BUT the registered bar is 15 losses or 250 settled and the arm is at 6 and 28, so it was not front-run: that is the discretion the pre-registration exists to remove. The arm is not unguarded meanwhile - the ladder's own -$5 stage stop sits against a cohort at -$4.42 and will probably act before the read is due, which is the design working. The ladder re-armed the arm itself at 2026-09-26T16:47:21Z when the cool-down expired (BACKLOG 247's frozen cohort is growing again, as predicted). The two new losses are UFC method-of-victory markets, not the eBattles family amendment 1 blocked."
+   "note": "2026-09-28: WAIT, no retirement, and the venue record matches the app to four cents. App read at 00:20:54Z - 43 settled, 8 losses, -11.59c, 80% [-21.81, -1.38]. Recomputed at 11:05Z on the same rows with the same miniArmStats formula: 51 settled, 8 losses over 4 days, -8.86c/contract, 80% [-17.34, -0.39]. The research file sums to -$4.5516; venue-pnl --by-arm --since 2026-09-23T09:00:00Z reads mini:fade n=52 -$4.51 (52 resolutions against 51 closed entries - one row's worth of timing). THE UPPER BOUND IS BELOW ZERO, the registration's FAIL shape, BUT the registered bar is 15 losses or 250 settled and the arm is at 8 and 51. Reading early is what the registration exists to prevent. polyus-fade stays tiny-live."
   },
   {
    "id": "125/181/190/198",
@@ -54,12 +54,12 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-09-28",
+   "due": "2026-09-29",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-09-27 (fresh dump): NOT YET, neither branch fires, leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 338 settlements, 560.08 contracts. New coins 286.03 of the required 400 contracts, +2.72c, 95% [-4.73, +10.18] over 9 day-clusters; established BTC/ETH +8.21c [+5.26, +11.15]; pooled +5.41c [+1.26, +9.55]. Per coin: HYPE +15.21c (n=38), BTC +10.03c (85), BNB +5.02c (50), ETH +3.09c (49), SOL +1.31c (48), XRP -0.62c (48), DOGE -16.02c (16), ZEC -17.16c (4). The contract count grew 210.03 -> 286.03 in a day, so 400 is reachable before the 10-04 final if the cadence holds. Note for the reader: this read and the ladder's own lead-lag verdict deliberately measure DIFFERENT cohorts - the ladder pool is proven coins only (ladder.ts:120-122), which is what closed BACKLOG 251 today."
+   "note": "2026-09-28 (fresh 11:00Z dump): NOT YET, neither branch fires, leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 387 settlements, 692.08 contracts. New coins 334.03 of the required 400, +3.33c, 95% [-3.70, +10.36] over 10 day-clusters; established BTC/ETH +10.00c [-1.18, +21.18]; pooled +6.78c [-1.62, +15.18]. Per coin: BTC +13.95c (n=104, [+5.64, +22.25], the only one clear of zero), HYPE +13.94c (44), BNB +8.90c (56), XRP -0.05c (50), SOL -0.57c (51), ZEC -1.25c (7), ETH -2.11c (56), DOGE -16.99c (19). Contracts grew 286.03 -> 334.03 in a day, so 400 is reachable before the 2026-10-04 final if the cadence holds."
   },
   {
    "id": "146b",
@@ -203,12 +203,12 @@
   },
   {
    "id": "2",
-   "due": "2026-09-28",
    "what": "WebSocket order book for execution",
    "how": "kalshi-auto.json state.wsStats.dayLog",
    "rule": "backlog 2: 7 consecutive days >= 0.99 agreement",
    "action": "then build 'use the socket book when under 5 s old'; until then move due forward a day",
-   "note": "2026-09-27: 6 of 7, the build stays parked, and the seventh day closes tonight - this trigger can first fire 2026-09-28. wsStats.dayLog now holds eight closed UTC days: 09-19 0.99480 PASS, 09-20 0.98950 FAIL, 09-21 0.99153 PASS, 09-22 0.99720 PASS, 09-23 0.99393 PASS, 09-24 0.99608 PASS, 09-25 0.99482 PASS, 09-26 0.99518 PASS. The run is 09-21..09-26 = six consecutive days at or above the bar, broken before that by 09-20 alone. wsStats.lastError still reads 'universe drift 32%', unexplained."
+   "note": "2026-09-28: TRIGGER MET for the first time and the build was taken (section 172). dayLog closed its ninth day: 09-21 0.99153, 09-22 0.99720, 09-23 0.99393, 09-24 0.99608, 09-25 0.99482, 09-26 0.99518, 09-27 0.993808 - seven consecutive UTC days at or above 0.99 (09-20's 0.98950 is now outside the window). Built: wsBookPromoted() re-reads the streak from the persisted day log on EVERY scan and KalshiWsClient.serveFresh() replaces REST books with LIVE, two-sided socket books younger than 5,000 ms; grading happens before serving so the shadow comparison can never be fed its own output. 24 new assertions. The 'unexplained' lastError 'universe drift 32%' is explained and is NOT an error: kalshiWs.ts:159 cycle()s deliberately on >=30% universe drift and cycle() records its reason in lastError (line 440).",
+   "done": "2026-09-28"
   },
   {
    "id": "202",
@@ -221,19 +221,21 @@
   },
   {
    "id": "86b",
-   "due": "2026-09-28",
+   "due": "2026-10-05",
    "what": "Weekly lead-lag basis (Mondays)",
    "how": "leadlag_settlement_basis.py <dump> 7 and leadlag_basis_cells.py",
    "rule": "backlog 86b: build a gate only if a cell's day-clustered upper band is below zero over >= 7 days",
-   "action": "then move due to the next Monday"
+   "action": "then move due to the next Monday",
+   "note": "2026-09-28: PERFORMED IN FULL, NO GATE. leadlag_settlement_basis.py 7 walked 4,648 matched 15-minute windows on both venues' public results: Kalshi's CF Benchmarks 60 s average and Polymarket's Chainlink 60 s TWAP disagree on 47 windows, 1.01% (BNB 12 and HYPE 14 worst, ETH 2 best), and every disagreeing window landed within 4.6 bp of the strike, most inside 1 bp. leadlag_basis_cells.py on the registered cell: mtc<3 & dist<5bp - 7 days, 105 fills, mean +2.11c/contract, day-clustered CI95 [-7.35, +11.57] -> NO GATE (upper band >= 0), and the near-strike cell is the wrong SIGN for a gate, being net positive. Same on mtc<2 & dist<5bp (+0.86c [-9.34, +11.05]) and on all 367 matched fills (+1.42c [-7.08, +9.92]). Carried separately as BACKLOG 255: OUR fills disagree five times as often as the market at large - 13 of 259 windows (5.0%) against the 1.01% base rate - and all 13 settled worthless, about -$8.69 including fees against the arm's +$37-46 over the same window. Next Monday 2026-10-05; budget ~25 min of API paging for the basis run."
   },
   {
    "id": "221",
-   "due": "2026-09-28",
+   "due": "2026-10-05",
    "what": "Lead-lag markout on the per-scan rows",
    "how": "leadlag_executable_bound.py on leadlag-quotes-shadow.jsonl",
    "rule": "backlog 221: signal vs execution",
-   "action": "report"
+   "action": "report",
+   "note": "2026-09-28: REPORTED. leadlag_executable_bound.py over 2,120 orderbook rows (2026-09-17T09:42Z .. 2026-09-28T09:59Z). Signal edge after the row's own fee: +8.49c at the mid, +7.40c at the ADVERSE bound, positive on 98.3% of rows; ~42% of rows executable at all. Forward Kalshi markout at +5 min on the 288 rows with a later same-ticker orderbook row: +3.55c SE 1.57 (+3.74c SE 1.59 on the 284 whose adverse-bound edge clears the fee). So the edge survives to execution with the right sign at roughly HALF the size the signal advertises. By spread: 1-2c +7.95c (n=122), 4-8c +1.40c (82), 2-4c -0.73c (84) - the middle bucket is the one that does not pay, on too small a sample to act on. Report only; no action registered."
   },
   {
    "id": "241",
@@ -325,12 +327,12 @@
   },
   {
    "id": "1",
-   "due": "2026-09-28",
+   "due": "2026-09-29",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-09-27: trigger MET, action DECLINED, and the script's own verdict line agrees for the second day. Raw aggregate VETO -0.040/contract against the rest at +0.033, so raw (i) and (ii) pass; the critic is skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. The script's last line - the encoded amended rule - reads 'KEEP veto mode OFF - veto -0.040 vs rest +0.033; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true; the 200-settled disable clause is not reached because skill is composition-dependent, not absent."
+   "note": "2026-09-28: trigger MET, action DECLINED, and the script's own verdict line agrees for the third day. Raw aggregate VETO -0.040/contract (n=314) against the rest at +0.034, so amended (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.034; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true; the 200-settled disable clause is not reached because skill is composition-dependent, not absent."
   },
   {
    "id": "65b/80c",
@@ -343,11 +345,12 @@
   },
   {
    "id": "40/75b",
-   "due": "2026-09-28",
+   "due": "2026-10-05",
    "what": "Anti-flood cap re-check (weekly)",
    "how": "kalshi-auto.json openTrades count",
    "rule": "backlog 40: openTrades >= 60 on 3 consecutive days -> review the per-series cap",
-   "action": "then move due a week"
+   "action": "then move due a week",
+   "note": "2026-09-28: NOT MET, nowhere near. kalshi-auto.json state.openTrades = 13 against the rule's '>= 60 on 3 consecutive days'. No per-series cap review. Weekly; next 2026-10-05."
   },
   {
    "id": "110",
@@ -368,11 +371,12 @@
   },
   {
    "id": "11",
-   "due": "2026-09-28",
+   "due": "2026-10-05",
    "what": "Forecaster v2 (weekly)",
    "how": "node scripts/hunch-gate.mjs",
    "rule": "PREREGISTERED-llm-hunch: the hunch gate reaching 200 settled events without passing",
-   "action": "build v2 in shadow under its own registration; else move due a week"
+   "action": "build v2 in shadow under its own registration; else move due a week",
+   "note": "2026-09-28: NOT YET, and the trading half is still clearly negative. hunch-gate.mjs reads 176 of the 200 settled events the gate needs. The Brier half passes handsomely - model 0.0770 vs mid 0.2199, diff -0.1429, CI95 [-0.1550, -0.1309] over 176 events - and the trading half fails at every threshold: best cell |p-mid| >= 0.25 is -6.78c, Bonferroni LB -8.76c, day-CI [-8.85, -4.71]. A model that knows more than the mid and still cannot trade it is the same reading as the last four weeks. No v2 built. Weekly; next 2026-10-05."
   }
  ]
 }

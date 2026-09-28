@@ -18,7 +18,7 @@ import type { NewsItem } from '../../shared/ipc'
 import type { AutoBookStats, AutoVetTest } from '../../shared/ipc'
 import type { MarketCandle, MarketTrade, OpenOrder, OrderBook, Position, VenueMarket } from '../../shared/types'
 import { KalshiAdapter } from '../venues/kalshi'
-import { KalshiWsClient, type WsStats } from '../venues/kalshiWs'
+import { KalshiWsClient, WS_BOOK_MAX_AGE_MS, type WsStats } from '../venues/kalshiWs'
 import { PolymarketAdapter } from '../venues/polymarket'
 import { sendAlert } from '../util/alert'
 import { KALSHI_TAKER_FEE_COEF, kalshiFeeCentsPerContract, kalshiOrderFeeDollars } from '../util/kalshiFee'
@@ -726,6 +726,7 @@ export class AutoTrader {
   private auxStatus: (() => Pick<AutoStatus, 'ladder' | 'lastReview'>) | undefined
   /** Live WS book cache — shadow-graded against REST before it may be trusted. */
   private ws?: KalshiWsClient
+  private lastWsServeLogAt = 0
   private leadLagFastAttached = false
   /** The minute scan's last read of the exchange pause, for the fast path's gate (a pause also rejects orders). */
   private leadLagPaused = false
@@ -1772,12 +1773,15 @@ export class AutoTrader {
         data.books.set(b.marketId, b)
         this.recordBook(b)
       }
-      // WebSocket runs in SHADOW: it maintains its own books from the live
-      // socket and every REST fetch grades them. REST stays authoritative
-      // until that comparison earns the promotion — the two silent failure
-      // modes (wrong field names → empty book, inverted price convention →
-      // mirrored book) both surface as disagreement here and nowhere else.
-      this.updateWs(tickers, books)
+      // The WebSocket maintains its own books from the live socket and every
+      // REST fetch grades them — the two silent failure modes (wrong field
+      // names → empty book, inverted price convention → mirrored book) both
+      // surface as disagreement here and nowhere else. That comparison earned
+      // its promotion on 2026-09-28 (backlog 2, seven consecutive UTC days at
+      // or above 0.99), so updateWs now also SERVES socket books under 5 s old
+      // back into data.books; see wsBookPromoted(), which re-reads the streak
+      // every scan and falls back to REST by itself if it ever decays.
+      this.updateWs(tickers, books, data.books)
     }
 
     if (adapter.getRecentTrades && (this.config.volumeSpikeEnabled || this.config.vetMode === 'llm')) {
@@ -4287,8 +4291,8 @@ export class AutoTrader {
     }
   }
 
-  /** Keep the WS universe in step with the scan and grade its books against REST. */
-  private updateWs(tickers: string[], restBooks: OrderBook[]): void {
+  /** Keep the WS universe in step with the scan, grade its books against REST, then serve the fresh ones. */
+  private updateWs(tickers: string[], restBooks: OrderBook[], serving?: Map<string, OrderBook>): void {
     if (!this.config.wsEnabled) {
       if (this.ws) {
         this.ws.stop()
@@ -4305,6 +4309,17 @@ export class AutoTrader {
     }
     this.ws.start(tickers.slice(0, 50))
     for (const b of restBooks) this.ws.compare(b.marketId, b)
+    // ORDER MATTERS: grade first, serve second. compare() reads the REST array, so the substitution below can
+    // never become its own grader - but only while this line stays after the loop above.
+    if (serving) {
+      const served = this.ws.serveFresh(serving, Date.now())
+      // A promotion that serves nothing is the silence worth a line; so is the first scan that serves.
+      const now = Date.now()
+      if (now - this.lastWsServeLogAt >= 10 * 60_000) {
+        this.lastWsServeLogAt = now
+        console.log(`[ws] books: ${served} of ${serving.size} served from the socket (< ${WS_BOOK_MAX_AGE_MS / 1000}s old), ${this.ws.stats.served ?? 0} this process - ${this.ws.stats.promotion}`)
+      }
+    }
     this.state.wsStats = { ...this.ws.stats }
   }
 

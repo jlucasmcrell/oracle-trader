@@ -80,6 +80,16 @@ export interface WsStats {
    */
   day?: WsDayAgreement
   dayLog?: WsDayAgreement[]
+  /**
+   * Backlog 2 promotion: how many REST books the socket replaced on the last scan, and the running total for
+   * this process, plus `promotion` - the reason in words. `servedLastScan === 0` with a `promotion` that starts
+   * "7 consecutive days" is the silence to explain: the rule passed and nothing was actually served. All three
+   * are carried rather than inferred from a ratio.
+   */
+  servedLastScan?: number
+  served?: number
+  /** Why the socket book is or is not being served, in words, as of the last scan. */
+  promotion?: string
 }
 
 export interface WsDayAgreement {
@@ -90,6 +100,41 @@ export interface WsDayAgreement {
 
 export function defaultWsStats(): WsStats {
   return { connected: false, attempts: 0, reconnects: 0, frames: 0, snapshots: 0, deltas: 0, gaps: 0, liveBooks: 0, compared: 0, agreed: 0, maxDiffCents: 0 }
+}
+
+/** Backlog 2, the registered promotion trigger: seven consecutive CLOSED UTC days at or above 0.99 agreement. */
+export const WS_PROMOTION_DAYS = 7
+export const WS_PROMOTION_BAR = 0.99
+/** A socket book older than this is not served; the REST book fetched this scan is used instead. */
+export const WS_BOOK_MAX_AGE_MS = 5_000
+/**
+ * The day log only rolls when a comparison is made, so a frozen log would otherwise keep a long-dead streak
+ * alive for ever. The newest CLOSED day must be yesterday or the day before.
+ */
+export const WS_DAYLOG_MAX_STALE_DAYS = 2
+
+/**
+ * The promotion rule from backlog 2, re-read on every scan rather than decided once: the socket may serve books
+ * only while the last WS_PROMOTION_DAYS closed days are all at or above the bar, the structural guards are
+ * clear and the price convention has been detected. A decayed streak demotes the socket by itself, with no
+ * config change and no session in the loop.
+ *
+ * Pure on purpose: `nowMs` is passed in so the staleness clause is testable without a clock.
+ */
+export function wsBookPromoted(stats: WsStats | undefined, nowMs: number): { ok: boolean; why: string } {
+  if (!stats) return { ok: false, why: 'no ws stats' }
+  if (stats.guardTripped) return { ok: false, why: `guard tripped: ${stats.guardTripped}` }
+  if (!stats.convention) return { ok: false, why: 'price convention not detected yet' }
+  const log = (stats.dayLog ?? []).filter((d) => d.compared > 0)
+  if (log.length < WS_PROMOTION_DAYS) return { ok: false, why: `${log.length} of ${WS_PROMOTION_DAYS} closed days on file` }
+  const recent = log.slice(-WS_PROMOTION_DAYS)
+  const newest = recent[recent.length - 1]
+  const ageDays = Math.round((Date.parse(`${new Date(nowMs).toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse(`${newest.date}T00:00:00Z`)) / 86_400_000)
+  if (!Number.isFinite(ageDays) || ageDays < 0 || ageDays > WS_DAYLOG_MAX_STALE_DAYS) return { ok: false, why: `newest closed day ${newest.date} is ${ageDays} days old` }
+  const under = recent.filter((d) => d.agreed / d.compared < WS_PROMOTION_BAR)
+  if (under.length > 0) return { ok: false, why: `${under.length} of the last ${WS_PROMOTION_DAYS} days under ${WS_PROMOTION_BAR} (worst ${under[0].date} ${(under[0].agreed / under[0].compared).toFixed(5)})` }
+  const worst = recent.reduce((a, d) => Math.min(a, d.agreed / d.compared), 1)
+  return { ok: true, why: `${WS_PROMOTION_DAYS} consecutive days >= ${WS_PROMOTION_BAR} (worst ${worst.toFixed(5)}), serving books under ${WS_BOOK_MAX_AGE_MS / 1000}s` }
 }
 
 export class KalshiWsClient {
@@ -133,6 +178,35 @@ export class KalshiWsClient {
 
   getStatus(ticker: string): BookStatus {
     return this.books.get(ticker)?.status ?? 'UNAVAILABLE'
+  }
+
+  /**
+   * Backlog 2. Replace REST books with socket books that are younger than WS_BOOK_MAX_AGE_MS, in place, and
+   * return how many were replaced. Called only AFTER this scan's REST books have graded the socket, so the
+   * shadow comparison can never be fed its own output.
+   *
+   * A one-sided socket book is left alone even when it is fresh: the fade EV math and the execution limits
+   * both need two sides, and a half-built book after a re-snapshot looks exactly like a market with no offers.
+   */
+  serveFresh(books: Map<string, OrderBook>, nowMs: number): number {
+    const promo = wsBookPromoted(this.stats, nowMs)
+    this.stats.promotion = promo.why
+    if (!promo.ok) {
+      this.stats.servedLastScan = 0
+      return 0
+    }
+    let served = 0
+    for (const ticker of books.keys()) {
+      const b = this.books.get(ticker)
+      if (!b || b.status !== 'LIVE' || nowMs - b.lastFrameMs >= WS_BOOK_MAX_AGE_MS) continue
+      const ws = this.getBook(ticker)
+      if (!ws || ws.bids.length === 0 || ws.asks.length === 0) continue
+      books.set(ticker, ws)
+      served++
+    }
+    this.stats.servedLastScan = served
+    this.stats.served = (this.stats.served ?? 0) + served
+    return served
   }
 
   start(tickers: string[]): void {

@@ -13,6 +13,7 @@ import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
+import { KalshiWsClient, WS_BOOK_MAX_AGE_MS, WS_PROMOTION_BAR, WS_PROMOTION_DAYS, wsBookPromoted, type WsDayAgreement, type WsStats } from '../../src/main/venues/kalshiWs'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter, resolvedLongPrice } from '../../src/main/venues/polymarketUs'
 import { isPinnedQuote, refreshedCloseTime, settlementProbeDue, statsBand, stuckSettlements } from '../../src/main/strategies/ledgerAudit'
 import { GENERIC_STRATEGIES, leadLagRowCounts } from '../../src/main/ladder/ladder'
@@ -32,7 +33,7 @@ import { needsSettleFetch, settledCacheEntry } from '../lib/cull-cache.mjs'
 import { tmpdir } from 'node:os'
 import { join as joinPath } from 'node:path'
 import { GEMINI, geminiKey } from '../../src/main/intelligence/gemini'
-import type { MarketTrade, VenueFill } from '../../src/shared/types'
+import type { MarketTrade, OrderBook, VenueFill } from '../../src/shared/types'
 
 let pass = 0
 let fail = 0
@@ -979,6 +980,7 @@ await registeredReadTests()
 await appendTests()
 await legFailCountTests()
 consensusTests()
+wsBookPromotionTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
 })
@@ -1857,4 +1859,70 @@ async function legFailCountTests(): Promise<void> {
   const day = new Date().toISOString().slice(0, 10)
   eq('lead-lag: a cycle whose Kalshi leg failed is counted for the day, and a clean one is not', engine.state.legFailByDay?.[day], { cycles: 2, failed: 1 })
   rmSync(dir, { recursive: true, force: true })
+}
+
+
+// ---- the socket book is served only while the registered trigger holds (backlog 2, build 2026-09-28) ----
+// The trigger fired on 2026-09-28 (2026-09-21..27, seven consecutive UTC days at or above 0.99). It is encoded
+// rather than recorded so a DECAYED streak demotes the socket by itself: these tests are the rule, not the day.
+function wsBookPromotionTests(): void {
+  const NOW = Date.parse('2026-09-28T11:00:00Z')
+  const day = (date: string, ratio: number): WsDayAgreement => ({ date, compared: 100_000, agreed: Math.round(ratio * 100_000) })
+  // The real series that fired the trigger, read from wsStats.dayLog on 2026-09-28.
+  const real: WsDayAgreement[] = [
+    day('2026-09-19', 0.99480), day('2026-09-20', 0.98950), day('2026-09-21', 0.99153), day('2026-09-22', 0.99720),
+    day('2026-09-23', 0.99393), day('2026-09-24', 0.99608), day('2026-09-25', 0.99482), day('2026-09-26', 0.99518),
+    day('2026-09-27', 0.993808)
+  ]
+  const base = (dayLog: WsDayAgreement[]): WsStats => ({ connected: true, attempts: 1, reconnects: 0, frames: 1, snapshots: 1, deltas: 1, gaps: 0, liveBooks: 10, compared: 1, agreed: 1, maxDiffCents: 1, convention: 'yes-leg (direct)', dayLog })
+
+  eq('ws promotion: the seven days that fired the trigger pass', wsBookPromoted(base(real), NOW).ok, true)
+  eq('ws promotion: the 09-20 FAIL is outside the last seven and does not block it', wsBookPromoted(base(real), NOW).why.includes('7 consecutive days'), true)
+  // One day under the bar anywhere in the last seven demotes it, including the oldest of the seven.
+  eq('ws promotion: one day under the bar inside the window demotes', wsBookPromoted(base([...real.slice(0, 2), day('2026-09-21', 0.98999), ...real.slice(3)]), NOW).ok, false)
+  eq('ws promotion: one day under the bar inside the window demotes (newest)', wsBookPromoted(base([...real.slice(0, 8), day('2026-09-27', 0.98)]), NOW).ok, false)
+  // Exactly at the bar is a PASS: the trigger reads ">= 0.99".
+  eq('ws promotion: exactly at the bar passes', wsBookPromoted(base(Array.from({ length: WS_PROMOTION_DAYS }, (_, i) => day(`2026-09-${21 + i}`, WS_PROMOTION_BAR))), NOW).ok, true)
+  // Fewer than seven closed days is not a streak, however good they are.
+  eq('ws promotion: six perfect days are not seven', wsBookPromoted(base(real.slice(-6).map((d) => ({ ...d, agreed: d.compared }))), NOW).ok, false)
+  // A day with no comparisons is not a day; it must not pad the window.
+  eq('ws promotion: an empty day does not count towards the streak', wsBookPromoted(base([...real.slice(-6), { date: '2026-09-27', compared: 0, agreed: 0 }]), NOW).ok, false)
+  // A frozen log must not keep a dead streak alive: the app may have stopped comparing days ago.
+  eq('ws promotion: a stale day log demotes', wsBookPromoted(base(real), Date.parse('2026-10-05T11:00:00Z')).ok, false)
+  eq('ws promotion: one day of staleness is tolerated', wsBookPromoted(base(real), Date.parse('2026-09-29T11:00:00Z')).ok, true)
+  // The structural guards outrank the streak.
+  eq('ws promotion: a tripped guard outranks a perfect streak', wsBookPromoted({ ...base(real), guardTripped: 'crossed book' }, NOW).ok, false)
+  eq('ws promotion: an undetected price convention blocks it', wsBookPromoted({ ...base(real), convention: undefined }, NOW).ok, false)
+  eq('ws promotion: no stats at all blocks it', wsBookPromoted(undefined, NOW).ok, false)
+
+  // ---- serveFresh: what actually reaches data.books ----
+  const client = new KalshiWsClient('wss://example.invalid', () => ({}))
+  const c = client as unknown as { books: Map<string, unknown>; noLegPricing: boolean | null; stats: WsStats }
+  Object.assign(c.stats, base(real))
+  c.noLegPricing = false
+  const book = (bid: number, ask: number, ageMs: number): unknown => ({
+    yes: new Map([[Math.round(bid * 10000), 500]]),
+    no: new Map([[Math.round(ask * 10000), 500]]),
+    status: 'LIVE',
+    lastFrameMs: NOW - ageMs
+  })
+  const rest = (t: string): OrderBook => ({ venue: 'kalshi', marketId: t, bids: [{ price: 0.4, size: 1 }], asks: [{ price: 0.6, size: 1 }] })
+  c.books.set('FRESH', book(0.41, 0.59, 1_000))
+  c.books.set('OLD', book(0.41, 0.59, WS_BOOK_MAX_AGE_MS))
+  c.books.set('ONESIDED', { yes: new Map([[4100, 500]]), no: new Map(), status: 'LIVE', lastFrameMs: NOW - 1_000 })
+  c.books.set('STALE', { ...(book(0.41, 0.59, 1_000) as Record<string, unknown>), status: 'STALE' })
+  const books = new Map<string, OrderBook>([['FRESH', rest('FRESH')], ['OLD', rest('OLD')], ['ONESIDED', rest('ONESIDED')], ['STALE', rest('STALE')], ['NOSOCKET', rest('NOSOCKET')]])
+  eq('ws serve: only the fresh two-sided LIVE book is served', client.serveFresh(books, NOW), 1)
+  eq('ws serve: the served book is the socket book', books.get('FRESH')?.bids[0]?.price, 0.41)
+  eq('ws serve: a book at exactly the age ceiling is NOT served', books.get('OLD')?.bids[0]?.price, 0.4)
+  eq('ws serve: a one-sided socket book is not served', books.get('ONESIDED')?.bids[0]?.price, 0.4)
+  eq('ws serve: a STALE socket book is not served', books.get('STALE')?.bids[0]?.price, 0.4)
+  eq('ws serve: a market the socket does not hold keeps its REST book', books.get('NOSOCKET')?.bids[0]?.price, 0.4)
+  eq('ws serve: the count is carried, not inferred', [c.stats.servedLastScan, c.stats.served], [1, 1])
+  // Demoted: nothing is served and the REST books are untouched, whatever the socket holds.
+  const books2 = new Map<string, OrderBook>([['FRESH', rest('FRESH')]])
+  c.stats.guardTripped = 'crossed book'
+  eq('ws serve: a tripped guard serves nothing', client.serveFresh(books2, NOW), 0)
+  eq('ws serve: a tripped guard leaves the REST book in place', books2.get('FRESH')?.bids[0]?.price, 0.4)
+  eq('ws serve: the reason is recorded in words', (c.stats.promotion ?? '').startsWith('guard tripped'), true)
 }

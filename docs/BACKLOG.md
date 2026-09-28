@@ -7,7 +7,8 @@ Triaged 2026-09-23 (section 165): 294 entries, 113 closed, 181 open. Everything 
 nobody has to remember a date. What is left below is either the operator's, or code still to write.
 
 ## Needs the operator (each is his decision or his credentials)
-- **232** IB Gateway logins: set up IBC with the IBKR login, or keep logging in by hand after reboots and weekly.
+- **232** IB Gateway logins: set up IBC with the IBKR login, or keep logging in by hand after reboots and
+  weekly. The page fired 2026-09-28 (incident `2026-09-28T03-50`): the weekly token expiry, not a reboot.
 - **185** Whether the nightly review may keep auto-applying to live arms. Moot for registered parameters, which it can
   no longer touch (section 163).
 - **243** IBKR's real fee: needs the API's read-only switch off for one what-if preview; only matters before any IBKR
@@ -435,7 +436,28 @@ the report section. One item per day unless trivial. Record the trigger check in
    enabled-arms reads disagree in DIRECTION again, so the script's own "consider veto mode" verdict line is
    the wrong answer today.
 
-2. **WebSocket book for execution.** *(2026-09-21: the per-UTC-day pair backlog 56 asked for EXISTS now - `wsStats.day` plus a `dayLog` - so
+2. **WebSocket book for execution - TRIGGER MET AND BUILT 2026-09-28 (section 172).** `dayLog` closed its ninth day
+   overnight and the run is **seven consecutive UTC days at or above 0.99**: 09-21 0.99153, 09-22 0.99720,
+   09-23 0.99393, 09-24 0.99608, 09-25 0.99482, 09-26 0.99518, **09-27 0.993808** (09-20's 0.98950 is the break and is
+   now outside the window). Built exactly as registered: `wsBookPromoted(stats, nowMs)` in `src/main/venues/kalshiWs.ts`
+   is a pure function that RE-READS the streak from the persisted day log on every scan - so a decayed streak demotes
+   the socket by itself, with no config knob and no session in the loop - and `KalshiWsClient.serveFresh(books, now)`
+   replaces REST books in place with socket books that are LIVE, two-sided and younger than **5,000 ms**. Grading runs
+   BEFORE serving inside `updateWs`, so the shadow comparison can never be fed its own output; that ordering is
+   commented as load-bearing. Counts (`servedLastScan`, `served`) and the reason in words (`promotion`) are carried
+   rather than inferred. 24 new assertions in `review-fixes.test.ts` cover the rule, not the day. First live line
+   11:22:58Z: `[ws] books: 0 of 251 served from the socket (< 5s old), 0 this process - price convention not detected
+   yet` - correct, because `convention` is per-process and must be re-earned with ten discriminating REST samples after
+   every boot. Ten minutes later, verified in production: `[ws] books: 22 of 277 served from the socket (< 5s old), 517
+   this process - 7 consecutive days >= 0.99 (worst 0.99153), serving books under 5s`. **Two things left over:
+   BACKLOG 254** (the socket subscribes to `tickers.slice(0, 50)` against 277 books a scan, so the hard cap is 18% of
+   the map and the observed rate was 8%) and a **correction**: the
+   "`wsStats.lastError` still reads `universe drift 32%`, unexplained" line carried below since 09-11 is wrong.
+   It is NOT an error - `kalshiWs.ts:159` calls `cycle('universe drift N%')` deliberately when >= 30% of the desired
+   ticker set has drifted and five minutes have passed, and `cycle()` records its reason in `lastError` (line 440).
+   The string is stale (absent from the last 24 h of `main.log`) and never had any bearing on the agreement ratio.
+   Original text follows.
+   *(2026-09-21: the per-UTC-day pair backlog 56 asked for EXISTS now - `wsStats.day` plus a `dayLog` - so
    the ratio is computable for the first time since 09-12, and the honest daily numbers are:
    **2026-09-19 48,446/48,699 = 0.9948 PASS; 2026-09-20 52,772/53,332 = 0.9895 FAIL; 2026-09-21 to 11:30Z
    25,422/25,693 = 0.9895 FAIL.** Two consecutive days under the bar, so the seven-day streak is at 0 and
@@ -1805,7 +1827,8 @@ Nothing here re-arms momentum, lifts a cool-down, or changes sizes beyond what t
     Nothing is at risk meanwhile - mode `paper`, `liveStrategies: []`, `live: []`, no IBKR order ever sent, and
     the quote call throws BEFORE `fillOrders`/`closePositions` (`ibkrLab.ts:114` vs `126-127`), so nothing is
     decided on stale prices. The signature is suppressed to 2026-09-24 (repair 03:50), so the daily run must
-    read `ibkr-lab.json` `lastScanAt`/`scans` rather than the log's silence. Decide then: either IBC/auto-restart
+    read `ibkr-lab.json` `lastScanAt`/`scans` rather than the log's silence (re-suppressed to 2026-10-01 by repair
+    2026-09-28T03-50, same pattern, weekly token expiry - the same rule applies). Decide then: either IBC/auto-restart
     keeps the gateway up (the operator's call, it holds his credentials), or the lab's status line should say "paused:
     gateway down" in the UI instead of only in `notes._discovery`. **Noticed in passing, not fixed and not
     reproduced:** a discovery that comes back PARTIAL (gateway returning mid-walk, one product erroring) is
@@ -2890,6 +2913,16 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   re-login weekly whatever the auto-restart setting says. The sentinel now pages within 30 minutes of it going down.
   IBC (the open-source IB Controller) automates the login and the weekly restart but needs the IBKR username and
   password in its config file - the operator's to set up, never this app's. Trigger: **the next time the page fires**.
+  **Status 2026-09-28 (repair 2026-09-28T03-50): the page fired, and it narrowed the ask.** IBKR's weekly security-token
+  expiry landed on the 23:45-local daily restart - `C:/Jts/ibgateway/1051/launcher.20260927.log:149,152`, `Session expired
+  [sessionId=2,softToken=0,...]` then `Authorization failed: The security tokens ... have expired (routinely) ... Please
+  manually enter your username and password to access IB Gateway.` - so the gateway relaunched (PID 52824, 23:45:03 local,
+  Responding, `instance of control is not created yet` every 5 min) into its login dialog with **no** listener on 4001 or
+  4002, and the paper lab stopped at scan 20577 / 03:44:33Z. Newly measured, and it is the part that was guesswork before:
+  the **daily** auto-restart does work unattended - `launcher.20260923..26.log` all reach `Daily auto-restart is enabled.`
+  at 23:45:07-08 and cost the lab 2-4 warn lines - so hands are needed only for the **weekly** expiry, which announces
+  itself in `launcher.<date>.log`. The warn is suppressed to 2026-10-01 (three days), so a repeat after that raises its own
+  incident. Still the operator's: IBC would hold his username and password.
 
 - **233. Lead-lag at event speed: read the shadow (2026-09-22, section 159).** `python scripts/backtests/leadlag_fast_shadow.py
   --since 2026-09-22T21:48Z` on or after **2026-09-26** with 3+ UTC days of rows; rule in
@@ -3066,6 +3099,45 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   disabled also print the fair-value count the live line carries, since "fair-value on 0 of M" is half of the
   registered silence check and is invisible while the arm is off. Log-only; no behaviour. Trigger: any day
   `quoter.ts` is touched.
+- **256. Build-queue 10's trigger is UNREACHABLE, not merely unmet: the Metaculus shadow has ten pairs, and the
+  earliest resolves 2026-11-04 (2026-09-28, section 172).** `data/metaculus-shadow/pairs.jsonl` has **199 rows and
+  exactly 10 distinct `(mcId, ticker)` pairs** - the hourly task re-appends the same matches, the same shape as
+  BACKLOG 248's duplication, so "189 pairs on file" on 09-27 and "199" today are both really *ten*. `0 graded` is
+  fully explained and is not a grader defect: **not one pair has a resolution date in the past.** The resolve-year
+  histogram is 2026:22, 2027:95, 2029:44, 2030:38 rows, and by distinct pair the earliest six are 2026-11-04
+  (KXTRYFIRECOOK), then five on 2027-01-01..06, then SCOTUS 2029, Abraham Accords 2029, SpaceX-Mars 2030 and
+  KXNIREFCALL 2030. So the registered trigger (**>= 100 graded**, base rate beating the price after fees) cannot be
+  met before 2030 on this matcher, whatever the pair count says. The matcher is the problem, not the token or the
+  grader: it is finding only long-horizon Metaculus questions, which is exactly the class Kalshi also prices furthest
+  from a resolution. Three honest options, none taken today: (a) de-duplicate the append so the count stops lying;
+  (b) re-point the matcher at Metaculus questions with `scheduled_resolve_time` inside 90 days and see whether any
+  Kalshi market matches at all; (c) retire item 10 and stop the hourly task, as reads 12/68b and 163 retired their
+  own recorders. Do **not** report "N pairs on file" as progress again without the distinct count beside it.
+  Trigger: **any day; before item 10 is described as "awaiting grades" once more.**
+- **254. The socket can only ever replace about a fifth of the book map, and in practice 8% (2026-09-28, section
+  172).** Build-queue 2 shipped today: `serveFresh()` swaps a REST book for a socket book under 5 s old. But
+  `updateWs` starts the client with `tickers.slice(0, 50)` (`autoTrader.ts:4306`) while the same scan's REST orderbook
+  call fetched **277** books, so the hard cap is 18% of the map - and the first promoted scan served **22 of 277, 8%**,
+  the difference being the 5 s freshness bar. The cap is
+  not arbitrary - one subscription per channel per session means a wider universe cycles the socket more often, and
+  `setTickers()` already refuses to cycle on small drift precisely because cycling discards every book - so raising it
+  is a real trade against cache hit rate, not a constant to edit. Measure first: `wsStats.servedLastScan / books.size`
+  now exists and costs nothing to read. Trigger: **once the promotion has been live for seven days**, so the served
+  ratio is measured under the real cap before anyone argues about a bigger one.
+- **255. Lead-lag's own fills disagree across the settlement basis five times as often as the market at large
+  (2026-09-28, section 172, from read 86b).** Kalshi's KX<COIN>15M settles on CF Benchmarks' 60 s average and
+  Polymarket's `<coin>-updown-15m` on Chainlink's 60 s TWAP. Over 4,648 matched windows in the last 7 days they
+  disagree on **47, 1.01%** (BNB 12, HYPE 14 worst; ETH 2 best), and every disagreeing window landed within **4.6 bp
+  of the strike**, most inside 1 bp. **Of OUR 259 windows in the sample, 13 disagreed - 5.0%**, and all 13 settled
+  worthless: about **-$8.42 of cost plus $0.27 of fees = -$8.69**, against the arm's +$37-46 over the same window,
+  i.e. roughly a fifth of gross. The mechanism is not mysterious and is not a defect: lead-lag fires exactly when
+  Polymarket has moved and Kalshi has not, which selects close calls, which is where two index methodologies can
+  settle differently. **The registered 86b gate test says do nothing** - `mtc<3 & dist<5bp` is 105 fills at
+  **+2.11c/contract**, day-clustered CI95 [-7.35, +11.57], the WRONG SIGN for a gate as well as spanning zero - so
+  this is recorded, not acted on. What it would take to act: a cell that is both near-strike AND negative with an
+  upper band below zero over >= 7 days, or a per-coin cut (BNB and HYPE carry 26 of the 47 disagreements and BNB is
+  50 contracts of live exposure). Trigger: **the next 86b Monday read, 2026-10-05**, and before any size increase on
+  BNB or HYPE.
 - **253. Nothing compares the running bundle against HEAD, so a rebuild without a restart is invisible (2026-09-26,
   section 170).** A second headless session committed `8b83935` at 11:27:27Z and rebuilt `out/main/index.js` at 11:26Z
   without restarting, so the running app was on a 10-minute-old bundle that did not contain a protective change to an
@@ -3157,3 +3229,46 @@ Registered reads due today and performed: **233** (CONTINUE, app and grader now 
 **235** (WAIT at the app's 00:47Z read; cohort now 28 settled / 6 losses / -15.66c, 80% [-28.18, -3.14], and the
 registered bar is 15 losses or 250 settled), **72b/161** (NOT YET, 286.03 of 400 new-coin contracts),
 **2** (6 of 7), **202** (not reproducible; detector fixed), **1** (KEEP veto off). `docs/reads.json` advanced.
+
+## 2026-09-28 daily maintenance: dated trigger checks (see docs/reports/2026-09-28.md, section 172)
+
+**Build-queue 2's trigger fired for the first time and was built** (above), so the rule's "take the FIRST item whose
+trigger is met" pointed at it rather than at item 9. Item 9 (SportsGameOdds role) still has no trigger and no
+deadline and carries forward again.
+
+- **1 critic skill** - MET daily, declined by the amended rule; third consecutive day the script's own verdict line
+  agrees ("KEEP veto mode OFF - veto -0.040 vs rest +0.034; skilled in 1 of 2 shared enabled strategies").
+- **2 WebSocket book** - **MET, 7 of 7, BUILT TODAY.**
+- **3 HRRR** - done 2026-09-21; the shadow keeps favouring HRRR: n=567 station-days, HRRR MAE 1.90 / bias -0.35
+  against NBM 2.23 / -1.06, closer on 309 days to 242 with 16 ties.
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** - not met: quoter notch 1, off on an operator hold,
+  ALLOWED cohort 67 settled proxy fills over 37 events (needs 30 over 40) at -1.70c.
+- **6 sports anchor on Polymarket US** - not met: `kalshi-sports-anchor` is disabled on an operator hold, so it has
+  no checkpoint that could be positive.
+- **7 player props** - not met (anchor notch 1).
+- **8c market-maker rest patterns** - not met: mean-reversion 24 settled, +$0.73, checkpoint at 40.
+- **9 SportsGameOdds role** - no trigger; next untriggered build, deferred with the reason above.
+- **10 Metaculus** - **UNREACHABLE, not merely unmet (BACKLOG 256).** 199 rows are **10 distinct pairs** re-appended hourly, and not one has a resolution date in the past: the earliest is 2026-11-04 and the rest run to 2030. The trigger needs 100 graded.
+- **11 forecaster v2** - not met: 176 of 200 settled events. The Brier half passes (model 0.0770 vs mid 0.2199, CI95
+  [-0.1550, -0.1309]); the trading half fails at every threshold, best cell -6.78c with Bonferroni LB -8.76c.
+- **12 mention base rates** - counter-indicated and closed: the read FAILed 2026-09-25 (182 graded, base Brier 0.2441
+  against the market's 0.1551) and the task is disabled by that registration's own action.
+- **13 consensus arm** - built and on the ladder; its SHADOW's trigger is **NOT met**: the report prints "graded
+  1,170,278" against 480,107 on 09-24, which is BACKLOG 248's duplication, while the executable Kalshi-ask leg is
+  **still n=1,436** - the headline inflates and the only promotable cohort has not grown in four days.
+
+Registered reads due today and all performed: **233** (CONTINUE, seventh day; app +0.23c [-0.49, 0.95] n=2483,
+grader -0.01c [-0.78, +0.75] n=2690; `leadLagFastLive` stays off), **235** (WAIT; 51 settled / 8 losses /
+-8.86c 80% [-17.34, -0.39], ledger `mini:fade` n=52 -$4.51 against the research file's -$4.5516 - the registered bar
+is 15 losses or 250 settled), **72b/161** (NOT YET, 334.03 of 400 new-coin contracts), **2** (MET, built),
+**86b** (performed in full: **no gate**, and BACKLOG 255 raised), **221** (reported: signal +7.40c at the adverse
+bound, 5-min markout +3.55c SE 1.57 - about half the advertised edge survives), **1** (KEEP veto off),
+**40/75b** (openTrades 13 against 60), **11** (176 of 200 events). `docs/reads.json` advanced; nothing is due
+2026-09-28 any more.
+
+Also confirmed today: **253**'s check passes by hand - the running app's `main bundle built 2026-09-27T11:20:22.316Z`
+matched `out/main/index.js`'s mtime exactly before this session rebuilt. **251** gains a data point that cuts against
+its worry: since `kalshi-leadlag`'s stage start the ladder reads 72 trades / +$29.45 while the ledger reads 139
+contracts / **+$37.41** - the ledger is now the LARGER of the two, where on 09-26 the ladder was 3.8x the ledger, so
+the tracker is not systematically overstating. **252** stands: today's last quoter line reads `disabled: 37
+candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a silence.
