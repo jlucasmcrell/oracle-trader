@@ -3118,7 +3118,10 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   172).** Build-queue 2 shipped today: `serveFresh()` swaps a REST book for a socket book under 5 s old. But
   `updateWs` starts the client with `tickers.slice(0, 50)` (`autoTrader.ts:4306`) while the same scan's REST orderbook
   call fetched **277** books, so the hard cap is 18% of the map - and the first promoted scan served **22 of 277, 8%**,
-  the difference being the 5 s freshness bar. The cap is
+  the difference being the 5 s freshness bar. Measured again at 11:45:03Z on a second process: `liveBooks: 50` against
+  284 books in the scan (17.6% hard cap) with **22 of those 50 fresh enough to serve, 44%**. So the binding constraint
+  is the subscription size, not the freshness bar, and any argument for widening should be made against `liveBooks`
+  rather than against the served count. The cap is
   not arbitrary - one subscription per channel per session means a wider universe cycles the socket more often, and
   `setTickers()` already refuses to cycle on small drift precisely because cycling discards every book - so raising it
   is a real trade against cache hit rate, not a constant to edit. Measure first: `wsStats.servedLastScan / books.size`

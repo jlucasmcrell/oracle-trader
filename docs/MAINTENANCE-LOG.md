@@ -6121,6 +6121,13 @@ scan fetched 277 books, so the hard cap is 18% of the map and the observed rate 
 cycles the socket more often, and cycling discards every cached book) and is not part of the registered build —
 **BACKLOG 254**, with the ratio now instrumented.
 
+**Confirmed again on the process this session leaves running** (PID 26816), at 11:45:03Z:
+`[ws] books: 22 of 284 served from the socket (< 5s old), 464 this process - 7 consecutive days >= 0.99 (worst
+0.99153), serving books under 5s`, with `wsStats` reading `convention: 'yes-leg (direct)'`, `servedLastScan: 22`,
+`served: 464`, `guardTripped: null`, **`liveBooks: 50`**. That last number pins BACKLOG 254 exactly: the socket holds
+**50** books against the scan's 284, so 17.6% is the hard cap, and **22 of those 50 (44%) were fresh enough** to serve.
+The binding constraint is the subscription size, not the 5 s bar.
+
 A second restart at 11:33:37Z (PID 26816, `main bundle built 2026-09-28T11:33:13.905Z`) followed a comments-only
 correction to two stale doc-comments; `tsc`, the build and all three suites were re-run clean before it, and it keeps
 BACKLOG 253's invariant true — the running app is never left on a bundle older than `out/main/index.js`.

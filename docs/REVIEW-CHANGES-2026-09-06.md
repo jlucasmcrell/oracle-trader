@@ -7152,6 +7152,8 @@ REST**, 517 across that process. That is the build verified in production, not o
 doc-comments, with `tsc`, the build and all three suites re-run clean first - BACKLOG 253's invariant says never leave
 the running app on a bundle older than `out/main/index.js`, and a comment change is no exception.)
 
+Confirmed again at 11:45:03Z on the process this session leaves running: `22 of 284 served ... 464 this process`, `wsStats` reading `convention: 'yes-leg (direct)'`, `servedLastScan: 22`, `served: 464`, `guardTripped: null`, **`liveBooks: 50`**.
+
 Two things left over. **BACKLOG 254**: `updateWs` starts the client with `tickers.slice(0, 50)` while that scan
 fetched 277 books, so the hard cap is 18% of the map and the observed rate was **8%** - now measured rather than
 argued - and the cap is not arbitrary, because
