@@ -1,7 +1,7 @@
 import type {IbkrLabMarket} from '../../shared/ibkrLab'
-import {fetchHourlyForecast,remainingExtremes,normalCdf,STATION_COORDS} from './weatherForecast'
+import {fetchHourlyForecast,forecastSigma,remainingExtremes,normalCdf,STATION_COORDS} from './weatherForecast'
 import {localDate,stationTimeZone} from './weatherDay'
-const cache=new Map<string,{at:number;pending:Promise<{mu:number;morning:boolean}|undefined>}>()
+const cache=new Map<string,{at:number;pending:Promise<{mu:number;morning:boolean;hours:number}|undefined>}>()
 /** ForecastEx's WU settlement differs from NWS. This is a forecast with a wide error band, never a locked outcome. */
 export async function ibkrWeather(m:IbkrLabMarket,now:number):Promise<{p:number;morning:boolean;at:number}|undefined>{
   const match=/^U([HL])([A-Z]{3})_(\d{2})(\d{2})(\d{2})_/.exec(m.id)
@@ -31,13 +31,17 @@ export async function ibkrWeather(m:IbkrLabMarket,now:number):Promise<{p:number;
       }else if(eventDate<localDate(now,tz))return
       const mu=kind==='H'?Math.max(ext.max,...temperatures):Math.min(ext.min,...temperatures)
       const hour=Number(new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',hourCycle:'h23'}).format(now))
-      return {mu,morning:eventDate>localDate(now,tz)||hour<10}
+      return {mu,morning:eventDate>localDate(now,tz)||hour<10,hours:ext.hours}
     })()
     data={at:now,pending};cache.set(key,data)
   }
   const value=await data.pending
   if(!value)return
-  // Three degrees retains forecast error, observation gaps and NWS/WU basis uncertainty throughout the day.
-  const p=1-normalCdf((m.strike+.5-value.mu)/3)
+  // BACKLOG 241, read 2026-09-29: the flat 3 degrees was the day-out forecast error charged all day, so the model
+  // stayed as unsure at 4 PM - with the day's extreme already banked in the observations above - as it was at dawn.
+  // The Kalshi weather model has narrowed with the remaining hours since round 30 (`forecastSigma`, 3.0 -> 0.9); the
+  // lab now uses the same curve on the same inputs. Sigma is the FORECAST error only: ForecastEx settles on Weather
+  // Underground, and that basis is what this arm exists to measure, so it is not padded in here by guesswork.
+  const p=1-normalCdf((m.strike+.5-value.mu)/forecastSigma(value.hours))
   return {p:Math.max(.02,Math.min(.98,p)),morning:value.morning,at:data.at}
 }

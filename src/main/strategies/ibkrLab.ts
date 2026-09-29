@@ -8,6 +8,7 @@ import type {IbkrAdapter} from '../venues/ibkrAdapter'
 import {discoverForecastMarkets,loadFinalSettlements} from '../venues/forecastexData'
 import {IBKR_HOLD_MAX_DAYS,ibkrHoldsToSettlement,IBKR_RETIRED,IBKR_STRATEGIES,IBKR_UNAVAILABLE,exitAsk,freshAsk,frameMid,ibkrSignals,type LabFrame} from './ibkrSignals'
 import {ibkrWeather} from './ibkrWeather'
+import {scanSlotVerdict,IBKR_LAB_WEDGE_MS} from './scanSlot'
 import {IBKR_RULES_SINCE,type IbkrLabConfig,type IbkrLabMarket,type IbkrLabPosition,type IbkrLabState,type IbkrLabStatus,type IbkrLabStrategyRow} from '../../shared/ibkrLab'
 
 export const IBKR_LAB_DEFAULTS:IbkrLabConfig={enabled:true,mode:'paper',liveStrategies:[],contracts:1,maxOpenPerStrategy:4,maxDailyLoss:10,maxLiveCost:1.5}
@@ -34,6 +35,10 @@ export interface IbkrLabSources {
 export class IbkrLab {
   private state:IbkrLabState
   private busy=false
+  /** When the pass that owns the slot started, for the wedge guard (./scanSlot). */
+  private busyAt=0
+  /** Bumped by every scan that takes the slot; a pass whose epoch is stale has been superseded. */
+  private scanEpoch=0
   private failure?:string
   private cursor=0
   private activeCursor=0
@@ -154,8 +159,16 @@ export class IbkrLab {
     this.state.config=config;this.save();return this.status()
   }
   async scan(now=Date.now()){
-    if(this.busy||this.failure)return
+    if(this.failure)return
+    // A plain `busy` boolean is released by a THROWN scan and never by one that does not settle, and the lab
+    // then goes silent with no log line at all (2026-09-29, 3 h 52 min). Same guard as the auto-trader's tick
+    // and the lead-lag poll; the stale pass is superseded by `scanEpoch`, not cancelled.
+    const slot=scanSlotVerdict(this.busy,this.busyAt,now,IBKR_LAB_WEDGE_MS)
+    if(slot==='busy')return
+    if(slot==='wedged')console.error(`[ibkr-lab] scan wedged for ${Math.round((now-this.busyAt)/60000)} min - taking the slot; the stale pass can no longer trade or write the ledger`)
     this.busy=true
+    this.busyAt=now
+    const epoch=++this.scanEpoch
     try{
       const s=this.state
       // A failed discovery cannot succeed before the Gateway is back, and each attempt logs a line per product
@@ -216,6 +229,8 @@ export class IbkrLab {
         const history=s.histories[m.id]??[];const f:LabFrame={market:m,yes,no,history,forecast:s.forecast[m.id],spot:spotByProduct.get(m.product),weather:weatherByMarket.get(m.id)}
         if(freshAsk(yes,now)&&freshAsk(no,now)){frames.push(f);s.histories[m.id]=[...history,{at:now,p:frameMid(f)}].filter(x=>x.at>=now-2*3600000).slice(-240)}
       }
+      // Superseded: a newer pass owns the slot. Read-only work above may finish; nothing below may write.
+      if(this.scanEpoch!==epoch){console.warn('[ibkr-lab] superseded scan finished its awaits; it does not trade or write');return}
       this.fillOrders(now,universe)
       this.closePositions(now)
       if(s.positions.some(p=>p.market.expiresAt<now)||s.live.some(p=>p.status==='open'&&p.market.expiresAt<now)){
@@ -247,8 +262,8 @@ export class IbkrLab {
       void this.runForecast(frames,now).catch(e=>{s.notes.news=String(e)})
       void this.reconcileLive(now).catch(e=>{s.notes._live=String(e)})
       console.log(`[ibkr-lab] ${s.config.mode}; scan ${s.scans}; ${frames.length}/${batch.length} fresh pairs; ${s.orders.length} pending; ${s.positions.length} paper positions; ${s.trades.length} closed`)
-    }catch(e){this.state.lastError=String(e);try{this.save()}catch{};console.warn('[ibkr-lab]',String(e))}
-    finally{this.busy=false}
+    }catch(e){if(this.scanEpoch===epoch){this.state.lastError=String(e);try{this.save()}catch{}}console.warn('[ibkr-lab]',String(e))}
+    finally{if(this.scanEpoch===epoch)this.busy=false}
   }
   /**
    * True once an arm has lost its daily allowance, which stops its entries for the rest of the UTC day. That is a

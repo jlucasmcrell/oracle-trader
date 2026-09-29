@@ -24,6 +24,7 @@ import { fadeCategoryBlock, isWeatherSeries, underlyingOf, weatherSeatBlock } fr
 import { dailyBrakeBlock, miniRestIsStale } from '../../src/main/strategies/miniAuto'
 import { hunchModelPlans } from '../../src/main/strategies/hunch'
 import { computeCandidate, MAX_ROWS_PER_DAY, midOf, momentumCandidateStats, momentumCandidatesActive, recordMomentumCandidates, resetMomentumCandidates, setMomentumCandidateDir } from '../../src/main/strategies/momentumCandidates'
+import { IBKR_LAB_WEDGE_MS, LEADLAG_WEDGE_MS } from '../../src/main/strategies/scanSlot'
 import { chmodSync, mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from 'node:fs'
 import { appendDurably } from '../../src/main/store/append'
 import { OrderJournal } from '../../src/main/store/orderJournal'
@@ -961,6 +962,15 @@ eq('phases: a repeated name sums its slices', phaseDurations([['a', 100], ['b', 
   eq('scan slot: the incident pass reads as wedged', scanSlotVerdict(true, t0, Date.UTC(2026, 8, 20, 23, 50, 2)), 'wedged')
   // A clock that jumps backwards (host resume) must not hand a live scan's slot away.
   eq('scan slot: a backwards clock never wedges a live scan', scanSlotVerdict(true, t0, t0 - 3600_000), 'busy')
+  // Third caller (2026-09-29): the ForecastEx lab wedged for 3 h 52 min on a 30 s interval with nothing watching.
+  // Measured over 2,832 consecutive gaps the worst LEGITIMATE lab scan was 255 s (a discovery walk), so the window
+  // has to clear that and still be far under the auto-trader's, whose tick is minutes of work by design.
+  eq('lab slot: the worst legitimate lab scan still holds it', scanSlotVerdict(true, t0, t0 + 255_000, IBKR_LAB_WEDGE_MS), 'busy')
+  eq('lab slot: one second under the deadline still holds it', scanSlotVerdict(true, t0, t0 + IBKR_LAB_WEDGE_MS - 1_000, IBKR_LAB_WEDGE_MS), 'busy')
+  eq('lab slot: the deadline itself hands the slot on', scanSlotVerdict(true, t0, t0 + IBKR_LAB_WEDGE_MS, IBKR_LAB_WEDGE_MS), 'wedged')
+  eq('lab slot: the 2026-09-29 outage reads as wedged long before it ended', scanSlotVerdict(true, t0, t0 + 3600_000, IBKR_LAB_WEDGE_MS), 'wedged')
+  eq('lab slot: the window clears the worst scan and sits between the other two', IBKR_LAB_WEDGE_MS > 2 * 255_000 && IBKR_LAB_WEDGE_MS < SCAN_WEDGE_MS && IBKR_LAB_WEDGE_MS > LEADLAG_WEDGE_MS, true)
+  eq('lab slot: an idle lab is free', scanSlotVerdict(false, t0 - 9 * 3600_000, t0, IBKR_LAB_WEDGE_MS), 'free')
 }
 
 killStateTests()

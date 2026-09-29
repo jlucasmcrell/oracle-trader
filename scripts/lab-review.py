@@ -114,7 +114,7 @@ print('  open positions:', len(P.get('positions', [])), '| resting orders:', len
 
 # ---------------- IBKR ForecastEx paper lab ----------------
 I = json.load(open(os.path.join(A, 'ibkr-lab.json'), encoding='utf-8'))
-RULES_I = 1789630303000  # IBKR_RULES_SINCE 2026-09-17T07:31:43Z
+RULES_I = 1790680200000  # IBKR_RULES_SINCE 2026-09-29T11:10:00Z
 arms = collections.defaultdict(list)
 events = collections.defaultdict(set)
 legacy = collections.Counter()

@@ -30,7 +30,9 @@ nobody has to remember a date. What is left below is either the operator's, or c
   command would have to change.
 - **206 (rest)** eight IBKR paper positions stay unpriced because the opposing side has no offer at all; pricing them
   at zero would be a new rule for the lab's gate (paper only).
-- Paper labs: **240**, **241** (dated in `docs/reads.json`).
+- Paper labs: **240** (dated in `docs/reads.json`). **241 closed 2026-09-29** (section 173): the merge is
+  superseded by the 09-24 stop of the whole momentum family, the weather sigma now narrows through the day,
+  and the 1c slippage allowance is measured at $10.13 of the lab's -$47.33.
 
 ## Closed by the 2026-09-23 triage (reason in section 165)
 Retired arms or dead lines: 4, 5, 6, 7, 8, 15, 37, 21, 27, 28, 47, 61a, 63a, 73b, 78b, 79b, 144b, 145a, 204, 211, 213,
@@ -3141,6 +3143,34 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   upper band below zero over >= 7 days, or a per-coin cut (BNB and HYPE carry 26 of the 47 disagreements and BNB is
   50 contracts of live exposure). Trigger: **the next 86b Monday read, 2026-10-05**, and before any size increase on
   BNB or HYPE.
+- **257. The ForecastEx lab wedged for 3 h 52 min and nothing anywhere noticed, because silence is not a signature
+  (2026-09-29, section 173). FIXED, and the watch half is still open.** `IbkrLab.scan` guarded itself with a plain
+  `busy` boolean cleared in a `finally`. A pass that THROWS releases it; a pass whose `await` never settles does not,
+  and the 30 s `setInterval` then returned at `if(this.busy)` on every tick. The pass that started at
+  2026-09-29T07:10Z never came back: last line `scan 22960` at 07:09:51.419Z, `ibkr-lab.json` frozen at the same
+  instant, nothing in `main.log` for 3 h 52 min, about **470 lost scans** - with the IB Gateway **up** the whole time
+  (`data/sentinel/status.json` `gateway: up` at 11:05Z), so this is not BACKLOG 232. It is the third shape of the
+  same defect in this file (auto-trader 2026-09-20, lead-lag 2026-09-25) and the second silent lab stoppage in four
+  days (section 170's `failure` latch, fixed 09-26 and NOT the cause here: three `SAVE FAILED` lines would have had
+  to appear first and there are none). **Fixed** by making the lab the third caller of `scanSlotVerdict`
+  (`src/main/strategies/scanSlot.ts`, new `IBKR_LAB_WEDGE_MS` = 10 min against a measured worst-legitimate scan of
+  255 s over 2,832 consecutive gaps), with `scanEpoch` so the superseded pass may finish its awaits but cannot trade
+  or write, and the hand-over logged at **error** so the sentinel can see it. **Still open:** nothing watches
+  `ibkr-lab.json` `lastScanAt` - the sentinel's own suppression text for 232 says "read ibkr-lab.json
+  lastScanAt/scans, never this signature's silence", and no code does. Same family as 249. Trigger: **the next time
+  `sentinel.mjs` is touched**, with 249 and 253; and the wedge line itself should be watched by name.
+- **258. The ladder's two-strike stop has frozen read 235's cohort eleven losses short of its bar (2026-09-29,
+  section 173).** `docs/PREREGISTERED-polyus-fade.md` reads at **15 losses or 250 settled**; the arm stands at
+  **10 losses / 69 settled** and the ladder disabled it at 2026-09-29T01:33:42Z on its own checkpoint rule (56
+  trades, -$2.34, 80% [-0.06, -0.03] over 4 day-clusters), with `polyus-fade` now "stopped 2 times: only its gate or
+  the operator can re-arm it". No new entries means the registered bar can never be reached, so the read will return
+  WAIT for ever. The two rules are not in conflict - the ladder stops on money, the registration decides retirement -
+  but the registration has no branch for "the ladder got there first". Note the shapes agree: the registered band's
+  UPPER bound (-1.92c) is already below zero, which is the FAIL shape, so nothing is being kept alive by the
+  mismatch. Options, in order of honesty: (a) add a terminal branch - a cohort with no live arm behind it is
+  INCONCLUSIVE at the next read, which retires it and closes the line; (b) leave it daily and let the operator's
+  re-arm restart it; (c) close the read now by hand, which is the discretion the pre-registration exists to remove
+  and is therefore refused. Trigger: **the next 235 read, 2026-09-30**, or any re-arm of `polyus-fade`.
 - **253. Nothing compares the running bundle against HEAD, so a rebuild without a restart is invisible (2026-09-26,
   section 170).** A second headless session committed `8b83935` at 11:27:27Z and rebuilt `out/main/index.js` at 11:26Z
   without restarting, so the running app was on a 10-minute-old bundle that did not contain a protective change to an

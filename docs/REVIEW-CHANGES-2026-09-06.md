@@ -7227,3 +7227,90 @@ And the IBKR paper lab, dark since 03:44:33Z on IBKR's weekly token expiry (the 
 NEEDS-OPERATOR), **came back by itself at 11:02:37Z** - 7 h 18 m lost, `scan 20578` following 20577 with no gap in
 the numbering, so wall-clock only and no state. BACKLOG 232 is unchanged and is still his: IBC with the login in its
 config file, or one manual login a week.
+
+## §173 - 2026-09-29 11:30Z: the lab wedged for four hours with no signature at all, and read 241 turned out to be two-thirds already answered
+
+Five registered reads were due and all five were performed. Four of them said "no change" in the way a
+pre-registration is supposed to: lead-lag at event speed is **CONTINUE for the eighth day** (grader -0.12c, 80%
+[-0.78, +0.53] over n=3135; app +0.01c over n=2955; PASS needs a lower bound above zero and neither has one, so
+`leadLagFastLive` stays off), the coin cohort is **eleven contracts short** of its 400 (389.04, +2.54c, 95%
+[-3.70, +8.78]) with five days to its final, and the critic is **MET-but-declined** for the fourth day (VETO
+-0.040 against the rest at +0.036, skilled in 1 of 2 shared enabled arms, so condition (iii) fails).
+
+The day's real content is in the other two.
+
+### The lab had been dead for 3 h 52 min and every instrument in the house said it was fine
+
+`[ibkr-lab] paper; scan 22960` at **07:09:51.419Z** is the last line the ForecastEx paper lab wrote. `ibkr-lab.json`
+and both quote logs stop at the same instant, `scans` frozen at 22960, `lastError` empty. Then nothing, for nearly
+four hours and about **470 lost scans**, while `main.log` filled normally with every other subsystem. The liveness
+table in the maintenance prompt does not have a row for it; the sentinel has no finding for it; the nightly review
+did not mention it. **A subsystem that stops emitting emits no error, and every watch in this house is built on
+signatures.**
+
+Three obvious causes were ruled out with evidence rather than reasoning:
+
+- **Not the Gateway** (BACKLOG 232, whose warn signature was 54 of the day's lines and is suppressed to 2026-10-01).
+  `data/sentinel/status.json` reads `gateway: up` at 11:05Z, and the reconciler reached IBKR again after 07:24Z. The
+  07:10-07:24Z blip is real; the lab stayed dark for three and a half hours after it cleared.
+- **Not section 170's `failure` latch**, fixed on 09-26. That path needs **three consecutive** `SAVE FAILED` lines
+  before it stops entries, and the log has none.
+- **Not a dead timer.** `index.ts:443` is a plain `setInterval(..., 30000)`; it kept firing and kept returning at
+  `if(this.busy||this.failure)`.
+
+What remains is the one shape that produces exactly this: an `await` inside `scan()` that never settles. A pass that
+THROWS releases `busy` in its `finally`; a pass that never returns does not, and every later tick is then refused in
+silence. **This is the third instance of the identical defect in this codebase** - the auto-trader on 2026-09-20
+(2 h 42 min) and the lead-lag engine on 2026-09-25 (11 h) - and both were fixed by a shared guard the lab never got.
+So the fix is to become its third caller, not to grow a fourth copy: `scanSlotVerdict` gains `IBKR_LAB_WEDGE_MS`,
+`IbkrLab.scan` takes the slot through it, `scanEpoch` lets a superseded pass finish its awaits while refusing it the
+ledger, and the hand-over logs at **`console.error`** because that is the level the sentinel reads.
+
+The window was measured, not picked. Over **2,832 consecutive lab-scan gaps** the interval is p50 30.0 s, p99
+33.1 s, and the worst LEGITIMATE gap is **255 s** (a six-hourly discovery walk). Ten minutes is 2.4x that and bounds
+any future silence at one tick instead of four hours. Twelve new assertions cover it, six pure and six driving the
+real `scan()` with a quote call that never resolves; the lab test was deliberately broken first (window widened to
+24 h) and failed on `calls: expected 2`, so the block is not vacuous.
+
+**The open half stays open.** Nothing watches `ibkr-lab.json` `lastScanAt` - and the sentinel's own suppression note
+for 232 says, in as many words, *"read ibkr-lab.json lastScanAt/scans, never this signature's silence"*. Nothing
+does. BACKLOG **257**, filed with 249 and 253 against the next change to `sentinel.mjs`.
+
+### Read 241 was written before the evidence that answered two-thirds of it
+
+BACKLOG 241 (2026-09-22) asked for three things. Performing it as registered meant reading what had happened since
+it was written:
+
+**(a) Merge momentum, log-momentum and breakout into one arm held to settlement: SUPERSEDED.** All three were read
+at their own registered date on 2026-09-24 (backlog 190, section 168) and **stopped on their own evidence** -
+-8.57c [-11.04, -6.10] over 8 day-clusters, -9.34c [-12.97, -5.72] over 7, -9.82c [-12.41, -7.23] over 7. Merging
+three condemned hypotheses into one arm re-arms them, and `IBKR_RETIRED`'s own breakout note already said the
+answer: *"a passive re-seat is a different hypothesis and needs its own pre-registration."* Not built.
+
+**(b) Make the weather model's uncertainty shrink through the day: BUILT.** `ibkrWeather.ts` divided by a hard-coded
+3 degF at every hour, so a bracket 0.9 degF from an extreme the station observations had **already banked** priced
+identically at 02:00 local and at 20:00. It now uses `weatherForecast.forecastSigma(ext.hours)`, the same 3.0 -> 0.9
+curve the Kalshi weather model has used since round 30, on the same inputs. Sigma is the FORECAST error only:
+ForecastEx settles on Weather Underground and that basis is exactly what this arm exists to measure, so it is not
+padded in by guesswork. `IBKR_RULES_SINCE` moves to **2026-09-29T11:10:00Z** (with its mirror in `lab-review.py`,
+which `completion.test.ts` asserts) because every weather arm now prices differently.
+
+**(c) Report the 1c slippage allowance apart from real costs: measured.** Over the whole 699-trade ledger the lab
+charges 1c per taker entry and 1c per market exit: **$6.16 + $3.97 = $10.13, 1.45c/contract**, against real fees of
+$10.96 and a net of **-$47.33**. It is **21% of the whole deficit and almost as large as the entire fee bill** -
+and on 241's own evidence probably unnecessary, since the displayed ask was executable on 94,707 of 94,709 pairs.
+But remove it entirely and the lab is still -$37.20 and **no arm changes sign**, so it is conservative rather than
+causal. It stays; the number is now on the record beside the fees instead of hidden inside them.
+
+### And a read whose bar the ladder made unreachable overnight
+
+`polyus-fade` was stopped by the ladder at **01:33:42Z** (56 trades, -$2.34, 80% [-0.06, -0.03] over 4
+day-clusters) and is now "stopped 2 times". Its registered read 235 reads at **15 losses or 250 settled**; the arm
+is at **10 and 69** (recomputed on the live rows at 11:10Z: -7.99c/contract, 80% [-14.07, -1.92], matching the venue
+ledger's -$5.52 to four cents). With no live arm behind it the cohort cannot grow, so the read will return WAIT for
+ever. The two rules are not in conflict - the ladder stops on money, the registration decides retirement - but the
+registration has no branch for "the ladder got there first". BACKLOG **258**; the shapes agree, so nothing is being
+kept alive by the mismatch, and inventing a verdict today is the discretion a pre-registration exists to remove.
+
+Venue-true over the 24 h: **Kalshi +$2.35** over 48 settlements after $1.23 of fees, **Polymarket US -$1.01** over
+18. Equity $115.61 at cost, $114.57 at market, plus $38.79 on Polymarket US.

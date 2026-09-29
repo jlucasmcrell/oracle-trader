@@ -33,3 +33,13 @@ export const SCAN_WEDGE_MS = 15 * 60_000
  * missed polls is already a third of a 15-minute window, so the bar to supersede is much lower here.
  */
 export const LEADLAG_WEDGE_MS = 5 * 60_000
+
+/**
+ * A ForecastEx lab scan is one 25 s quote batch plus a handful of forecast fetches on a 30 s interval, and the
+ * same `busy` boolean guarded it with nothing watching. 2026-09-29: the pass that started at 07:10Z never
+ * settled, `busy` stayed true, the 30 s interval returned at `if(this.busy)` on every tick and the lab logged
+ * NOTHING for 3 h 52 min - about 470 lost scans, with the Gateway up the whole time. Measured over 2,832
+ * consecutive gaps on 09-28/29 the interval is p50 30.0 s, p99 33.1 s and worst-legitimate 255 s (a discovery
+ * walk), so ten minutes is 2.4x the slowest real scan and still bounds the silence at one tick's worth of loss.
+ */
+export const IBKR_LAB_WEDGE_MS = 10 * 60_000

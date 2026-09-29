@@ -57,11 +57,15 @@ export interface IbkrLabState {
   unlisted?:Record<string,number>
 }
 /**
- * Trades OPENED before this instant ran under earlier entry/exit rules (round 114 changed marks, holds and admission at
- * 2026-09-17T07:31:43Z). They stay in the ledger and are reported as a separate cohort; scorecards and live
- * qualification use only trades opened under the current rules. Move this forward whenever those rules change.
+ * Trades OPENED before this instant ran under earlier entry/exit rules. They stay in the ledger and are reported as a
+ * separate cohort; scorecards and live qualification use only trades opened under the current rules. Move this forward
+ * whenever those rules change - and never to a FUTURE instant, which silently freezes the lab (section 143).
+ * 2026-09-17T07:31:43Z: round 114 changed marks, holds and admission.
+ * 2026-09-29T11:10:00Z: BACKLOG 241's registered read - the weather model's sigma now narrows with the day's
+ * remaining hours (`ibkrWeather.ts`, `forecastSigma`) instead of sitting at the day-out 3F, so every weather arm
+ * prices differently from this instant and its earlier trades are a different cohort.
  */
-export const IBKR_RULES_SINCE=Date.parse('2026-09-17T07:31:43Z')
+export const IBKR_RULES_SINCE=Date.parse('2026-09-29T11:10:00Z')
 export interface IbkrLabStrategyRow {
   id:string; name:string; status:string; reason:string; fills:number; closed:number; wins:number; losses:number
   realized:number; unrealized:number; unpriced:number; cash:number; open:number; pending:number; days:number

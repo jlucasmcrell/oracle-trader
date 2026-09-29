@@ -6188,3 +6188,289 @@ not a decision, and is queued.
 
 `SendUserFile` and `PushNotification` are not available in this headless session, as designed. The same section is
 in `docs/MAINTENANCE-LOG.md`, and this file is what the 08:30 desktop task delivers.
+
+# Oracle Trader — maintenance, 2026-09-29
+
+Headless run (Windows task `OracleTrader-Maintenance`), started 07:00 local / 11:00Z. All five DUE registered reads
+were performed. One of them (241) was a dated build trigger and was carried out. The day's defect is the one the
+liveness table did not catch by itself: **the IBKR paper lab had been wedged for 3 h 52 min with the Gateway up, and
+nothing anywhere logged it.**
+
+## 1. Liveness
+
+| check | state |
+|---|---|
+| app process | up, PID 26816 — **restarted by this session at 11:18:12Z, PID 58424** |
+| `main.log` | written 0 min ago |
+| `ladder.json` `lastRunAt` | 2026-09-29T10:33:36Z (27 min, inside the 2 h bar) |
+| BTC collector | up, PID 25128, `node scripts/btc-collector.mjs` |
+| nightly review | `reviews/2026-09-29.md` present, 06:34Z, 1 attempt, no error |
+| sentinel | `status.json` at 11:20:01Z, task Ready, **0** repair sessions today, disk 924 GB free |
+| `OracleTrader-HrrrShadow` | `forecasts.jsonl` 10:20:10Z |
+| `OracleTrader-MetaculusShadow` | ran 10:35Z |
+| `OracleTrader-PolyConsensus` | `run.log` 10:58Z |
+| `OracleTrader-MentionShadow` | **Disabled, correctly** — read 12/68b FAILed 2026-09-25 and its registration's action is to close the line and disable the task. Not to be re-enabled on a freshness signal. |
+| `OracleTrader-SportsBooks`, `-SpotShadow` | Disabled for the same kind of reason (reads 163 and 157) |
+| `OracleTrader-CullGate` | last ran 09-25, next 10-02 — a **weekly** trigger, not a wedge (the 09-27 lesson) |
+| **IBKR paper lab** | **DEAD since 07:09:51Z**, 3 h 52 min, ~470 lost scans. Section 4. |
+| running bundle vs HEAD | matched after the restart: `[app] start … main bundle built 2026-09-29T11:15:40.533Z` against `out/main/index.js` mtime `2026-09-29T11:15:40.5327946Z`. BACKLOG **253**'s check, by hand; it passed. |
+
+## 2. Evidence
+
+**Venue-true, last 24 h** (`venue-pnl.py` on fresh read-only dumps taken 11:02Z):
+
+- **Kalshi +$2.35** over 48 settlements after $1.23 of fees. A thin day and a mixed one: KXXRP15M +$3.32 (6),
+  KXSOL15M +$2.01 (5), KXNATGASD +$1.45 (1), KXBTC15M +$1.31 (4) and KXWTI +$1.20 (1) against KXBNB15M **-$5.12**
+  (7), KXDOGE15M -$1.51 (2), KXETH15M -$1.39 (3) and KXBTCD -$1.01 (1).
+- **Polymarket US -$1.01** over 18 resolutions.
+- Balances: Kalshi cash **$105.66** + open positions at cost $9.94 = $115.61 (at market $114.57), by shard
+  **0: $11.67 · 1: $5.00 · 2: $69.93 · 3: $19.06**; Polymarket US **$38.79** (buying power $38.79 — the cost of open
+  positions is already netted there). 10 Kalshi positions and 3 resting orders; 4 Polymarket US positions, no open
+  orders.
+- Shard 0 recovered to **$11.67** from yesterday's $7.08. Still thin, still harmless while every weather arm is on
+  an operator hold.
+
+**Gates.** `btc-gate.mjs` FAIL / NOT YET — 490 events, Bonferroni LB **-1.98c** against the +1c required, day LB
+-1.13c, mean -0.09c over 1,324 graded. `quoter-shadow-gate.mjs` insufficient sample — ALLOWED 67 settled proxy fills
+over **37** events (the bar is 30 over 40) at -1.70c, band [-13.83, +10.43]; BLOCKED 1,563 at **-4.15c**, band
+[-6.40, -1.90]. The gates are still refusing quotes that would have lost.
+
+**Quoter silence check.** Last line, verbatim:
+`[quoter] disabled: 30 candidates, would quote 0 (4 gated) — shadow meter on | resting 0 placed 1632 amended 861
+canceled 873 filled 43.11 ledgerFills 10 gates r0/b4/i3 shadow q5545 f1694 mo-2.68c(n1655)`.
+Read with BACKLOG **252** in hand that is **4 chosen and all 4 gated**, not 30 candidates with nothing quotable:
+`quoter.ts:869` prints `cands.length` for the first number and computes the rest over the smaller `chosen` set. Not
+a silence. The other half of 252 still bites — the disabled line carries no fair-value count.
+
+**Odds API spend.** `__spentDay:2026-09-29` = **320** at 11:05Z against the 645 ceiling (09-28 626, 09-27 642,
+09-26 644). Under budget.
+
+**Sharp anchor, out of sample.** `gradedN` **1687**, `gradedBrier` **200.1768** (a running SUM, so mean Brier
+**0.1187**), `ruleN` **826**, `ruleNet` **+32.8275**. `anchor-grades.jsonl` gained **35 rows** in the last 24 h
+(1,691 total) — a quiet sports day against yesterday's 208. The arm is disabled on an operator hold, so this is a
+shadow record only.
+
+**Shadows.** HRRR-vs-NBM (`hrrr-shadow.mjs report`): n=**594** station-days, **HRRR MAE 1.92 / bias -0.35** against
+**NBM MAE 2.20 / bias -1.03**, closer on 319 days to NBM's 258 with 17 ties — HRRR ahead on every column for the
+whole series. Metaculus: **211 rows, 0 graded**, up 12 rows and still ten distinct pairs re-appended hourly with the
+earliest resolution 2026-11-04 — BACKLOG **256**, unreachable rather than unmet. Polymarket consensus: the headline
+now reads **"graded 1,340,979"**, up from 1,170,278 yesterday and 480,107 on 09-24 — BACKLOG **248**'s duplication
+compounding on a schedule — while the executable **Kalshi-ask leg is still n=1,436**, exactly where it has been for
+five days. **Build-queue 13's trigger is NOT met.**
+
+**Errors in the last 24 h.** 13,116 lines, and the honest summary is that the loudest signature was not the problem
+and the problem had no signature at all. 54 × `[ibkr-lab] Gateway API not available yet` and 3 × `IBKR request timed
+out` (a Gateway blip around 07:10–07:24Z, cleared by itself; the suppression to 2026-10-01 covers it); 4 ×
+`[dutch] scan failed: The operation was aborted due to timeout`; 4 × `[leadlag] Kalshi leg failed for N of M pairs`;
+2 × `[auto-trader] scan wedged for 15 min` and 3 × `[leadlag] scan wedged` — the slot guards doing exactly their job
+during the same window; and **one** `401: API key timestamp expired` on the Polymarket US portfolio read at
+07:24:05Z, single, self-clearing, no order affected. No `SAVE FAILED`, no `insufficient`, no `rejected`, no kill
+switch, no disarm. Since the 11:18Z restart: one `[leadlag-fast]` convention notice and nothing else.
+
+## 3. Ladder against the ledger
+
+**One ladder change in the window, and it is a stop.** `polyus-fade` went **tiny-live → disabled at
+2026-09-29T01:33:42Z**: "checkpoint 56 trades, net $-2.34, mean -$0.04 (80% band -0.06..-0.03): losing money with 80%
+confidence over 4 day-clusters". It is now "stopped 2 times: only its gate or the operator can re-arm it". That is
+the ladder working; it is also what froze read 235's cohort (section 4, BACKLOG 258).
+
+| arm | stage | notch | the ladder's own evidence |
+|---|---|---|---|
+| `kalshi-leadlag` | **live** | 2 | checkpoint 79 trades, net **+$29.37**, mean $0.37, 80% band 0.13..0.62 |
+| `kalshi-fade` | tiny-live | 1 | 78 settled since stage start, **-$0.12**, checkpoint at 80 |
+| `kalshi-mean-reversion` | tiny-live | 1 | 29 settled, **+$3.62**, checkpoint at 40 |
+| `kalshi-dutch` | tiny-live | 1 | 0 settled, nothing to judge |
+| `polyus-fade` | **disabled today** | 1 | stopped on its own checkpoint, above |
+| the other 17 | disabled | 1 | operator holds, two-strike stops, or retired by their own registrations |
+
+**Ledger check on the one arm that decides anything.** Since `kalshi-leadlag`'s stage start (2026-09-26T02:57:26Z),
+taken from the same 11:02Z dump, `venue-pnl --by-arm` reads `leadlag` **n=172 contracts, +$36.10** against the
+ladder's 79 trades / +$29.37. The units differ by construction — the ladder counts TRADES and drops the unproven
+coins on purpose (`ladder.ts:120-122`, the 09-27 finding), the ledger counts CONTRACTS on all eight — so neither the
+count nor the dollar gap is a discrepancy. Same sign, same order of magnitude, no verdict turns on it. BACKLOG 251
+stays closed as a units error.
+
+## 4. Registered reads due today — all five performed
+
+**233 — lead-lag at event speed: CONTINUE, eighth day, and the edge is still not there.** The app's own
+`fastLeadLagRead` at 00:33:47Z: `+0.01c/contract, 80% [-0.65, 0.68], n=2955 over 8 days`. The maintenance grader
+`leadlag_fast_shadow.py --since 2026-09-22T21:48Z` at the registered 6c floor, 11:03Z: **-0.12c, 80% [-0.78, +0.53],
+n=3135 over 8 days**. PASS needs n ≥ 150 **and** lo80 > 0; the lower bound is negative on both instruments, so this
+is the registration's non-PASS branch and **`leadLagFastLive` stays absent from config, i.e. off**. Speed as
+registered: 8,020 gaps at the 6c floor over 157.2 h (51.0/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s.
+Worth recording beside it: the 2c and 4c floors are **-1.41c [-1.74, -1.08]** and **-1.08c [-1.34, -0.82]**, both
+bands wholly below zero, which is the 6c floor earning its keep. Reads daily to 2026-10-03.
+
+**235 — Polymarket US favourite fade: WAIT, and the cohort is now frozen by the ladder.** The app read at 00:33:47Z:
+65 settled, 10 losses, -8.80c, 80% [-15.47, -2.13]. Recomputed at 11:10Z on the live rows with the same
+`miniArmStats` formula: **69 settled, 10 losses over 5 days, -7.99c/contract, 80% [-14.07, -1.92]**. The research
+file sums to **-$5.5601** over 67.94 shares; `venue-pnl --by-arm --since 2026-09-23T09:00:00Z` reads `mini:fade`
+**n=70, -$5.52** — four cents and one row of timing. The registered bar is **15 losses or 250 settled** and the arm
+is at 10 and 69, so the FAIL SHAPE (upper bound below zero) does not fire the FAIL branch; reading early is what
+this registration exists to prevent. But the ladder stopped the arm at 01:33Z, so no entry will ever be added: the
+bar is now unreachable. Recorded as **BACKLOG 258** with three options, the honest one being a terminal
+INCONCLUSIVE branch for "the ladder got there first". No retirement today.
+
+**72b/161 — lead-lag coin cohort: NOT YET, eleven contracts short.** `leadlag-coins.mjs --json --since
+2026-09-19T00:00:00Z` on the 11:02Z dump: 420 settlements, 763.09 contracts. New coins **389.04 of the required
+400** (334.03 yesterday), +2.54c, 95% [-3.70, +8.78] over 11 day-clusters; established BTC/ETH +9.55c
+[-1.58, +20.68]; pooled +5.98c [-2.24, +14.20]. Per coin: BTC +13.92c (n=108, [+5.44, +22.39] — still the only one
+clear of zero), HYPE +11.94c (50), XRP +3.86c (56), BNB +2.36c (63), SOL +2.09c (56), ZEC -1.25c (7), ETH -3.46c
+(59), DOGE -16.99c → **-19.36c** (21). `leadLagCoins` keeps the eight, `leadLagProvenCoins` stays absent. At the
+last day's +55 contracts the bar clears tomorrow, five days before the 2026-10-04 final.
+
+**1 — critic skill check: trigger MET, action DECLINED, fourth day running.** `critic-skill.py` on the 11:02Z dump:
+VETO **-0.040/contract** (n=314) against the rest at **+0.036**, so amended conditions (i) and (ii) pass; skilled in
+**1 of 2** strategies present in both cohorts among currently enabled arms, so (iii) fails. Its last line: *"KEEP
+veto mode OFF - veto -0.040 vs rest +0.036; skilled in 1 of 2 shared enabled strategies"*. `intelligenceMode` stays
+`shadow`, `intelligenceEnabled` stays true.
+
+**241 — IBKR lab, re-seat the arms the review kept: performed in three parts, one superseded, one built, one
+measured.** Section 5.
+
+## 5. Today's work
+
+### 5a. The defect: the lab wedged for 3 h 52 min and nothing said so (BACKLOG 257)
+
+**Proved before it was fixed.** `[ibkr-lab] paper; scan 22960` at **07:09:51.419Z** is the last line of any kind
+from the lab; `ibkr-lab.json`, `ibkr-lab.json.quotes-2026-09-29.jsonl` and `ibkr-quotes/2026-09-29.jsonl` all stop
+writing at the same instant, `scans` frozen at 22960 and `lastError` empty. Nothing in `main.log` for the next
+**3 h 52 min** — about **470 lost scans** at the 30 s interval. Three candidate causes were ruled out rather than
+argued away:
+
+- **Not BACKLOG 232 / the Gateway.** `data/sentinel/status.json` reads `gateway: up` at 11:05Z and the reconciler
+  reached IBKR again after 07:24Z. The 07:10–07:24Z blip is real and is already suppressed to 2026-10-01; the lab
+  stayed dark for three and a half hours after it cleared.
+- **Not section 170's `failure` latch** (the 09-26 fix). That path now needs **three consecutive** `SAVE FAILED`
+  lines before it stops entries, and there are none in the file.
+- **Not a dead interval.** `index.ts:443` is a plain `setInterval(…, 30000)`; it kept firing and kept returning at
+  `if(this.busy||this.failure)`.
+
+What is left is the one thing that produces exactly this shape: **an `await` inside `scan()` that never settles**,
+leaving `busy` true for ever. A pass that THROWS releases the flag in its `finally`; a pass that never returns does
+not, and then every later tick is silently refused. This is the **third** instance of the identical defect in this
+codebase — the auto-trader on 2026-09-20 (2 h 42 min) and the lead-lag engine on 2026-09-25 (11 h) — and both of
+those were fixed by the same shared guard the lab never got.
+
+**The fix is to become its third caller, not to grow a fourth copy.** `scanSlotVerdict` in
+`src/main/strategies/scanSlot.ts` gains `IBKR_LAB_WEDGE_MS`, and `IbkrLab.scan` now takes the slot through it, with
+`scanEpoch` so a superseded pass may finish its awaits but can neither trade nor write, and with the hand-over
+logged at **`console.error`** rather than `warn` because that is the level the sentinel scans for.
+
+**The window is measured, not chosen.** Over **2,832 consecutive lab-scan gaps** on 09-28/29 the interval is p50
+**30.0 s**, p90 31.0 s, p99 33.1 s, and the worst LEGITIMATE gap is **255 s** (a six-hourly discovery walk). Ten
+minutes is 2.4× that worst case and still bounds any future silence at one tick's worth of loss instead of four
+hours.
+
+**Tests: 12 new assertions.** In `scripts/tests/review-fixes.test.ts` (pure): the worst legitimate scan still holds
+the slot; one second under the deadline holds it; the deadline itself hands it on; the 09-29 outage reads as wedged
+within the hour; the window sits above the lead-lag one and below the auto-trader's and clears 255 s with margin; an
+idle lab is free. In `scripts/tests/ibkr-lab.test.ts` (the real `scan()`, driven with a quote call that never
+resolves): the hung pass writes nothing; inside the window a later tick is refused; past the window a new pass takes
+the slot, completes and writes; the hand-over is logged at error; the superseded pass, when finally released,
+finishes its awaits and writes nothing and says so; and the slot is free afterwards. The lab test was **deliberately
+broken first** (wedge window widened to 24 h) and failed on `calls: expected 2`, so the block is not vacuous.
+
+### 5b. Read 241, in three parts
+
+**(a) The merge: SUPERSEDED, not built.** BACKLOG 241 was written on 2026-09-22 and asked to merge momentum,
+log-momentum and breakout into one weather-momentum arm held to settlement. All three were read at their own
+registered date two days later (backlog 190, section 168) and **stopped on their own evidence**: -8.57c
+[-11.04, -6.10] over 8 day-clusters, -9.34c [-12.97, -5.72] over 7, -9.82c [-12.41, -7.23] over 7. Merging three
+condemned hypotheses into one arm re-arms them. `IBKR_RETIRED`'s own breakout note already says the answer: *"a
+passive re-seat is a different hypothesis and needs its own pre-registration."* Not built, and recorded as such.
+
+**(b) The weather model's uncertainty: BUILT.** `ibkrWeather.ts` divided by a hard-coded **3 °F at every hour of the
+day**, so a bracket 0.9 °F from an extreme that the station observations had *already banked* priced the same at
+02:00 local as at 20:00. It now uses `weatherForecast.forecastSigma(ext.hours)` — the same 3.0 → 0.9 curve the
+Kalshi weather model has used since round 30, on the same inputs. Sigma is the **forecast** error only: ForecastEx
+settles on Weather Underground and that basis is precisely what this arm exists to measure, so it is not padded in
+by guesswork. `IBKR_RULES_SINCE` moves to **2026-09-29T11:10:00Z** (with its mirror in `scripts/lab-review.py`,
+which `completion.test.ts` asserts) because every weather arm now prices differently and its earlier trades are a
+different cohort.
+
+**(c) The 1c slippage allowance, reported apart from real costs.** Over the whole **699-trade** ledger the lab
+charges 1c per taker entry and 1c per market exit:
+
+| | entry | exit | allowance | real fees | net |
+|---|---|---|---|---|---|
+| whole ledger (699) | $6.16 | $3.97 | **$10.13** (1.45c/contract) | $10.96 (1.57c) | **-$47.33** |
+| 09-17 cohort (525) | $4.44 | $2.30 | **$6.74** (1.28c) | $7.55 (1.44c) | **-$33.93** |
+
+**The allowance is 21% of the whole deficit and almost as large as the entire fee bill.** It is also, on 241's own
+evidence, probably unnecessary: the displayed ask was executable on 94,707 of 94,709 pairs. But removing it entirely
+still leaves the lab at **-$37.20** and **no arm changes sign** (the best are spot-first +$1.91 → +$2.05 and
+calibration +$0.13 → +$0.36), so the allowance is conservative rather than the cause of anything. It stays; the
+number is now on the record beside the fees instead of inside them.
+
+**Verified.** `npx tsc --noEmit` clean. `electron-vite build` clean. **review-fixes 662 passed / 0 failed**
+(deliberately broken once first), **ladder 177 / 0**, **adversarial 97 / 0**, plus **ibkr-lab** and **completion 20
+scenarios** because both were touched. Backup `oracle-trader-MAINT-2026-09-29-20260929-071548.zip` (2,318 files,
+1,286 MB zipped). App restarted visibly at 11:18:12Z, PID 58424, `main bundle built 2026-09-29T11:15:40.533Z`.
+
+**The lab is alive again and the numbering proves it lost wall-clock, not state:**
+
+```
+[2026-09-29T11:18:40.079Z] [ibkr-lab] paper; scan 22961; 18/30 fresh pairs; 0 pending; 80 paper positions; 699 closed
+[2026-09-29T11:21:58.925Z] [ibkr-lab] paper; scan 22968; 20/30 fresh pairs; 0 pending; 80 paper positions; 699 closed
+```
+
+`scan 22961` follows `22960` with no gap. The WebSocket book shows `0 of 245 served … price convention not detected
+yet` at 11:19Z, which is the **design**, not a regression: the convention guard is per process and needs ten
+discriminating REST comparisons after every boot (section 172). It re-earned it within two minutes on the
+`[leadlag-fast]` client and will re-earn it on the auto-trader's within about ten.
+
+## 6. Build-queue trigger checks — every item, as the rule requires
+
+- **1 critic skill** — MET daily, declined by the amended rule (section 4).
+- **2 WebSocket book** — MET and **built 2026-09-28**; serving again after today's restart once the convention
+  re-detects. BACKLOG 254 (the 50-book subscription cap) is the open half.
+- **3 HRRR** — done 2026-09-21; the shadow keeps running and keeps favouring HRRR (section 2).
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** — not met: quoter notch 1, off on an operator hold,
+  ALLOWED cohort 67 settled proxy fills over 37 events (needs 30 over 40) at -1.70c.
+- **6 sports anchor on Polymarket US** — not met: `kalshi-sports-anchor` is disabled on an operator hold and has no
+  checkpoint that could be positive.
+- **7 player props** — not met (anchor notch 1).
+- **8c market-maker rest patterns** — not met: mean-reversion 29 settled at +$3.62, checkpoint at 40.
+- **9 SportsGameOdds role** — no trigger; still the next untriggered build, deferred again because read 241's dated
+  trigger fired and a dated registered read outranks an untriggered queue item.
+- **10 Metaculus** — **UNREACHABLE, not merely unmet** (BACKLOG 256): 211 rows are ten distinct pairs re-appended
+  hourly, earliest resolution 2026-11-04, trigger 100 graded.
+- **11 forecaster v2** — weekly, next read 2026-10-05; at the last read 176 of the 200 settled events it needs and
+  the trading half negative at every threshold.
+- **12 mention base rates** — counter-indicated and closed: the read FAILed on 09-25 and the task is disabled.
+- **13 consensus arm** — built and on the ladder; its shadow's trigger is **NOT met** (BACKLOG 248/250, section 2).
+
+## 7. Sentinel
+
+**No incident was opened in the window and none is `Status: OPEN`** except the 2026-09-08 drill, which is
+deliberate. Zero repair sessions today of the three allowed. Sentinel liveness: `status.json` at **11:20:01Z**, task
+Ready, last result 0, disk 924 GB free, Ollama up, IB Gateway **up**. Standing notifies unchanged: the
+KXNCAAMBUAC-27-EKY position closing 2027-04-04 (a known long-horizon hold) and **OpenRouter credit $8.91** — the
+ninth day; the nightly review falls back to Ollama, so nothing is down.
+
+**And the finding of the day is what the sentinel did *not* raise.** It watches the app process, the log's warn and
+error signatures, `ladder.json`'s tick and five task schedules. A subsystem that simply stops emitting produces
+none of those, so the lab's four-hour outage was invisible to it — while its own suppression note for BACKLOG 232
+says, in as many words, *"read ibkr-lab.json lastScanAt/scans, never this signature's silence"*. Nothing does. That
+is the open half of **BACKLOG 257**, filed with 249 and 253 against the next change to `sentinel.mjs`.
+
+**Suppressions.** Five entries; four are expired and inert (2026-09-18, 2026-09-24, 2026-09-25 and the LPGA horizon
+one, which lapsed at 2026-09-28T12:00Z as designed), and one is live: the IBKR gateway warn to 2026-10-01, which
+covered today's 07:10–07:24Z blip exactly as written. `[ratchet] refused` runs to 2026-12-02. **None renewed by this
+session.** The LPGA notify is back and the answer is still hold: a matched box worth a guaranteed penny, and selling
+it would pay two spreads to escape.
+
+## 8. Open questions for the operator — none blocking
+
+**(a) BACKLOG 232 — IB Gateway logins.** Today's 14-minute blip was harmless, but the weekly token expiry is due
+again around **2026-10-05T03:45Z** and last time it cost the lab 7 h 18 m. His choice: IBC with the login in its
+config file, or one manual login a week.
+**(b) OpenRouter $8.91**, ninth day; the premium reviewer runs on Ollama until he tops it up.
+**(c) BACKLOG 248/250** — the consensus shadow's grade count passed **1.34 million rows for 1,436 usable ones** and
+grew another 171k overnight. Its repair is a build, not a decision, and is queued.
+**(d) BACKLOG 258** — `polyus-fade` is stopped and its registered read can no longer reach its bar. Nothing is at
+risk; the read will say WAIT for ever until either a terminal branch is added or he re-arms the arm.
+
+`SendUserFile` and `PushNotification` are not available in this headless session, as designed. The same section is
+in `docs/MAINTENANCE-LOG.md`, and this file is what the 08:30 desktop task delivers.

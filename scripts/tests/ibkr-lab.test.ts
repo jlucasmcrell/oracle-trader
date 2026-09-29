@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {EventName} from '@stoqey/ib'
 import {IbkrLab} from '../../src/main/strategies/ibkrLab'
+import {IBKR_LAB_WEDGE_MS} from '../../src/main/strategies/scanSlot'
 import {IBKR_HOLD_TO_SETTLEMENT,IBKR_RETIRED,IBKR_STRATEGIES,calibrationSlope,exitAsk,freshAsk,ibkrSignals,cryptoFair,type LabFrame} from '../../src/main/strategies/ibkrSignals'
 import {forecastTime,finalSettlements,csvRows} from '../../src/main/venues/forecastexData'
 import {IbkrReader} from '../../src/main/venues/ibkr'
@@ -254,6 +255,19 @@ async function main(){
    const weather=await ibkrWeather(wm,now);assert.ok(weather&&weather.p>.9);assert.equal(observationReads,1)
    const tomorrow=await ibkrWeather({...wm,id:'UHLAX_091726_77'},now);assert.ok(tomorrow&&tomorrow.p<.5);assert.equal(observationReads,1)
    assert.equal(await ibkrWeather({...wm,question:'Different station (KLGA)'},now),undefined)
+   // BACKLOG 241's read: the lab charged the day-out 3F of forecast error at every hour, so a bracket 0.9F from the
+   // banked extreme priced the same at 02:00 local as at 20:00. It now uses the Kalshi model's curve (3.0 -> 0.9).
+   // Same forecast, same observations, same strike - only the remaining hours differ.
+   {const clock=now
+    const ph={...market('UHPHX_091626_90',90),product:'UHPHX',question:'Will the highest temperature in Phoenix (KPHX) exceed 90 F on September 16, 2026?',rulesUrl:'https://data.forecastex.com/regulatory/DailyTemperatureTermsandConditions.pdf'}
+    const dawn=await ibkrWeather(ph,now)
+    now+=18*3600000
+    const dusk=await ibkrWeather(ph,now)
+    now=clock
+    assert.ok(dawn&&dusk,'both reads price the bracket')
+    assert.ok(dawn!.p>.35&&dawn!.p<.42,'a day out it is still the 3F band (flat-3 gives 0.382)')
+    assert.ok(dusk!.p<dawn!.p-.05,'late in the day the same mu is priced more confidently')
+    assert.equal(dawn!.morning,true);assert.equal(dusk!.morning,false)}
   }finally{globalThis.fetch=originalFetch}
   // A failed discovery waits instead of repeating on the next 30 s scan; with no universe at all it keeps trying.
   const backoff=setup();let discoveries=0
@@ -342,6 +356,31 @@ async function main(){
    assert.match((x.lab as any).failure,/storage failed/,'three consecutive failures do stop entries')
    ;(x.lab as any).path=good
   }
+  // 2026-09-29: a scan whose await never settled left `busy` true; the 30 s interval returned at `if(this.busy)` on
+  // every tick and the lab logged NOTHING for 3 h 52 min with the Gateway up. The slot guard the auto-trader and the
+  // lead-lag poll already share now covers it, and the superseded pass may finish its awaits but not write.
+  {const clock=now,w=setup(),errors:string[]=[],warns:string[]=[]
+   const realError=console.error,realWarn=console.warn
+   console.error=(...a:unknown[])=>{errors.push(a.join(' '))};console.warn=(...a:unknown[])=>{warns.push(a.join(' '))}
+   try{
+    let release:(v:unknown)=>void=()=>{},calls=0
+    const hung=new Promise<unknown>(r=>{release=r})
+    ;(w.reader as any).quotes=async(ids:number[])=>{calls++;return calls===1?hung:ids.map(id=>quote(id,.5))}
+    w.s.markets=[w.m];w.s.discoveryAt=now;w.s.config.enabled=false
+    const stale=w.lab.scan()
+    await new Promise(r=>setTimeout(r,0));await new Promise(r=>setTimeout(r,0))
+    assert.equal(calls,1,'the first pass is inside the quote call');assert.equal(w.s.scans,0,'and has written nothing')
+    now+=60000;await w.lab.scan()
+    assert.equal(calls,1,'inside the wedge window the slot is still held')
+    now+=IBKR_LAB_WEDGE_MS;await w.lab.scan()
+    assert.equal(calls,2,'past the wedge window a new pass takes the slot')
+    assert.equal(w.s.scans,1,'and it completes and writes')
+    assert.ok(errors.some(l=>/scan wedged for \d+ min/.test(l)),'taking the slot is logged at error, where the sentinel reads it')
+    release([quote(w.m.yes.conId,.8),quote(w.m.no.conId,.22)]);await stale
+    assert.equal(w.s.scans,1,'the superseded pass finishes its awaits and writes nothing')
+    assert.ok(warns.some(l=>/superseded scan/.test(l)),'and says so')
+    assert.equal((w.lab as any).busy,false,'the slot is free for the next tick')
+   }finally{console.error=realError;console.warn=realWarn;now=clock}}
   console.log(`IBKR laboratory passed: ${IBKR_STRATEGIES.length} reachable strategies, quote realism, settlement, fees, persistence, paper/live isolation, qualification, IOC reconciliation and recovery`)
  }finally{Date.now=actualNow}
 }

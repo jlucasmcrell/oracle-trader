@@ -4,12 +4,12 @@
   {
    "id": "233",
    "owner": "app",
-   "due": "2026-09-29",
+   "due": "2026-09-30",
    "what": "Lead-lag at event speed",
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-09-28: CONTINUE, seventh day, and the two instruments still agree in sign. App read 00:20:54Z: +0.23c/contract, 80% [-0.49, 0.95], n=2483 over 7 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor: -0.01c, 80% [-0.78, +0.75], n=2690 over 7 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 6,922 gaps at the 6c floor over 133.2 h (52.0/hour), median life 0.5 s, p90 5.0 s, 89% gone inside 5 s. The speed is real and the edge is not, for the seventh day. Reads daily to 2026-10-03."
+   "note": "2026-09-29: CONTINUE, eighth day, and the two instruments still straddle zero. App read 00:33:47Z: +0.01c/contract, 80% [-0.65, 0.68], n=2955 over 8 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: -0.12c, 80% [-0.78, +0.53], n=3135 over 8 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 8,020 gaps at the 6c floor over 157.2 h (51.0/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s. The 2c and 4c floors are clearly negative (-1.41c and -1.08c, both bands wholly below zero), which is the 6c floor doing its job. Eighth day running: the speed is real and the edge is not. Reads daily to 2026-10-03."
   },
   {
    "id": "234",
@@ -25,12 +25,12 @@
   {
    "id": "235",
    "owner": "app",
-   "due": "2026-09-29",
+   "due": "2026-09-30",
    "what": "Polymarket US favourite fade, re-armed 2026-09-23",
    "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
    "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
    "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
-   "note": "2026-09-28: WAIT, no retirement, and the venue record matches the app to four cents. App read at 00:20:54Z - 43 settled, 8 losses, -11.59c, 80% [-21.81, -1.38]. Recomputed at 11:05Z on the same rows with the same miniArmStats formula: 51 settled, 8 losses over 4 days, -8.86c/contract, 80% [-17.34, -0.39]. The research file sums to -$4.5516; venue-pnl --by-arm --since 2026-09-23T09:00:00Z reads mini:fade n=52 -$4.51 (52 resolutions against 51 closed entries - one row's worth of timing). THE UPPER BOUND IS BELOW ZERO, the registration's FAIL shape, BUT the registered bar is 15 losses or 250 settled and the arm is at 8 and 51. Reading early is what the registration exists to prevent. polyus-fade stays tiny-live."
+   "note": "2026-09-29: WAIT, no retirement by this read - but the LADDER stopped the arm overnight, so the cohort is now frozen. App read 00:33:47Z: 65 settled, 10 losses over 4 days, -8.80c, 80% [-15.47, -2.13]. Recomputed at 11:10Z on the live rows with the same miniArmStats formula: 69 settled, 10 losses over 5 days, -7.99c/contract, 80% [-14.07, -1.92]; the research file sums to -$5.5601 over 67.94 shares and venue-pnl --by-arm --since 2026-09-23T09:00:00Z reads mini:fade n=70, -$5.52 (four cents, one row of timing). The registered bar is 15 losses or 250 settled and the arm is at 10 and 69, so the FAIL SHAPE (upper bound below zero) does not fire the FAIL branch - reading early is what this registration exists to prevent. Separately, ladder.json shows polyus-fade tiny-live -> disabled at 2026-09-29T01:33:42Z on its own checkpoint rule (56 trades, -$2.34, mean -$0.04, 80% [-0.06, -0.03] over 4 day-clusters), and it is now 'stopped 2 times: only its gate or the operator can re-arm it'. With no new entries the cohort cannot reach 15 losses or 250 settled, so this read is measurement-complete unless the arm is re-armed. BACKLOG 258."
   },
   {
    "id": "125/181/190/198",
@@ -54,12 +54,12 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-09-29",
+   "due": "2026-09-30",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-09-28 (fresh 11:00Z dump): NOT YET, neither branch fires, leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 387 settlements, 692.08 contracts. New coins 334.03 of the required 400, +3.33c, 95% [-3.70, +10.36] over 10 day-clusters; established BTC/ETH +10.00c [-1.18, +21.18]; pooled +6.78c [-1.62, +15.18]. Per coin: BTC +13.95c (n=104, [+5.64, +22.25], the only one clear of zero), HYPE +13.94c (44), BNB +8.90c (56), XRP -0.05c (50), SOL -0.57c (51), ZEC -1.25c (7), ETH -2.11c (56), DOGE -16.99c (19). Contracts grew 286.03 -> 334.03 in a day, so 400 is reachable before the 2026-10-04 final if the cadence holds."
+   "note": "2026-09-29 (fresh 11:02Z dump): NOT YET, neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 420 settlements, 763.09 contracts. New coins 389.04 of the required 400 (up from 334.03), +2.54c, 95% [-3.70, +8.78] over 11 day-clusters; established BTC/ETH +9.55c [-1.58, +20.68]; pooled +5.98c [-2.24, +14.20]. Per coin: BTC +13.92c (n=108, [+5.44, +22.39], still the only one clear of zero), HYPE +11.94c (50), XRP +3.86c (56), BNB +2.36c (63), SOL +2.09c (56), ZEC -1.25c (7), ETH -3.46c (59), DOGE -19.36c (21). Eleven contracts short of the bar with five days to the 2026-10-04 final; at the last day's +55 it clears tomorrow."
   },
   {
    "id": "146b",
@@ -243,7 +243,9 @@
    "what": "IBKR lab: re-seat the arms the review kept",
    "how": "backlog 241",
    "rule": "merge the momentum family into one pre-registered arm held to settlement; report the slippage allowance apart",
-   "action": "IBKR_RULES_SINCE"
+   "action": "IBKR_RULES_SINCE",
+   "done": "2026-09-29",
+   "note": "2026-09-29, performed in three parts (section 173). (a) THE MERGE: SUPERSEDED, not built. 241 was written 2026-09-22 while momentum, log-momentum and breakout were still running; all three were read at their own registered date on 2026-09-24 (backlog 190) and STOPPED on their own evidence - -8.57c [-11.04, -6.10] over 8 day-clusters, -9.34c [-12.97, -5.72] over 7, -9.82c [-12.41, -7.23] over 7. Merging three condemned hypotheses into one arm would re-arm them, and IBKR_RETIRED's own breakout note already says a re-seat is a different hypothesis needing its own pre-registration. (b) THE SIGMA: BUILT. ibkrWeather.ts charged the day-out 3F of forecast error at every hour; it now uses weatherForecast.forecastSigma(ext.hours), the same 3.0 -> 0.9 curve the Kalshi weather model has used since round 30. Sigma is the FORECAST error only - ForecastEx settles on Weather Underground and that basis is exactly what this arm exists to measure, so it is not padded in by guesswork. Tests in scripts/tests/ibkr-lab.test.ts: the same mu, strike and observations price at 0.38 a day out and materially lower late in the day, and the old flat 3F priced both the same. IBKR_RULES_SINCE moved to 2026-09-29T11:10:00Z (with its mirror in lab-review.py) because every weather arm now prices differently. (c) THE SLIPPAGE ALLOWANCE, reported apart: over the whole 699-trade ledger the lab charges 1c per taker entry and 1c per market exit = $6.16 + $3.97 = $10.13, 1.45c/contract, against real fees of $10.96 and a net of -$47.33. It is 21% of the whole deficit and almost as large as the entire fee bill. Remove it and the lab is still -$37.20 and no arm changes sign, so the allowance is conservative rather than the cause. Under the 09-17 cohort: $6.74 of allowance against $7.55 of fees, net -$33.93 -> -$27.19."
   },
   {
    "id": "177",
@@ -327,12 +329,12 @@
   },
   {
    "id": "1",
-   "due": "2026-09-29",
+   "due": "2026-09-30",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-09-28: trigger MET, action DECLINED, and the script's own verdict line agrees for the third day. Raw aggregate VETO -0.040/contract (n=314) against the rest at +0.034, so amended (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.034; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true; the 200-settled disable clause is not reached because skill is composition-dependent, not absent."
+   "note": "2026-09-29: trigger MET, action DECLINED, and the script's own verdict line agrees for the fourth day. critic-skill.py on the 11:02Z dump: VETO -0.040/contract (n=314) against the rest at +0.036, so amended conditions (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.036; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true."
   },
   {
    "id": "65b/80c",
