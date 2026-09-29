@@ -784,6 +784,12 @@ export class Ladder {
     return g && g.venue === 'kalshi' && !g.contracts ? g.key : undefined
   }
 
+  /** Stopped maxDemotions times and still off: only its gate or the operator can re-arm it. */
+  stoppedForGood(id: LadderStrategyId): boolean {
+    const s = this.state.strategies[id]
+    return !!s && s.stage === 'disabled' && (s.demotions ?? 0) >= (this.autoTrader.getConfig().ladderMaxDemotionsBeforeGate ?? 2)
+  }
+
   status(): LadderStatus {
     return {
       enabled: this.autoTrader.getConfig().ladderEnabled ?? true,

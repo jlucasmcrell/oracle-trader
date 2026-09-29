@@ -26,7 +26,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { decidedRead, fastLeadLagRead, polyusFadeRead, ReadRunner } from './ladder/registeredReads'
+import { decidedRead, fastLeadLagRead, leadLagWeekdayRead, polyusFadeRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -508,25 +508,31 @@ app.whenReady().then(async () => {
   // Pre-registered reads run themselves (section 163): each from its date, once a UTC day, applying the registered
   // action on PASS or FAIL and pushing the verdict. Nobody has to remember a date or flip a switch.
   const kalshiPublic = new HttpClient({ baseUrl: 'https://api.elections.kalshi.com/trade-api/v2', rateLimit: 1, rateLimitWindowMs: 1100, timeoutMs: 20_000 })
+  const kalshiSettled = async (series: string, minCloseTs: number): Promise<{ ticker: string; result?: string }[]> => {
+    const out: { ticker: string; result?: string }[] = []
+    let cursor = ''
+    for (let page = 0; page < 20; page++) {
+      const d = await kalshiPublic.get<{ markets?: { ticker: string; result?: string }[]; cursor?: string }>(
+        `/markets?series_ticker=${series}&status=settled&limit=1000&min_close_ts=${minCloseTs}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      )
+      out.push(...(d.markets ?? []))
+      cursor = d.cursor ?? ''
+      if (!cursor || !(d.markets ?? []).length) break
+    }
+    return out
+  }
   const reads = new ReadRunner(
     join(app.getPath('userData'), 'registered-reads.json'),
     [
       fastLeadLagRead({
         shadowPath: join(app.getPath('userData'), 'leadlag-fast-shadow.jsonl'),
-        kalshiSettled: async (series, minCloseTs) => {
-          const out: { ticker: string; result?: string }[] = []
-          let cursor = ''
-          for (let page = 0; page < 20; page++) {
-            const d = await kalshiPublic.get<{ markets?: { ticker: string; result?: string }[]; cursor?: string }>(
-              `/markets?series_ticker=${series}&status=settled&limit=1000&min_close_ts=${minCloseTs}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
-            )
-            out.push(...(d.markets ?? []))
-            cursor = d.cursor ?? ''
-            if (!cursor || !(d.markets ?? []).length) break
-          }
-          return out
-        },
+        kalshiSettled,
         setFastLive: (on) => void autoTrader.setConfig({ leadLagFastLive: on })
+      }),
+      leadLagWeekdayRead({
+        dislocationsPath: join(app.getPath('userData'), 'leadlag-dislocations.jsonl'),
+        kalshiSettled,
+        setWeekdays: (on) => void autoTrader.setConfig({ leadLagWeekdays: on })
       }),
       // The Polymarket US lag registration closed on its own FAIL condition (section 164): the in-play prices it traded
       // on were a stale public snapshot (a 30 s CDN cache plus minutes-long server freezes), not the exchange's book.
@@ -540,7 +546,8 @@ app.whenReady().then(async () => {
       polyusFadeRead({
         researchPath: join(app.getPath('userData'), 'mini-auto-polymarket-us.json-research.jsonl'),
         cohortStart: Date.parse('2026-09-23T09:00:00Z'),
-        retire: (reason) => ladder.retire('polyus-fade', reason)
+        retire: (reason) => ladder.retire('polyus-fade', reason),
+        stopped: () => ladder.stoppedForGood('polyus-fade')
       }),
       decidedRead('convergence-gate', 'docs/PREREGISTERED-btc-convergence.md (backlog 57a)', 'FAIL',
         'btc-gate.mjs 2026-09-23: 379 events (bar 200), event-clustered lower bound -2.36c against the +1c the registration requires, mean -0.16c/contract; "fail on any one, and this rule is not built"',

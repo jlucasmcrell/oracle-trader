@@ -4627,7 +4627,8 @@ export class AutoTrader {
       leadLagNewCoinContracts: Math.max(1, Math.min(4, this.config.leadLagNewCoinContracts ?? 2)),
       leadLagMaxCoinsPerDirectionPerWindow: Math.max(1, Math.min(7, this.config.leadLagMaxCoinsPerDirectionPerWindow ?? 2)),
       pollIntervalMs: Math.max(5_000, this.config.leadLagPollIntervalMs ?? 10_000),
-      leadLagFastLive: this.config.leadLagFastLive ?? false
+      leadLagFastLive: this.config.leadLagFastLive ?? false,
+      leadLagWeekdays: this.config.leadLagWeekdays
     }
   }
 

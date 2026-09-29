@@ -3159,7 +3159,7 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   `ibkr-lab.json` `lastScanAt` - the sentinel's own suppression text for 232 says "read ibkr-lab.json
   lastScanAt/scans, never this signature's silence", and no code does. Same family as 249. Trigger: **the next time
   `sentinel.mjs` is touched**, with 249 and 253; and the wedge line itself should be watched by name.
-- **258. The ladder's two-strike stop has frozen read 235's cohort eleven losses short of its bar (2026-09-29,
+- **258. DONE 2026-09-29 (section 174): option (a) built - a read whose arm the ladder has stopped for good is final (`Ladder.stoppedForGood`, PREREGISTERED-polyus-fade.md amendment 2).** The ladder's two-strike stop has frozen read 235's cohort eleven losses short of its bar (2026-09-29,
   section 173).** `docs/PREREGISTERED-polyus-fade.md` reads at **15 losses or 250 settled**; the arm stands at
   **10 losses / 69 settled** and the ladder disabled it at 2026-09-29T01:33:42Z on its own checkpoint rule (56
   trades, -$2.34, 80% [-0.06, -0.03] over 4 day-clusters), with `polyus-fade` now "stopped 2 times: only its gate or

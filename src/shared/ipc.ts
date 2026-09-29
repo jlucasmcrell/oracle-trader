@@ -272,6 +272,8 @@ export interface AutoTraderConfig {
   leadLagFastShadow?: boolean
   /** Trade the event-speed lead-lag gaps (section 161). Off until the operator approves the 2026-09-26 read. */
   leadLagFastLive?: boolean
+  /** false: lead-lag trades live on New York weekends only (set by the registered weekday read). */
+  leadLagWeekdays?: boolean
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
   /** Allow settlement-convergence to execute with REAL money (it is a paper experiment until proven). */

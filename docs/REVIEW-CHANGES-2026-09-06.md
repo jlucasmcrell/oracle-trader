@@ -7314,3 +7314,23 @@ kept alive by the mismatch, and inventing a verdict today is the discretion a pr
 
 Venue-true over the 24 h: **Kalshi +$2.35** over 48 settlements after $1.23 of fees, **Polymarket US -$1.01** over
 18. Equity $115.61 at cost, $114.57 at market, plus $38.79 on Polymarket US.
+
+## §174 - 2026-09-29 20:15Z: read 235 gets its terminal branch, and lead-lag's weekdays get a registered test
+
+- **Backlog 258 closed (option a).** `Ladder.stoppedForGood(id)` is true for an arm the ladder has stopped
+  `ladderMaxDemotionsBeforeGate` times that is still off; `polyusFadeRead` then treats the next daily read as final
+  (FAIL if the band is wholly below zero, PASS if wholly above, else INCONCLUSIVE; FAIL and INCONCLUSIVE retire).
+  `docs/PREREGISTERED-polyus-fade.md` amendment 2. The band stood at -8.80c/contract, 80% [-15.47, -2.13], so the
+  2026-09-30 read is expected to FAIL and retire the arm.
+- **Lead-lag, weekdays against weekends (read 259, `docs/PREREGISTERED-leadlag-weekday.md`).** Live since 09-15:
+  weekdays -$32.48 over 11 days (-3.4c/contract), weekends +$55.32 over 4 days (+11.2c/contract); every weekend day
+  positive. Fills were at the logged price on both (slippage under 0.1c), and weekends carried about three times the
+  signals. Found after looking, so it is registered forward: cohort from 2026-09-30T04:00Z, read from 2026-10-19 once
+  it holds 10 weekday and 6 weekend days; a weekday band wholly below zero sets the new `leadLagWeekdays` false and the
+  arm trades New York weekends only (`leadLagDayOpen`, both the minute scan and the fast path; the recorders keep
+  running). PASS or INCONCLUSIVE (2026-11-02) changes nothing. `src/main/util/etDay.ts` gives the New York day.
+- The week, venue-true from 2026-09-26 11:17Z: Kalshi +$42.12 (lead-lag +$38.73 on 435 contracts, mean-reversion
+  +$3.40, fade +$0.15), Polymarket US -$2.13 (fade, 60 resolutions). The IBKR paper lab's closed trades since 09-20 are
+  -$16.83 over 270; its rules restarted 2026-09-29 11:10Z.
+
+Tests: review-fixes 671/0, adversarial 99/0, ladder 177/0; `npm test` 22/22.

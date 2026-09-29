@@ -7,9 +7,10 @@ import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, par
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
-import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type RegisteredRead } from '../../src/main/ladder/registeredReads'
+import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type LeadLagFill, type RegisteredRead, weekdayReadStats, weekdayReadVerdict } from '../../src/main/ladder/registeredReads'
+import { etDay } from '../../src/main/util/etDay'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
-import { fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
+import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
@@ -1795,6 +1796,35 @@ async function registeredReadTests(): Promise<void> {
   eq('reads: polyus-fade waits for 15 losses or 250 settled', polyusFadeVerdict(miniArmStats(fades(10, 10, (d, i) => (i % 25 === 0 ? -0.93 : 0.05))), oct).verdict, 'WAIT')
   eq('reads: polyus-fade with 15 losses and a clear loss fails', polyusFadeVerdict(miniArmStats(fades(10, 26, (d, i) => (i % 17 === 0 ? -0.93 : 0.02))), oct).verdict, 'FAIL')
   eq('reads: polyus-fade with a clear edge at 250 passes', polyusFadeVerdict(miniArmStats(fades(10, 25, (d, i) => (i % 50 === 0 ? -0.93 : 0.07 + d * 0.001))), oct).verdict, 'PASS')
+  eq('reads: polyus-fade stopped for good by the ladder is read now: a band below zero fails (backlog 258)', polyusFadeVerdict(miniArmStats(fades(4, 17, (d, i) => (i % 6 === 0 ? -0.93 : 0.05))), oct, true).verdict, 'FAIL')
+  eq('reads: ...and the same cohort with the arm still running waits', polyusFadeVerdict(miniArmStats(fades(4, 17, (d, i) => (i % 6 === 0 ? -0.93 : 0.05))), oct, false).verdict, 'WAIT')
+  // Lead-lag weekdays against weekends (PREREGISTERED-leadlag-weekday.md): New York days, contract-weighted.
+  eq('etDay: Saturday noon New York is a weekend day', etDay(Date.parse('2026-10-03T16:00:00Z')), { date: '2026-10-03', weekend: true })
+  eq('etDay: 03:00Z Saturday is still Friday evening in New York', etDay(Date.parse('2026-10-03T03:00:00Z')), { date: '2026-10-02', weekend: false })
+  eq('lead-lag day switch: unset trades every day; off trades weekends only',
+    [leadLagDayOpen({}, Date.parse('2026-09-30T16:00:00Z')), leadLagDayOpen({ leadLagWeekdays: false }, Date.parse('2026-09-30T16:00:00Z')), leadLagDayOpen({ leadLagWeekdays: false }, Date.parse('2026-10-04T16:00:00Z'))],
+    [true, false, true])
+  {
+    const wkFills: LeadLagFill[] = []
+    const res = new Map<string, 'yes' | 'no'>()
+    for (let d = 0; d < 25; d++) {
+      const day = new Date(Date.parse('2026-10-01T16:00:00Z') + d * 86_400_000)
+      const weekend = day.getUTCDay() === 0 || day.getUTCDay() === 6
+      for (let k = 0; k < 4; k++) {
+        const t = `KXBTC15M-D${d}K${k}`
+        res.set(t, 'yes')
+        // weekdays win 1 in 4, weekends 3 in 4; the price wobbles by day so the day-clustered band has width
+        const won = weekend ? k !== 0 : k === 0
+        wkFills.push({ ts: day.toISOString(), t, yes: won, contracts: 2, price: 0.45 + (d % 3) * 0.05 })
+      }
+    }
+    const s = weekdayReadStats(wkFills, res, Date.parse('2026-09-30T04:00:00Z'))
+    eq('weekday read: 25 days split 17 weekday / 8 weekend', [s.weekday.days, s.weekend.days, s.weekday.contracts], [17, 8, 136])
+    eq('weekday read: weekdays that lose fail (lead-lag goes weekends-only)', weekdayReadVerdict(s).verdict, 'FAIL')
+    eq('weekday read: waits for 10 weekday and 6 weekend days', weekdayReadVerdict(weekdayReadStats(wkFills.slice(0, 40), res, Date.parse('2026-09-30T04:00:00Z'))).verdict, 'WAIT')
+    const flipped = wkFills.map((f) => ({ ...f, yes: !f.yes }))
+    eq('weekday read: weekdays that win pass (no change)', weekdayReadVerdict(weekdayReadStats(flipped, res, Date.parse('2026-09-30T04:00:00Z'))).verdict, 'PASS')
+  }
   eq('reads: polyus-fade still unclear at the final read stops', polyusFadeVerdict(miniArmStats(fades(10, 50, (d, i) => (i % 20 === 0 ? -0.93 : (d % 2 ? 0.1 : 0.0)))), oct).verdict, 'INCONCLUSIVE')
   eq('reads: polyus-lag inconclusive at 150 entries stops', polyusLagVerdict(polyusLagStats(games(30, 5, (g, i) => (i % 2 ? 0.5 : -0.5)), []), early).verdict, 'INCONCLUSIVE')
   rmSync(dir, { recursive: true, force: true })

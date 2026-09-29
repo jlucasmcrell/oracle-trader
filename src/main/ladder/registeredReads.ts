@@ -7,6 +7,7 @@
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
+import { etDay } from '../util/etDay'
 
 export type Verdict = 'WAIT' | 'CONTINUE' | 'PASS' | 'FAIL' | 'INCONCLUSIVE'
 export interface ReadResult {
@@ -293,6 +294,102 @@ export function decidedRead(id: string, doc: string, verdict: 'PASS' | 'FAIL', s
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Lead-lag weekdays against weekends (docs/PREREGISTERED-leadlag-weekday.md)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const WEEKDAY_COHORT_START = Date.parse('2026-09-30T04:00:00Z')
+
+/** One live lead-lag fill from leadlag-dislocations.jsonl: `price` is what the side bought cost. */
+export interface LeadLagFill { ts: string; t: string; yes: boolean; contracts: number; price: number }
+export interface DayBand { contracts: number; days: number; meanCents: number; lo80: number; hi80: number }
+
+/** Contract-weighted cents per contract after the taker fee, with an 80% band clustered on the New York day. */
+function dayBand(obs: { day: string; ct: number; cents: number }[]): DayBand {
+  const byDay = new Map<string, { ct: number; sum: number }>()
+  for (const o of obs) {
+    const d = byDay.get(o.day) ?? { ct: 0, sum: 0 }
+    d.ct += o.ct
+    d.sum += o.ct * o.cents
+    byDay.set(o.day, d)
+  }
+  const ct = obs.reduce((s, o) => s + o.ct, 0)
+  const m = ct ? obs.reduce((s, o) => s + o.ct * o.cents, 0) / ct : 0
+  const g = byDay.size
+  const se = g >= 2 ? Math.sqrt((g / (g - 1)) * [...byDay.values()].reduce((s, d) => s + (d.sum - d.ct * m) ** 2, 0)) / ct : Infinity
+  return { contracts: ct, days: g, meanCents: m, lo80: m - 1.28 * se, hi80: m + 1.28 * se }
+}
+
+export function weekdayReadStats(fills: LeadLagFill[], results: Map<string, 'yes' | 'no'>, since = WEEKDAY_COHORT_START): { weekday: DayBand; weekend: DayBand } {
+  const wk: { day: string; ct: number; cents: number }[] = []
+  const we: { day: string; ct: number; cents: number }[] = []
+  for (const f of fills) {
+    const at = Date.parse(f.ts)
+    const res = results.get(f.t)
+    if (!(at >= since) || !res || f.contracts <= 0) continue
+    const won = (res === 'yes') === f.yes
+    const day = etDay(at)
+    ;(day.weekend ? we : wk).push({ day: day.date, ct: f.contracts, cents: (won ? 100 : 0) - 100 * f.price - kalshiTakerFeeCentsFor(f.price, 1) })
+  }
+  return { weekday: dayBand(wk), weekend: dayBand(we) }
+}
+
+const fmtBand = (b: DayBand): string =>
+  `${b.meanCents >= 0 ? '+' : ''}${b.meanCents.toFixed(2)}c/contract, 80% [${b.lo80.toFixed(2)}, ${b.hi80.toFixed(2)}], ${b.contracts} contracts over ${b.days} days`
+
+/**
+ * The registered rule: read once the cohort holds at least 10 weekday and 6 weekend days. FAIL (weekdays lose): the
+ * weekday band wholly below zero - lead-lag then trades weekends only. PASS: the weekday band wholly above zero - no
+ * change. Otherwise continue to 2026-11-02, then INCONCLUSIVE - no change.
+ */
+export function weekdayReadVerdict(s: { weekday: DayBand; weekend: DayBand }): ReadResult {
+  const line = `weekdays ${fmtBand(s.weekday)}; weekends ${fmtBand(s.weekend)}`
+  if (s.weekday.days < 10 || s.weekend.days < 6) return { verdict: 'WAIT', summary: line + ' (needs 10 weekday and 6 weekend days)' }
+  if (s.weekday.hi80 < 0) return { verdict: 'FAIL', summary: line }
+  if (s.weekday.lo80 > 0) return { verdict: 'PASS', summary: line }
+  return { verdict: 'CONTINUE', summary: line + ' (weekday band spans zero)' }
+}
+
+export function leadLagWeekdayRead(deps: {
+  dislocationsPath: string
+  kalshiSettled: (series: string, minCloseTs: number) => Promise<{ ticker: string; result?: string }[]>
+  setWeekdays: (on: boolean) => void
+}): RegisteredRead {
+  return {
+    id: 'leadlag-weekday',
+    doc: 'docs/PREREGISTERED-leadlag-weekday.md',
+    from: Date.parse('2026-10-19T04:00:00Z'),
+    finalAt: Date.parse('2026-11-02T05:00:00Z'),
+    async evaluate() {
+      if (!existsSync(deps.dislocationsPath)) return { verdict: 'WAIT', summary: 'no lead-lag log yet' }
+      const fills: LeadLagFill[] = []
+      for (const line of readFileSync(deps.dislocationsPath, 'utf8').split(/\r?\n/)) {
+        if (!line.includes('"executed":true')) continue
+        try {
+          const r = JSON.parse(line) as { ts?: string; kalshiTicker?: string; suggestedAction?: string; filledContracts?: number; fillPrice?: number }
+          if (r.ts && r.kalshiTicker && typeof r.filledContracts === 'number' && r.filledContracts > 0 && typeof r.fillPrice === 'number' && Date.parse(r.ts) >= WEEKDAY_COHORT_START) {
+            fills.push({ ts: r.ts, t: r.kalshiTicker, yes: (r.suggestedAction ?? '').endsWith('YES'), contracts: r.filledContracts, price: r.fillPrice })
+          }
+        } catch {
+          // skip a torn line
+        }
+      }
+      const results = new Map<string, 'yes' | 'no'>()
+      for (const s of [...new Set(fills.map((f) => f.t.split('-')[0]))]) {
+        for (const m of await deps.kalshiSettled(s, Math.floor(WEEKDAY_COHORT_START / 1000))) if (m.result === 'yes' || m.result === 'no') results.set(m.ticker, m.result)
+      }
+      return weekdayReadVerdict(weekdayReadStats(fills, results))
+    },
+    async apply(verdict) {
+      if (verdict === 'FAIL') {
+        deps.setWeekdays(false)
+        return 'leadLagWeekdays switched OFF: lead-lag now trades live on New York weekends only'
+      }
+      return 'no change: lead-lag keeps trading every day'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Polymarket US fade, re-armed 2026-09-23 (docs/PREREGISTERED-polyus-fade.md, backlog 235)
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -315,10 +412,12 @@ export function miniArmStats(closed: MiniClosed[]): { n: number; losses: number;
  * FAIL: the upper bound below zero. Otherwise continue to 30 losses or 500 settled, or 2026-12-31: then INCONCLUSIVE, and
  * the arm stops - a favourite fade that shows nothing over that sample is not worth the slots.
  */
-export function polyusFadeVerdict(s: ReturnType<typeof miniArmStats>, now: number): ReadResult {
-  const line = `${s.n} settled, ${s.losses} losses over ${s.days} days: ${s.meanCents >= 0 ? '+' : ''}${s.meanCents.toFixed(2)}c/contract, 80% [${s.lo80.toFixed(2)}, ${s.hi80.toFixed(2)}]`
+/** `stopped`: the ladder has stopped the arm for good, so the cohort can never grow - the read is final now
+ * (PREREGISTERED-polyus-fade.md amendment 2; without it the read waited for ever, backlog 258). */
+export function polyusFadeVerdict(s: ReturnType<typeof miniArmStats>, now: number, stopped = false): ReadResult {
+  const line = `${s.n} settled, ${s.losses} losses over ${s.days} days: ${s.meanCents >= 0 ? '+' : ''}${s.meanCents.toFixed(2)}c/contract, 80% [${s.lo80.toFixed(2)}, ${s.hi80.toFixed(2)}]` + (stopped ? ' - the ladder stopped the arm for good, so this read is final' : '')
   const first = s.losses >= 15 || s.n >= 250
-  const final = s.losses >= 30 || s.n >= 500 || now >= Date.parse('2026-12-31T00:00:00Z')
+  const final = stopped || s.losses >= 30 || s.n >= 500 || now >= Date.parse('2026-12-31T00:00:00Z')
   if (!first && !final) return { verdict: 'WAIT', summary: line }
   if (s.hi80 < 0) return { verdict: 'FAIL', summary: line }
   if (s.lo80 > 0) return { verdict: 'PASS', summary: line }
@@ -326,7 +425,7 @@ export function polyusFadeVerdict(s: ReturnType<typeof miniArmStats>, now: numbe
   return { verdict: 'WAIT', summary: line + ' - continuing to 30 losses or 500 settled' }
 }
 
-export function polyusFadeRead(deps: { researchPath: string; cohortStart: number; retire: (reason: string) => Promise<void> }): RegisteredRead {
+export function polyusFadeRead(deps: { researchPath: string; cohortStart: number; retire: (reason: string) => Promise<void>; stopped?: () => boolean }): RegisteredRead {
   return {
     id: 'polyus-fade',
     doc: 'docs/PREREGISTERED-polyus-fade.md',
@@ -346,7 +445,7 @@ export function polyusFadeRead(deps: { researchPath: string; cohortStart: number
           }
         }
       }
-      return polyusFadeVerdict(miniArmStats(closed), now)
+      return polyusFadeVerdict(miniArmStats(closed), now, deps.stopped?.() ?? false)
     },
     async apply(verdict) {
       if (verdict === 'PASS') return 'stays on; the ladder may scale it under its own rules'

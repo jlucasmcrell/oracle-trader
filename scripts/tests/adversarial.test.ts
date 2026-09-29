@@ -512,6 +512,14 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     eq('G: Polymarket US fade scales on its research log', { stage: st('polyus-fade').stage, mult: (mcfg.strategySizeMult as Record<string, number>)?.fade }, { stage: 'live', mult: 2 })
     eq('G: Polymarket US evidence clusters by day, not by market (20 closes on 4 days)',
       (ladder as unknown as { miniEvidence: (s: string, since: number, notch: number) => { clusters: number } }).miniEvidence('fade', 0, 1).clusters, 4)
+    eq('G: a live arm is not stopped for good', ladder.stoppedForGood('polyus-fade'), false)
+    {
+      const pf = L.state.strategies['polyus-fade'] as { stage: string; demotions?: number }
+      const was = { stage: pf.stage, demotions: pf.demotions }
+      Object.assign(pf, { stage: 'disabled', demotions: 2 })
+      eq('G: disabled after two stops is stopped for good (backlog 258)', ladder.stoppedForGood('polyus-fade'), true)
+      Object.assign(pf, was)
+    }
     // lead-lag: 20 swept markets settled at +$0.05 through the venue ledger -> 2 contracts
     const now = Date.now()
     ;(L.state.strategies['kalshi-leadlag'] as { since?: number }).since = now - 6 * 86_400_000

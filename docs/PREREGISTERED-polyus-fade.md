@@ -41,3 +41,12 @@ with the review's terms:
 - The ladder stopped the arm on 2026-09-23 at 8 closes (-$3.50). Its stop message said "8 day-clusters" for one
   afternoon: Polymarket US evidence was clustered by market. It is clustered by UTC day from this build. The stop
   itself stands (one day is floored at the plain per-trade band, which was also wholly below zero).
+
+## Amendment 2 (2026-09-29, backlog 258)
+
+The ladder stopped the arm a second time at 2026-09-29T01:33:42Z (checkpoint 56 trades, -$2.34), and a second stop
+means only the operator re-arms it. The cohort then stood at 10 losses / 69 settled, so the 15-loss / 250-settled bar
+could never be reached and the read would have waited for ever. **When the ladder has stopped the arm for good, the
+next daily read is the final read**: FAIL if the band is wholly below zero, PASS if wholly above, else INCONCLUSIVE;
+FAIL and INCONCLUSIVE retire the arm as before. Chosen as backlog 258 option (a); the band stood at -8.80c/contract,
+80% [-15.47, -2.13] when this was written.

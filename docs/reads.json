@@ -379,6 +379,15 @@
    "rule": "PREREGISTERED-llm-hunch: the hunch gate reaching 200 settled events without passing",
    "action": "build v2 in shadow under its own registration; else move due a week",
    "note": "2026-09-28: NOT YET, and the trading half is still clearly negative. hunch-gate.mjs reads 176 of the 200 settled events the gate needs. The Brier half passes handsomely - model 0.0770 vs mid 0.2199, diff -0.1429, CI95 [-0.1550, -0.1309] over 176 events - and the trading half fails at every threshold: best cell |p-mid| >= 0.25 is -6.78c, Bonferroni LB -8.76c, day-CI [-8.85, -4.71]. A model that knows more than the mid and still cannot trade it is the same reading as the last four weeks. No v2 built. Weekly; next 2026-10-05."
+  },
+  {
+   "id": "259",
+   "owner": "app",
+   "due": "2026-10-19",
+   "what": "Lead-lag on weekdays against weekends",
+   "how": "in-app leadLagWeekdayRead on live lead-lag fills from 2026-09-30T04:00Z (leadlag-dislocations.jsonl), settled at Kalshi",
+   "rule": "docs/PREREGISTERED-leadlag-weekday.md: needs 10 weekday and 6 weekend days; FAIL weekday upper80 < 0; PASS weekday lower80 > 0; else continue to 2026-11-02, then no change",
+   "action": "FAIL sets leadLagWeekdays false (weekends only) by itself; PASS or INCONCLUSIVE changes nothing"
   }
  ]
 }

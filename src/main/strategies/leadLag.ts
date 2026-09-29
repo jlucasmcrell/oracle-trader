@@ -24,6 +24,7 @@ import { PreSubmitRefusal } from '../engine/engine'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { PolyClobWs } from '../services/polyClobWs'
 import { LEADLAG_WEDGE_MS, scanSlotVerdict } from './scanSlot'
+import { etDay } from '../util/etDay'
 
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2'
 const POLY_GAMMA_API = 'https://gamma-api.polymarket.com'
@@ -76,6 +77,16 @@ export interface LeadLagConfig {
    * at FAST_LIVE_MIN_NET_CENTS or more, through the same sweep, sizes and window caps as the minute scan.
    */
   leadLagFastLive?: boolean
+  /**
+   * false: trade live on Saturdays and Sundays (New York) only; the recorders still run every day. Set by the registered
+   * weekday read (docs/PREREGISTERED-leadlag-weekday.md) if weekdays lose after fees; unset trades every day.
+   */
+  leadLagWeekdays?: boolean
+}
+
+/** The weekday switch: may lead-lag trade live at `now`? */
+export function leadLagDayOpen(cfg: Pick<LeadLagConfig, 'leadLagWeekdays'>, now: number): boolean {
+  return cfg.leadLagWeekdays !== false || etDay(now).weekend
 }
 
 export interface LeadLagDislocation {
@@ -692,7 +703,7 @@ export class LeadLagEngine {
     if (!live) return
     try {
       const cfg = live.cfg()
-      if (!cfg.leadLagFastLive || !cfg.leadLagLiveEnabled || !cfg.leadLagEnabled || this.windowBlocked) return
+      if (!cfg.leadLagFastLive || !cfg.leadLagLiveEnabled || !cfg.leadLagEnabled || this.windowBlocked || !leadLagDayOpen(cfg, now)) return
       const key = `${r.t}|${r.side}`
       if (this.fastTried.has(key) || !live.allowed()) return
       const pair = [...this.fastPairs.values()].find((p) => p.ticker === r.t)
@@ -933,7 +944,7 @@ export class LeadLagEngine {
         })
 
         const threshold = cfg.leadLagMinDislocationCents / 100
-        const canTrade = mode === 'live' && armed && !killed && cfg.leadLagLiveEnabled
+        const canTrade = mode === 'live' && armed && !killed && cfg.leadLagLiveEnabled && leadLagDayOpen(cfg, now)
 
         if (poly.mid - kYesAsk >= threshold) {
           // Polymarket above Kalshi's ask: the Kalshi YES ask looks cheap.
