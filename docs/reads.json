@@ -4,12 +4,12 @@
   {
    "id": "233",
    "owner": "app",
-   "due": "2026-09-30",
+   "due": "2026-10-01",
    "what": "Lead-lag at event speed",
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-09-29: CONTINUE, eighth day, and the two instruments still straddle zero. App read 00:33:47Z: +0.01c/contract, 80% [-0.65, 0.68], n=2955 over 8 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: -0.12c, 80% [-0.78, +0.53], n=3135 over 8 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 8,020 gaps at the 6c floor over 157.2 h (51.0/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s. The 2c and 4c floors are clearly negative (-1.41c and -1.08c, both bands wholly below zero), which is the 6c floor doing its job. Eighth day running: the speed is real and the edge is not. Reads daily to 2026-10-03."
+   "note": "2026-09-30: CONTINUE, ninth day, and both instruments still straddle zero. App read 00:23:27Z: +0.13c/contract, 80% [-0.45, 0.71], n=3422 over 9 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: +0.01c, 80% [-0.53, +0.56], n=3679 over 9 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 9,368 gaps at the 6c floor over 181.2 h (51.7/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s. The 2c and 4c floors stay clearly negative (-1.43c and -1.00c, both bands wholly below zero), which is the 6c floor doing its job. Ninth day running: the speed is real and the edge is not. Reads daily to 2026-10-03."
   },
   {
    "id": "234",
@@ -30,7 +30,8 @@
    "how": "in-app polyusFadeRead on the trader's closed live fade entries from 2026-09-23T09:00Z; the maintenance session checks them against scripts/venue-pnl.py --by-arm",
    "rule": "docs/PREREGISTERED-polyus-fade.md: read at 15 losses or 250 settled; PASS lower bound > 0; FAIL upper bound < 0; else continue to 30 losses / 500 settled / 2026-12-31, then stop",
    "action": "FAIL or INCONCLUSIVE retires polyus-fade via Ladder.retire; PASS leaves it to the ladder",
-   "note": "2026-09-29: WAIT, no retirement by this read - but the LADDER stopped the arm overnight, so the cohort is now frozen. App read 00:33:47Z: 65 settled, 10 losses over 4 days, -8.80c, 80% [-15.47, -2.13]. Recomputed at 11:10Z on the live rows with the same miniArmStats formula: 69 settled, 10 losses over 5 days, -7.99c/contract, 80% [-14.07, -1.92]; the research file sums to -$5.5601 over 67.94 shares and venue-pnl --by-arm --since 2026-09-23T09:00:00Z reads mini:fade n=70, -$5.52 (four cents, one row of timing). The registered bar is 15 losses or 250 settled and the arm is at 10 and 69, so the FAIL SHAPE (upper bound below zero) does not fire the FAIL branch - reading early is what this registration exists to prevent. Separately, ladder.json shows polyus-fade tiny-live -> disabled at 2026-09-29T01:33:42Z on its own checkpoint rule (56 trades, -$2.34, mean -$0.04, 80% [-0.06, -0.03] over 4 day-clusters), and it is now 'stopped 2 times: only its gate or the operator can re-arm it'. With no new entries the cohort cannot reach 15 losses or 250 settled, so this read is measurement-complete unless the arm is re-armed. BACKLOG 258."
+   "note": "2026-09-30: closed FAIL by the app, and the terminal branch built yesterday is what closed it. App read 00:23:27Z: 'FAIL - 69 settled, 10 losses over 5 days: -7.99c/contract, 80% [-14.07, -1.92] - the ladder stopped the arm for good, so this read is final', followed by 'polyus-fade retired: off, and not re-armed by the ladder'; ladder.json now reads 'retired by its registration (PREREGISTERED-polyus-fade FAIL)'. Checked against the venue record as the registration requires: venue-pnl.py --by-arm --since 2026-09-23T09:00:00Z on the 11:01Z dump reads mini:fade n=70, -$5.52 (-7.89c/contract), unchanged from yesterday because the stopped arm took no new entries - so the app's cohort and the ledger agree and the cohort is closed, not merely quiet. BACKLOG 258 done; line closed.",
+   "done": "2026-09-30"
   },
   {
    "id": "125/181/190/198",
@@ -54,12 +55,12 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-09-30",
+   "due": "2026-10-01",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-09-29 (fresh 11:02Z dump): NOT YET, neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 420 settlements, 763.09 contracts. New coins 389.04 of the required 400 (up from 334.03), +2.54c, 95% [-3.70, +8.78] over 11 day-clusters; established BTC/ETH +9.55c [-1.58, +20.68]; pooled +5.98c [-2.24, +14.20]. Per coin: BTC +13.92c (n=108, [+5.44, +22.39], still the only one clear of zero), HYPE +11.94c (50), XRP +3.86c (56), BNB +2.36c (63), SOL +2.09c (56), ZEC -1.25c (7), ETH -3.46c (59), DOGE -19.36c (21). Eleven contracts short of the bar with five days to the 2026-10-04 final; at the last day's +55 it clears tomorrow."
+   "note": "2026-09-30 (fresh 11:01Z dump): the sample bar is MET for the first time and the verdict is UNDECIDED, so neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 458 settlements, 845.11 contracts. New coins 443.06 of the required 400 (up from 389.04) over 12 day-clusters, so both gates are open: +3.40c, 95% [-1.86, +8.67] - the lower bound is below zero and the upper above it, which is the registration's 'neither' branch, keep collecting and re-read daily. Established BTC/ETH +9.56c [-0.74, +19.86]; pooled +6.33c [-0.87, +13.54]. Per coin: BTC +14.57c (n=112, [+6.24, +22.90], still the only one clear of zero), HYPE +12.61c (58), XRP +4.33c (60), SOL +2.71c (60), BNB +2.56c (69), ZEC -1.25c (7), ETH -3.09c (69), DOGE -16.10c (23). Four days to the 2026-10-04 final, after which the registration narrows back to BTC, ETH by default."
   },
   {
    "id": "146b",
@@ -329,12 +330,12 @@
   },
   {
    "id": "1",
-   "due": "2026-09-30",
+   "due": "2026-10-01",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-09-29: trigger MET, action DECLINED, and the script's own verdict line agrees for the fourth day. critic-skill.py on the 11:02Z dump: VETO -0.040/contract (n=314) against the rest at +0.036, so amended conditions (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.036; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true."
+   "note": "2026-09-30: trigger MET, action DECLINED, and the script's own verdict line agrees for the fifth day. critic-skill.py on the 11:01Z dump: 2,595 decisions; VETO -0.039/contract (n=315) against the rest at +0.035, so amended conditions (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.039 vs rest +0.035; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true."
   },
   {
    "id": "65b/80c",

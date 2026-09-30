@@ -3058,7 +3058,7 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   of fee, n=1,436; matched Kalshi 3,546). This is the one measurement defect in the project that is getting worse on
   a schedule rather than holding still, and it blocks its own go-live trigger (build queue 12) by construction.
 
-- **250. The consensus shadow is still duplicating, and the count is still growing (2026-09-25).** Item 248
+- **250. DONE 2026-09-30 (section 175), with 248: the duplication stopped at its cause, not at its symptom. The consensus shadow is still duplicating, and the count is still growing (2026-09-25).** Item 248
   recorded 477,809 "graded" on 09-24 against 11,041 distinct signals; today `report` prints **646,265**. The
   frozen `state.json` from the 09-21 power loss is still being re-graded every hour, so the file grows without
   adding information and build-queue 13's trigger stays unreadable. 248 says do not read the count; 250 says
@@ -3181,7 +3181,7 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   said so. Trigger: the next time `sentinel.mjs` is touched, with 249.
 
 
-- **248. The consensus shadow's grades are 43x duplicated, and build-queue 13 must not read them (2026-09-24,
+- **248. DONE 2026-09-30 (section 175): root cause was a corrupt state.json plus a swallowed exception; journals de-duplicated and the report now prints distinct, day-clustered figures. The consensus shadow's grades are 43x duplicated, and build-queue 13 must not read them (2026-09-24,
   section 168).** `data/polymarket-consensus/grades.jsonl` has 480,107 rows and 11,041 distinct
   `(title, kalshi_market, ts)`; the worst keys are re-graded 129-133 times, because `state.json` has been frozen at
   2026-09-21T10:00Z since the power loss and every hourly run re-grades the same signals. The report's headline
@@ -3305,3 +3305,192 @@ its worry: since `kalshi-leadlag`'s stage start the ladder reads 72 trades / +$2
 contracts / **+$37.41** - the ledger is now the LARGER of the two, where on 09-26 the ladder was 3.8x the ledger, so
 the tracker is not systematically overstating. **252** stands: today's last quoter line reads `disabled: 37
 candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a silence.
+
+## 2026-09-30 daily maintenance (see docs/reports/2026-09-30.md, section 175)
+
+### Registered reads due today — all four performed
+
+- **233 lead-lag at event speed — CONTINUE, ninth day, leadLagFastLive stays off.** App read 00:23:27Z:
+  `CONTINUE - 6c net, first gap per market and side: +0.13c/contract, 80% [-0.45, 0.71], n=3422 over 9 days (band
+  spans zero)`. Maintenance grader `leadlag_fast_shadow.py --since 2026-09-22T21:48Z` at 11:03Z, registered 6c
+  floor: **+0.01c, 80% [-0.53, +0.56], n=3679 over 9 days**. PASS needs n >= 150 AND lo80 > 0; the lower bound is
+  negative on both instruments, so the registration's non-PASS branch holds and `leadLagFastLive` stays absent from
+  config. The 2c and 4c floors are **-1.43c [-1.71, -1.16]** and **-1.00c [-1.23, -0.77]**, both bands wholly below
+  zero — the 6c floor is the only one near break-even, which is the floor doing its job. Speed unchanged and real:
+  9,368 gaps at the 6c floor over 181.2 h (51.7/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s. Reads
+  daily to 2026-10-03.
+- **235 Polymarket US favourite fade — FAIL, final, and the app retired the arm itself.** The terminal branch built
+  yesterday (BACKLOG 258, amendment 2) is what closed it: `[reads] polyus-fade: FAIL - 69 settled, 10 losses over
+  5 days: -7.99c/contract, 80% [-14.07, -1.92] - the ladder stopped the arm for good, so this read is final`, then
+  `polyus-fade retired: off, and not re-armed by the ladder`. `ladder.json` now reads "retired by its registration
+  (PREREGISTERED-polyus-fade FAIL)". Checked against the venue record as the registration requires: `venue-pnl.py
+  --by-arm --since 2026-09-23T09:00:00Z` on the 11:01Z dump reads **mini:fade n=70, -$5.52 (-7.89c/contract)**,
+  identical to yesterday because a stopped arm takes no new entries. The app's cohort and the ledger agree, so the
+  cohort is closed rather than merely quiet. **Read 235 closed; BACKLOG 258 done.** Lasting note: yesterday's
+  deadlock took one day to clear because the branch was written before it was needed, not after.
+- **72b/161 lead-lag coin cohort — the sample bar is MET for the first time and the verdict is UNDECIDED.**
+  `leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z` on the 11:01Z dump: 458 settlements, 845.11 contracts.
+  New coins **443.06 of the required 400** over **12 day-clusters**, so both gates are open for the first time since
+  the window was frozen on 09-19 — and the interval is **+3.40c, 95% [-1.86, +8.67]**, lower bound below zero and
+  upper above it, which is the registration's explicit "neither" branch: keep collecting and re-read daily.
+  `leadLagCoins` keeps the eight and `leadLagProvenCoins` stays absent. Established BTC/ETH **+9.56c [-0.74,
+  +19.86]**; pooled +6.33c [-0.87, +13.54]. Per coin: BTC **+14.57c** (n=112, [+6.24, +22.90], still the only one
+  clear of zero), HYPE +12.61c (58), XRP +4.33c (60), SOL +2.71c (60), BNB +2.56c (69), ZEC -1.25c (7), ETH -3.09c
+  (69), DOGE **-16.10c** (23). Four days to the **2026-10-04** final, after which the registration narrows back to
+  BTC, ETH by default. Worth stating plainly now that the bar is met: the cohort is not being held back by sample
+  size any more, it is genuinely undecided, and the default on 10-04 is to narrow.
+- **1 critic skill check — trigger MET, action DECLINED, fifth consecutive day, and the script agrees.**
+  `critic-skill.py` on the 11:01Z dump: 2,595 decisions; VETO **-0.039/contract (n=315)** against the rest at
+  **+0.035**, so amended conditions (i) and (ii) pass; skilled in **1 of 2** strategies present in both cohorts
+  among currently enabled arms, so (iii) fails. Last line: `KEEP veto mode OFF - veto -0.039 vs rest +0.035;
+  skilled in 1 of 2 shared enabled strategies`. `intelligenceMode` stays `shadow`, `intelligenceEnabled` stays true.
+
+### Today's build: 248/250 — the consensus shadow's nine-day duplication, root cause found and fixed
+
+- **248 and 250 DONE 2026-09-30 (section 175).** Both items asked for the same repair and neither had the cause.
+  **The cause is one corrupt file and one swallowed exception.** `data/polymarket-consensus/state.json` does not
+  parse: `JSONDecodeError: Invalid control character at char 105,906,176` of 172 MB. `save_state` was
+  `json.dump(state, open(STATE, 'w'))` — truncate-in-place on a 172 MB file — and the Windows task's
+  `ExecutionTimeLimit PT45M` landed inside that write on 2026-09-21T10:00Z. From that moment `load_json` (which
+  catches every exception and returns the default) handed every hourly pass an **empty** state, so all three
+  cursors restarted from nothing every hour: `recent` empty meant every trade in the 72 h API window was "new"
+  (the run log's identical `12,9xx new trades` every hour for nine days), `signaled` empty meant the same
+  conditionIds re-emitted signals, and `graded` empty meant every settled signal was re-graded and re-appended.
+  And the reason it never healed is the second half of the same clamp: with `graded` empty there were thousands of
+  signals to fetch at ~0.15 s plus a network call each, so **not one pass since 2026-09-21T14:00Z has reached the
+  final state write** — 213 hourly passes, zero `graded N signals` lines, and the 06:55Z pass still alive at
+  11:05Z. The cursor could not advance because the pass could not finish, and the pass could not finish because
+  the cursor had not advanced.
+- **Fixed in four places, all in `scripts/polymarket_consensus.py`.** (a) `save_state` writes `state.json.tmp` and
+  `os.replace`s it, so a kill can never corrupt the file again. (b) `load_state` no longer silently accepts an
+  empty state: if `state.json` is missing or unreadable it says so in the run log and calls the new
+  `rebuild_state()`, which reconstructs all three cursors **from the journals themselves** — the journals are the
+  record and state is only a cursor over them. (c) grading takes a **20-minute wall-clock budget**
+  (`GRADE_BUDGET_S`) so the pass always reaches `save_state` inside the 45-minute task limit; a bounded pass that
+  saves beats a complete pass that is killed. (d) grade rows now carry `conditionId`, so the graded index can be
+  rebuilt exactly rather than by joining on `(ts, title, outcome)`.
+- **The journals are de-duplicated, by a re-runnable `repair` subcommand rather than by hand.**
+  trades.jsonl **3,871,169 rows -> 1,702,953 distinct, 2,405 MB -> 1,048 MB**; signals.jsonl **28,517 -> 14,385,
+  17 MB -> 9 MB**; grades.jsonl **1,511,157 -> 11,073, 482 MB -> 3.7 MB**. State rebuilt: 14,385 signalled, 9,904
+  graded, 180,610 trades inside the 72 h window. The de-duplicated grades reproduce BACKLOG 248's hand count to
+  32 rows (11,073 against 11,041 on 09-24, Brier **0.1008** identical), which is what confirms the de-duplication
+  key is the right one.
+- **`report` now prints distinct counts and day-clustered 95% bands** (`bands.py` gains `t975`, `cluster_band95`
+  and `day_band95`; the 80% path is untouched), as 248 asked. New headline: 14,385 distinct signals, **11,073
+  distinct graded**, hit 0.69 at mean price 0.69, Brier 0.1008; Polymarket price +0.29c [-0.34, +0.93] over 14
+  day-clusters.
+- **The VOID split matters, and so does not reading a frozen cursor.** **1,280 of the Kalshi-matched rows carry
+  no `kalshi_side`** — the class the 2026-09-19 matcher amendment declared VOID — so `report` prints the registered
+  post-matcher cohort on its own line with the VOID count beside it. Read straight after the de-duplication that
+  cohort looked dead (**-2.76c, 95% [-5.51, -0.02], 156 rows, 3 day-clusters**), and that figure must not be
+  quoted: grading had been dead since 2026-09-21, so the grade set ended there with 3,422 eligible signals never
+  looked at. **The repaired grader cleared the backlog in one pass** — `graded 3422 signals | skipped
+  {'already-graded': 9904, 'budget-spent': 56, 'not-found': 995, 'not-resolved': 8}` at 11:41:10Z, the first
+  completed pass since 2026-09-21T14:00Z, cursor advanced 9,904 → **13,326** — and the full set reads: Kalshi ask
+  net of fee, all rows **+4.53c 95% [+2.61, +6.45]** (1,984 rows, 23 day-clusters); **registered post-matcher
+  cohort +2.70c 95% [-0.81, +6.21]** (704 rows, 12 day-clusters); Polymarket price +0.60c [-0.01, +1.20] (14,493);
+  Polymarket US +2.39c [-0.27, +5.05] (2,939). So the cohort is **positive, not negative**, the shadow's own
+  ">= 100 graded and net positive after fees" trigger is **met for the first time**, and the registration's
+  *promotion* bound (day-clustered 95% lower bound > 0) is **not** met at -0.81. Nothing was changed: the arm
+  already exists as `kalshi-consensus` and sits on an **operator hold**, which is his to lift.
+- **Verified.** `selftest` 17 passed / 0 failed, with the block deliberately broken twice first (a no-op `dedupe`
+  fails `dedupe keeps one row per key`; the old truncate-in-place write fails `a failed write leaves the old state
+  readable`). New assertions: de-duplication keeps the first row per key, duplicating every row cannot move a
+  day-clustered band (it can only narrow an i.i.d. one, which is why 248's warning mattered), one cluster has no
+  band, `t975` is Student t on G-1, `save_state` round-trips and leaves no temp file, and a failed write leaves
+  the previous state readable. `npx tsc --noEmit` clean; `electron-vite build` clean; **review-fixes 671/0, ladder
+  177/0, adversarial 99/0**. No file under `src/` was touched, so **the app was deliberately not restarted** —
+  a restart with no code change would buy nothing and costs a boot. Backup
+  `oracle-trader-MAINT-2026-09-30-20260930-071013.zip` (2,393 files, 1,362 MB zipped) was taken **before** the
+  repair, so the duplicated journals are recoverable from it as well as from their `.bak` copies.
+
+### New
+
+- **259. The de-duplication backups are 2.9 GB of proven duplicates and should not become permanent
+  (2026-09-30, section 175).** `repair` kept `trades.jsonl.dup-20260930T111318Z.bak` (2,405 MB),
+  `grades.jsonl.dup-...bak` (482 MB), `signals.jsonl.dup-...bak` (17 MB) and
+  `state.json.corrupt-20260930T111318Z.bak` (172 MB) rather than deleting anything on the day of the change. They
+  are recoverable a second way — today's MAINT backup was taken before the repair — and the de-duplication key is
+  verified against BACKLOG 248's independent hand count, so nothing is protected by keeping them beyond one
+  confirmation day. Delete them once the 2026-10-01 run confirms the hourly pass is writing a fresh cursor and the
+  report still reads 11,073+ distinct graded. Keep `state.json.corrupt-...bak` a week: it is the only physical
+  evidence of the truncate-in-place failure mode. Trigger: **2026-10-01, after the day's first consensus report.**
+- **260. `state.json` is 112 MB because `recent` is the journal's whole 72 h union, and it is written twice an
+  hour (2026-09-30, section 175).** `rebuild_state` recovered **180,610** distinct trades inside the 72 h window
+  against the ~13,000 an hourly API pass sees, because the API returns only the last 100 trades per wallet and the
+  journal holds every window it ever saw. That is the correct dedup set and it is what `detect()` should have been
+  reading all along — the 48 h consensus book was previously only ever one pass deep — but it makes the atomic
+  state write move 112 MB twice a pass, and the first pass after the repair may emit a burst of signals it could
+  not previously see. Neither costs money (the shadow places no orders) and both are visible in the run log.
+  Options if it becomes a problem: keep `recent` as keys-only plus a separate 48 h trade window, or move the
+  cursor to SQLite. Trigger: **the 2026-10-01 run, which should show the first completed `graded N signals` line
+  since 2026-09-21T14:00Z; or any pass that exceeds the task's 45 minutes again.
+  **Grepped for the pattern the same day rather than waiting for the next symptom** (the 09-29 lesson):
+  `scripts/mention_shadow.py:93` writes its cursor the same truncate-in-place way
+  (`json.dump(state, open(STATE, 'w'), indent=1)`, loaded at line 87) and is the only other instance. It is
+  harmless **today** — 54 KB, and the task has been disabled since read 12/68b FAILed on 09-25, so no pass can be
+  killed mid-write — which is why it was not changed in this run. Fix it if that task is ever re-enabled. The
+  distinction that matters: `polymarket_consensus.py`'s two catalogue writes (`kalshi-catalog.json`, 17 MB, and
+  `polyus-catalog.json`) are also truncate-in-place, and that is **fine**, because their loader's empty default is
+  the correct answer to a miss — the next pass simply re-fetches. Truncate-in-place is only dangerous for a file
+  whose empty default is a lie.**
+
+- **261. `kalshi-dutch` has been armed at tiny-live for 24 days and has never placed a basket, and the ladder
+  cannot stop it because a stop rule needs settlements (2026-09-30, section 175).** `dutchEnabled` and
+  `dutchLiveEnabled` are both **true** in the live config and `ladder.ts:134` maps the arm to them, so it is armed,
+  not held. It scans constantly and finds nothing: **1,441 scan lines in the last 24 h and every single one ends
+  `found 0 arb slates`** (1,412 of them read `scanned 1600 events (61 exclusive)`; the rest scanned 800-1,400 with
+  51-61 exclusive), against a cumulative `opps 152 executed 0`. The 152 are
+  not recent — **all 152 `[dutch] FOUND` lines in the whole of `main.log` are dated 2026-09-03**, three days before
+  the arm went live, and they were the under-sum direction (e.g. `BUY-ALL-YES on KXSTATE51-29 (8 legs): sum 13.2c |
+  Net Edge +78.8c/basket`). They were skipped at `if (!canTrade) continue` because `dutchLiveEnabled` was false
+  then. Since 2026-09-06 the detector has fired **zero** times.
+  Two things make this worth a slot rather than a shrug. **(a) The hypothesis is already falsified in its own
+  source.** `autoTrader.ts:154-157`: "Backtested 2026-08-28: zero Σbids>1.03 excursions across 104
+  mutually_exclusive events (12h pre-close each) and zero live — the arb essentially never occurs. Disabled by
+  default; cheap to re-enable." It was re-enabled anyway and has produced exactly what that comment predicted.
+  **(b) The asymmetry is unexplained and is the one testable thing here.** The over-sum direction never fires, as
+  the backtest said; but the **under-sum** direction fired 152 times in a single day in early September and has
+  not fired once in 24 days. Either those events closed and nothing like them reappeared, or the scan universe
+  changed — note it now reads only **61 exclusive of 1,600** events scanned, and `[dutch] scan failed: aborted due
+  to timeout` appears 3 times in 24 h, so a shrinking or truncated universe is a live possibility that one read of
+  `quoter-kalshi`-style history plus `dutchBook.ts:197` (`if (ev.mutually_exclusive !== true) continue`) would
+  settle.
+  This is the shape of BACKLOG 247: an arm whose evidence supply is zero is **stalled, not pending**, and the
+  ladder's stop rule cannot reach it — 0 settlements means no checkpoint, for ever, so "nothing stays off without a
+  ladder verdict" has a mirror case the ladder cannot serve. Three honest options: (a) read the 152 09-03
+  opportunities against what the universe holds now and decide whether the detector or the market changed;
+  (b) write a pre-registration with a deadline (e.g. one executed basket by a date, or the arm retires) so the
+  ladder is not asked to judge an empty cohort; (c) retire it on the 08-28 backtest, which is the evidence already
+  in hand. Not acted on today: one behavioural change a run is the rule and this arm is not losing money — it has
+  cost exactly nothing, which is the whole problem. Trigger: **any day; it is one of tomorrow's two candidates
+  with 256.**
+
+### Build-queue trigger checks — every item, as the rule requires
+
+- **1 critic skill** — MET daily, declined by the amended rule for the fifth day (above).
+- **2 WebSocket book** — MET and built 2026-09-28; the promotion is holding. Open half is **BACKLOG 254**, whose
+  own trigger is *seven days of the promotion being live* = **2026-10-05**; not met, deliberately, so the served
+  ratio is measured under the real cap before anyone argues for a bigger one.
+- **3 HRRR** — done 2026-09-21; the shadow keeps running and keeps favouring HRRR (621 station-days, MAE 1.93 vs
+  2.19, closer on 333 against 270 with 18 ties).
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** — NOT met: quoter notch 1, disabled on an operator
+  hold, ALLOWED cohort **67 settled proxy fills over 37 events** against a bar of 30 over 40, at -1.70c
+  [-13.83, +10.43]. The events count is the binding half and it has not moved.
+- **6 sports anchor on Polymarket US** — NOT met: `kalshi-sports-anchor` is disabled on an operator hold and has no
+  checkpoint that could be positive; the nightly review reads it dead on its corrected clustered interval
+  (-5.67c [-11.27, -0.07]).
+- **7 player props** — NOT met (anchor notch 1).
+- **8c market-maker rest patterns** — NOT met: `kalshi-mean-reversion` is at **32 settled, +$2.27**; checkpoint 40.
+- **9 SportsGameOdds role** — no trigger; still the next untriggered build, deferred again because 248/250's
+  trigger ("next build-queue slot") fired and a dated trigger outranks an untriggered item.
+- **10 Metaculus** — **UNREACHABLE, not merely unmet (BACKLOG 256)**, and today's report is the exact sentence 256
+  forbids: `no graded pairs yet; pairs on file: 223`. 223 rows are still ten distinct pairs re-appended hourly and
+  the earliest resolves 2026-11-04. **Not taken today** because 248/250 had the older dated claim on the slot;
+  256's options (a) de-duplicate the append, (b) re-point the matcher inside 90 days, (c) retire item 10 stand
+  unchanged and it is the front-runner for tomorrow.
+- **11 forecaster v2** — weekly, next read **2026-10-05**.
+- **12 mention base rates** — counter-indicated and closed: the read FAILed on 09-25 and the task is disabled.
+- **13 consensus arm** — built and on the ladder (disabled on an operator hold); its shadow's trigger is **NOT
+  met**, and as of today for a better reason: the registered post-matcher cohort is **-2.76c over 156 rows and 3
+  day-clusters**, not the +4.63c the raw file prints (above).

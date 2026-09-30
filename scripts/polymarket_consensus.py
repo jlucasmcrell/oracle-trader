@@ -13,6 +13,7 @@ item 13): >= 100 graded signals, net positive after fees at the price we could h
   python scripts/polymarket_consensus.py           # one hourly pass
   python scripts/polymarket_consensus.py report    # results to date
   python scripts/polymarket_consensus.py grade     # grade settled signals only (no wallet poll)
+  python scripts/polymarket_consensus.py repair    # de-duplicate the journals, rebuild state.json
   python scripts/polymarket_consensus.py selftest  # pure assertions, no network
 Data: data/polymarket-consensus/{wallets.json,trades.jsonl,signals.jsonl,grades.jsonl,state.json,run.log}
 """
@@ -23,11 +24,15 @@ import math
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backtests'))
+import bands  # noqa: E402  the one band helper every research script uses
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'data', 'polymarket-consensus')
 WALLETS = os.path.join(DATA, 'wallets.json')
@@ -51,6 +56,9 @@ NOW_TS = NOW.timestamp()
 WINDOW_H = 48
 MIN_WALLETS = 3
 MIN_NOTIONAL = 500.0
+# The Windows task is killed at 45 minutes; the wallet poll and the two catalogues take about 4 of them.
+# Grading stops here so the pass always reaches save_state, which is what makes the cursor advance.
+GRADE_BUDGET_S = 20 * 60
 STOP = set('the a an of to in on at for and or vs v by with will be is are was were do does did who what which than over under before after this that these those from into its it their his her not no yes win wins won game match'.split())
 os.makedirs(DATA, exist_ok=True)
 
@@ -81,23 +89,92 @@ def load_json(path, dflt):
         return dflt
 
 
+def save_state(state):
+    """Atomic: a killed pass must never leave a half-written state.json behind.
+
+    2026-09-21 it did. `open(STATE, 'w')` truncates a 180 MB file before json.dump refills it, the task's
+    45-minute ExecutionTimeLimit landed inside that write, and the result parsed as
+    'Invalid control character at char 105906176'. load_json then swallowed the error and returned {} on
+    every later pass, so `recent`, `signaled` and `graded` all restarted empty every hour and the three
+    journals took a duplicate copy of themselves an hour for nine days (BACKLOG 248/250).
+    """
+    tmp = STATE + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(state, fh)
+    os.replace(tmp, STATE)
+
+
+def rebuild_state():
+    """The journals are the record; state.json is only a cursor over them. Rebuild it from the files.
+
+    Called when state.json is missing or unreadable, so a lost cursor costs one slow pass instead of a
+    duplicate copy of every journal. Each index is keyed exactly as the writer that consumes it keys it:
+    `signaled` and `graded` on '<conditionId>:<outcome>', `recent` on the trade key inside the 72 h window.
+    """
+    state = {}
+    sig_cid = {}
+    signaled = {}
+    for s in read_jsonl(SIGNALS):
+        cid, outcome = s.get('conditionId'), s.get('outcome')
+        if not cid or outcome is None:
+            continue
+        key = f'{cid}:{outcome}'
+        try:
+            ts = dt.datetime.fromisoformat(s['ts']).timestamp()
+        except Exception:  # noqa: BLE001
+            continue
+        if NOW_TS - ts <= 30 * 86400:          # detect() prunes at 30 days; the rebuild must not undo that
+            signaled[key] = max(signaled.get(key, 0), ts)
+        sig_cid[(s['ts'], s.get('title'), outcome)] = cid
+    graded = {}
+    for g in read_jsonl(GRADES):
+        cid = g.get('conditionId') or sig_cid.get((g.get('ts'), g.get('title'), g.get('outcome')))
+        if cid and g.get('outcome') is not None:
+            graded[f'{cid}:{g["outcome"]}'] = g.get('winner')
+    recent, keys = [], set()
+    for t in stream_jsonl(TRADES):
+        if not t.get('key') or NOW_TS - t.get('ts', 0) >= 72 * 3600 or t['key'] in keys:
+            continue
+        keys.add(t['key'])
+        recent.append(t)
+    state['signaled'] = signaled
+    state['graded'] = graded
+    state['recent'] = recent
+    log(f'state.json unreadable or absent; rebuilt from the journals: {len(signaled)} signalled, {len(graded)} graded, {len(recent)} trades in the 72 h window')
+    return state
+
+
+def load_state():
+    if os.path.exists(STATE):
+        try:
+            return json.load(open(STATE, encoding='utf-8'))
+        except Exception as e:  # noqa: BLE001
+            log(f'state.json will not parse ({str(e)[:80]}); rebuilding')
+    return rebuild_state()
+
+
 def append(path, row):
     with open(path, 'a', encoding='utf-8') as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + '\n')
 
 
-def read_jsonl(path):
+def stream_jsonl(path):
+    """Line at a time: trades.jsonl reached 2.5 GB under the duplication and must not be held in memory."""
     if not os.path.exists(path):
-        return []
-    out = []
-    for line in open(path, encoding='utf-8'):
-        line = line.strip()
-        if line:
+        return
+    with open(path, encoding='utf-8') as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
             try:
-                out.append(json.loads(line))
+                yield json.loads(line)
             except Exception:  # noqa: BLE001
                 pass
-    return out
+
+
+def read_jsonl(path):
+    return list(stream_jsonl(path))
 
 
 # ------------------------------------------------------------------ wallets and trades
@@ -452,7 +529,14 @@ def grade(state):
     graded = state.setdefault('graded', {})
     n = 0
     skip = collections.Counter()
+    deadline = time.time() + GRADE_BUDGET_S
     for s in sigs:
+        if time.time() > deadline:
+            # The task is killed at 45 minutes (ExecutionTimeLimit PT45M). A grade pass that runs past it
+            # never reaches save_state, so the cursor never advances and the next pass repeats the work.
+            # Stopping early with the cursor saved is strictly better than a complete pass that is killed.
+            skip['budget-spent'] += 1
+            continue
         key = f"{s['conditionId']}:{s['outcome']}"
         if key in graded:
             skip['already-graded'] += 1
@@ -483,7 +567,7 @@ def grade(state):
         y = 1 if winner == s['outcome'] else 0
         p = float(s.get('poly_price') or 0)
         entry = {
-            'ts': s['ts'], 'graded_at': NOW.isoformat(timespec='seconds'), 'title': s['title'], 'outcome': s['outcome'], 'winner': winner, 'y': y,
+            'ts': s['ts'], 'graded_at': NOW.isoformat(timespec='seconds'), 'conditionId': s['conditionId'], 'title': s['title'], 'outcome': s['outcome'], 'winner': winner, 'y': y,
             'n_wallets': s['n_wallets'], 'poly_price': p, 'brier_poly': round((p - y) ** 2, 4), 'pnl_poly': round((1 - p) if y else -p, 4),
             'hours_to_resolution': round((NOW_TS - dt.datetime.fromisoformat(s['ts']).timestamp()) / 3600, 1), 'category': (s.get('eventSlug') or '').split('-')[0]
         }
@@ -516,26 +600,94 @@ def grade(state):
     log(f'graded {n} signals' + (f' | skipped {dict(sorted(skip.items()))}' if skip else ''))
 
 
+def dedupe(rows, key):
+    """First row per key wins. The journals are append-only and were duplicated for nine days
+    (BACKLOG 248: 43x, then 129x); every count printed from them has to be distinct or it is fiction."""
+    seen, out = set(), []
+    for r in rows:
+        k = key(r)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(r)
+    return out
+
+
+def _band(rows, field):
+    """Day-clustered 95%, in cents, as docs/PREREGISTERED-polymarket-consensus.md fixes it."""
+    return bands.day_band95(rows, lambda r: str(r['ts'])[:10], lambda r: 100.0 * r[field])
+
+
+def _say(label, rows, field):
+    m, lo, hi, g, n = _band(rows, field)
+    band = 'no band (1 day-cluster)' if lo is None else f'95% [{lo:+.2f}, {hi:+.2f}] over {g} day-clusters'
+    print(f'{label} ({n} matched): {m:+.2f}c/contract, {band}')
+
+
 def report():
-    sigs = read_jsonl(SIGNALS)
-    g = read_jsonl(GRADES)
-    print(f'signals {len(sigs)}, matched kalshi {sum(1 for s in sigs if s.get("kalshi"))}, matched polymarket us {sum(1 for s in sigs if s.get("polyus"))}, graded {len(g)}')
+    sig_rows = read_jsonl(SIGNALS)
+    grade_rows = read_jsonl(GRADES)
+    sigs = dedupe(sig_rows, lambda s: (s.get('conditionId'), s.get('outcome')))
+    g = dedupe(grade_rows, lambda x: (x.get('title'), x.get('kalshi_market'), x.get('ts')))
+    print(f'signals {len(sigs)} distinct ({len(sig_rows)} rows), matched kalshi {sum(1 for s in sigs if s.get("kalshi"))}, '
+          f'matched polymarket us {sum(1 for s in sigs if s.get("polyus"))}, graded {len(g)} distinct ({len(grade_rows)} rows)')
     if not g:
         return
     hit = sum(x['y'] for x in g) / len(g)
     print(f'hit rate {hit:.2f} at mean price {sum(x["poly_price"] for x in g) / len(g):.2f}; Brier {sum(x["brier_poly"] for x in g) / len(g):.4f}')
-    print(f'P&L per contract at the Polymarket price: {sum(x["pnl_poly"] for x in g) / len(g):+.4f}')
+    _say('P&L at the Polymarket price', g, 'pnl_poly')
     kk = [x for x in g if 'pnl_kalshi' in x]
     if kk:
-        print(f'P&L per contract at the Kalshi ask net of fee ({len(kk)} matched): {sum(x["pnl_kalshi"] for x in kk) / len(kk):+.4f}')
+        _say('P&L at the Kalshi ask net of fee', kk, 'pnl_kalshi')
+        # The 2026-09-19 amendment (REVIEW-CHANGES §129) voided the Kalshi leg to date: the old matcher
+        # bought YES on any event sharing a fixture name, so a row without `kalshi_side` was graded
+        # against a market that was not the same bet. Those rows are the majority and they carry the
+        # headline, so the registered cohort is printed beside it and is the only one that may be read.
+        live = [x for x in kk if x.get('kalshi_side')]
+        _say('  of which post-matcher (kalshi_side present; the registered cohort)', live, 'pnl_kalshi')
+        if len(live) < len(kk):
+            print(f'  {len(kk) - len(live)} row(s) predate the matcher fix and are VOID for build-queue 13 (PREREGISTERED-polymarket-consensus.md, amendment 2026-09-19)')
     uu = [x for x in g if 'pnl_polyus' in x]
     if uu:
-        print(f'P&L per contract at the Polymarket US price net of fee ({len(uu)} matched): {sum(x["pnl_polyus"] for x in uu) / len(uu):+.4f}')
+        _say('P&L at the Polymarket US price net of fee', uu, 'pnl_polyus')
     by = collections.defaultdict(list)
     for x in g:
         by[x['category']].append(x)
     for c, xs in sorted(by.items(), key=lambda kv: -len(kv[1])):
         print(f'  {c:12s} n={len(xs):4d} hit={sum(x["y"] for x in xs) / len(xs):.2f} pnl={sum(x["pnl_poly"] for x in xs) / len(xs):+.4f} lead_h={sum(x["hours_to_resolution"] for x in xs) / len(xs):.0f}')
+
+
+def repair():
+    """One-off, re-runnable: de-duplicate the three journals in place and rewrite state.json from them.
+
+    Nine days of passes on an unreadable state.json appended a copy of every trade, signal and grade an
+    hour (BACKLOG 248/250). The duplicates carry no information, so dropping them loses nothing, and the
+    rebuilt cursor is what stops them coming back. Each file is kept as <name>.dup-<date>.bak until a
+    later session is satisfied; nothing is deleted here.
+    """
+    stamp = NOW.strftime('%Y%m%dT%H%M%SZ')
+    for path, key in ((TRADES, lambda r: r.get('key')),
+                      (SIGNALS, lambda r: (r.get('conditionId'), r.get('outcome'))),
+                      (GRADES, lambda r: (r.get('title'), r.get('kalshi_market'), r.get('ts')))):
+        if not os.path.exists(path):
+            continue
+        before = os.path.getsize(path)
+        tmp, seen, kept, rows = path + '.tmp', set(), 0, 0
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            for r in stream_jsonl(path):
+                rows += 1
+                k = key(r)
+                if k in seen:
+                    continue
+                seen.add(k)
+                kept += 1
+                fh.write(json.dumps(r, ensure_ascii=False) + '\n')
+        os.replace(path, f'{path}.dup-{stamp}.bak')
+        os.replace(tmp, path)
+        log(f'{os.path.basename(path)}: {rows} rows -> {kept} distinct, {before // 1048576} MB -> {os.path.getsize(path) // 1048576} MB')
+    if os.path.exists(STATE):
+        os.replace(STATE, f'{STATE}.corrupt-{stamp}.bak')
+    save_state(rebuild_state())
 
 
 def selftest():
@@ -553,7 +705,55 @@ def selftest():
     ok(resolved_winner({'outcomes': '["A", "B"]', 'outcomePrices': '["0.6", "0.4"]'})[1] == 'not-resolved', 'open market')
     ok(resolved_winner({'outcomes': '[]', 'outcomePrices': '[]'})[1] == 'not-resolved', 'empty market')
     ok(resolved_winner({'outcomes': 'not json', 'outcomePrices': None})[1] == 'bad-outcomes', 'garbage market')
-    print(f'selftest: {6 - len(fails)} passed, {len(fails)} failed' + (f' -> {fails}' if fails else ''))
+
+    # BACKLOG 248/250: the journals were duplicated for nine days, so nothing may be counted raw again.
+    dup = [{'title': 'A', 'kalshi_market': 'K1', 'ts': '2026-09-20T00:00:00', 'y': 1},
+           {'title': 'A', 'kalshi_market': 'K1', 'ts': '2026-09-20T00:00:00', 'y': 1},
+           {'title': 'A', 'kalshi_market': 'K2', 'ts': '2026-09-20T00:00:00', 'y': 0}]
+    ok(len(dedupe(dup, lambda x: (x['title'], x['kalshi_market'], x['ts']))) == 2, 'dedupe keeps one row per key')
+    ok(dedupe(dup, lambda x: (x['title'], x['kalshi_market'], x['ts']))[0] is dup[0], 'dedupe keeps the first row')
+    ok(len(dedupe([], lambda x: x)) == 0, 'dedupe of nothing')
+
+    # A duplicated row must not narrow the band: it is the same day and the same value, so it can only
+    # shrink an i.i.d. interval and cannot shrink a day-clustered one.
+    one = [{'ts': '2026-09-2%dT00:00:00' % d, 'v': v} for d, v in ((0, 0.10), (1, -0.05), (2, 0.02), (3, 0.08), (4, -0.01))]
+    m1, lo1, hi1, g1, n1 = bands.day_band95(one, lambda r: r['ts'][:10], lambda r: 100.0 * r['v'])
+    m2, lo2, hi2, g2, n2 = bands.day_band95(one + one, lambda r: r['ts'][:10], lambda r: 100.0 * r['v'])
+    ok(g1 == 5 and n1 == 5, 'five rows on five days cluster as five')
+    ok(abs(m1 - m2) < 1e-9 and abs(lo1 - lo2) < 1e-9 and abs(hi1 - hi2) < 1e-9, 'duplicating every row cannot move a day-clustered band')
+    ok(lo1 is not None and lo1 < m1 < hi1, 'the band brackets its mean')
+    ok(bands.day_band95(one[:1], lambda r: r['ts'][:10], lambda r: r['v'])[1] is None, 'one day-cluster has no band')
+    ok(bands.t975(4) == 2.776 and bands.t975(1000) == 1.960, 'the 95% quantile is Student t on G-1')
+
+    # 2026-09-21: the state write was truncate-in-place and a kill inside it cost nine days of duplication.
+    # save_state must leave no .tmp behind, and an interrupted write must leave the previous state intact.
+    global STATE
+    keep = STATE
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            STATE = os.path.join(d, 'state.json')
+            def state_now():
+                """Closed read: an open handle blocks the temp dir's cleanup on Windows, and a corrupt
+                file must report as a failed assertion rather than a traceback."""
+                try:
+                    with open(STATE, encoding='utf-8') as fh:
+                        return json.load(fh)
+                except Exception:  # noqa: BLE001
+                    return None
+
+            save_state({'graded': {'c:Yes': 'Yes'}})
+            ok(state_now() == {'graded': {'c:Yes': 'Yes'}}, 'save_state round-trips')
+            ok(not os.path.exists(STATE + '.tmp'), 'save_state leaves no temp file')
+            try:
+                save_state({'bad': {1, 2}})                      # a set is not JSON: the dump dies mid-write
+            except TypeError:
+                pass
+            ok(state_now() == {'graded': {'c:Yes': 'Yes'}}, 'a failed write leaves the old state readable')
+    finally:
+        STATE = keep
+    ok(GRADE_BUDGET_S < 41 * 60, 'the grade budget leaves room inside the 45-minute task limit')
+    total = 6 + 11
+    print(f'selftest: {total - len(fails)} passed, {len(fails)} failed' + (f' -> {fails}' if fails else ''))
     return 1 if fails else 0
 
 
@@ -564,11 +764,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'selftest':
         sys.exit(selftest())
     if len(sys.argv) > 1 and sys.argv[1] == 'grade':
-        state = load_json(STATE, {})
+        state = load_state()
         grade(state)
-        json.dump(state, open(STATE, 'w', encoding='utf-8'))
+        save_state(state)
         return
-    state = load_json(STATE, {})
+    if len(sys.argv) > 1 and sys.argv[1] == 'repair':
+        repair()
+        return
+    state = load_state()
     try:
         wallets = refresh_wallets(state)
         recent = poll_trades(wallets, state)
@@ -579,11 +782,14 @@ def main():
         detect(recent, state, kmatcher, umatcher)
     except Exception as e:  # noqa: BLE001
         log(f'pass failed: {e}')
+    # Saved before grading as well as after: grading is the long half, and if it is killed the trade and
+    # signal cursors must still survive or the next pass re-appends everything it already has.
+    save_state(state)
     try:
         grade(state)
     except Exception as e:  # noqa: BLE001
         log(f'grade failed: {e}')
-    json.dump(state, open(STATE, 'w', encoding='utf-8'))
+    save_state(state)
 
 
 if __name__ == '__main__':

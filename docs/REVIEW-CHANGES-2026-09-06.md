@@ -7334,3 +7334,105 @@ Venue-true over the 24 h: **Kalshi +$2.35** over 48 settlements after $1.23 of f
   -$16.83 over 270; its rules restarted 2026-09-29 11:10Z.
 
 Tests: review-fixes 671/0, adversarial 99/0, ladder 177/0; `npm test` 22/22.
+
+## §175 - 2026-09-30 11:30Z: nine days of a shadow copying itself, caused by one interrupted write and one swallowed exception
+
+The four reads due today were all performed and none of them moved a setting. Read 233 continues for a ninth day
+(+0.01c at the registered 6c floor, 80% [-0.53, +0.56], n=3679 over 9 days; the 2c and 4c floors stay wholly
+negative), so `leadLagFastLive` stays off. Read 1 declines veto mode for a fifth day. Read 235 **closed FAIL**,
+retired by the app itself through the terminal branch written yesterday, and the venue ledger agrees to four cents
+(mini:fade n=70, -$5.52). Read 72b/161 reached its **sample bar for the first time** — 443.06 new-coin contracts
+against 400, over 12 day-clusters — and returned **UNDECIDED**: +3.40c, 95% [-1.86, +8.67]. That matters more than
+another "not yet": the cohort is no longer short of evidence, it is genuinely undecided, and the registration's
+2026-10-04 default is to narrow back to BTC and ETH.
+
+### The build: the consensus shadow had been copying itself since 2026-09-21, and the cause was one write
+
+BACKLOG 248 (2026-09-24) and 250 (2026-09-25) both described the same symptom — `grades.jsonl` growing without
+adding information, "graded 477,809" then "646,265" then 1.51 million for about eleven thousand real rows — and
+both prescribed a repair without a cause. The cause is a single file.
+
+`data/polymarket-consensus/state.json` **does not parse**: `JSONDecodeError: Invalid control character at
+char 105,906,176` of 172 MB. The old `save_state` was `json.dump(state, open(STATE, 'w'))`, which truncates the
+file before it refills it, and the Windows task's `ExecutionTimeLimit PT45M` landed inside that write on
+2026-09-21T10:00Z. `load_json` catches every exception and returns its default, so from that instant every hourly
+pass was handed an **empty** state and all three cursors restarted from nothing:
+
+| cursor | consequence | visible as |
+|---|---|---|
+| `recent` empty | every trade in the 72 h API window counts as new | `12,9xx new trades` every hour, nine days |
+| `signaled` empty | the same conditionIds re-emit signals | 28,517 signal rows for 14,385 distinct |
+| `graded` empty | every settled signal is re-graded and re-appended | 1,511,157 grade rows for 11,073 distinct |
+
+And the reason it never healed is the other half of the same clamp. With `graded` empty there were thousands of
+signals to fetch at ~0.15 s plus a network call each, so **not one pass since 2026-09-21T14:00Z reached the final
+state write** — 213 hourly passes, not a single `graded N signals` line, and the 06:55Z pass still alive at 11:05Z,
+four hours into an hourly job. The cursor could not advance because the pass could not finish, and the pass could
+not finish because the cursor had not advanced. Neither half is a defect on its own; together they are a
+self-perpetuating one, which is why two sessions described it and neither could name it.
+
+**Fixed in four places** (`scripts/polymarket_consensus.py`): `save_state` writes a `.tmp` and `os.replace`s it, so
+a kill can never corrupt the file again; `load_state` refuses to accept an empty state silently and calls the new
+`rebuild_state()`, which reconstructs all three cursors **from the journals** — the journals are the record and the
+state file is only a cursor over them; grading takes a 20-minute wall-clock budget so the pass always reaches the
+save inside the 45-minute limit, because a bounded pass that saves beats a complete pass that is killed; and grade
+rows now carry `conditionId` so the graded index rebuilds exactly instead of by joining on `(ts, title, outcome)`.
+
+**The journals are de-duplicated by a re-runnable `repair` subcommand**, not by hand: trades 3,871,169 rows ->
+1,702,953 distinct (2,405 MB -> 1,048 MB), signals 28,517 -> 14,385, grades 1,511,157 -> **11,073** (482 MB ->
+3.7 MB). The de-duplicated grade count reproduces BACKLOG 248's independent hand count to 32 rows and its Brier to
+four decimals (0.1008), which is what confirms the key `(title, kalshi_market, ts)` is the right one. Note that
+**11,073 distinct rows are 9,904 distinct graded signals**: 1,169 rows are the same `(conditionId, outcome)`
+graded against both the old matcher's Kalshi market and the new one's, which is the voided class. The row key is
+right for the Kalshi leg and over-counts for the Polymarket leg; the grading cursor keys on the signal, which is
+why `rebuild_state` reports the smaller number. Two correct answers to two different questions.
+
+### The VOID split matters - and so does refusing to read a frozen cursor as if it were current
+
+`report` now prints distinct counts and day-clustered 95% bands (`bands.py` gains `t975`, `cluster_band95`,
+`day_band95`; the 80% path is untouched). **1,280 of the Kalshi-matched rows carry no `kalshi_side`**, which is
+exactly the class the 2026-09-19 matcher amendment declared VOID in as many words ("the app refuses rows without
+it"), so the registered post-matcher cohort gets its own line with the VOID count beside it.
+
+Read straight after the de-duplication, that cohort looked dead: **-2.76c, 95% [-5.51, -0.02], 156 rows, 3
+day-clusters**. **That figure is wrong to quote, and this session's own defect is why:** grading had been dead
+since 2026-09-21, so the grade set ended there and 3,422 eligible signals had never been looked at. The
+de-duplication fixed the double-counting and left the staleness, and the two look identical in a headline.
+
+The repaired grader then cleared the backlog in a single pass - `graded 3422 signals | skipped
+{'already-graded': 9904, 'budget-spent': 56, 'not-found': 995, 'not-resolved': 8}` at 11:41:10Z, **the first
+completed grade pass since 2026-09-21T14:00Z**, cursor advanced 9,904 -> 13,326, `budget-spent: 56` showing the new
+wall-clock budget engaging exactly as designed. On the full set:
+
+| cohort | n | day-clusters | mean | 95% |
+|---|---|---|---|---|
+| Kalshi ask net of fee, all rows | 1,984 | 23 | +4.53c | [+2.61, +6.45] |
+| **registered post-matcher cohort** | **704** | **12** | **+2.70c** | **[-0.81, +6.21]** |
+| Polymarket price, all graded | 14,493 | 23 | +0.60c | [-0.01, +1.20] |
+| Polymarket US price net of fee | 2,939 | 23 | +2.39c | [-0.27, +5.05] |
+
+The registered cohort is **positive, not negative**. The shadow's own trigger (">= 100 graded, net positive after
+fees at the price we could have acted on") is **met for the first time** at 704 graded and +2.70c; the
+registration's *promotion* bound - day-clustered 95% lower bound above zero - is **not** met at -0.81. **Nothing
+was changed.** The arm already exists on the ladder as `kalshi-consensus` and sits on an operator hold, which is
+his to lift, not the ladder's and not this session's.
+
+The lasting lesson is about the shape, not the script. **A cache that silently falls back to empty turns one
+interrupted write into an unbounded duplication, and the fallback is what hides it.** `load_json(path, {})` is the
+right helper for an optional catalogue and the wrong one for a cursor; the difference is that a cursor's default is
+not "nothing", it is "reconstruct me from the record". Grep for the pattern rather than wait for the next symptom:
+this is the same family as BACKLOG 249 and 257, where a subsystem stops without a signature.
+
+**Verified on the real path, not only in the selftest.** The repaired pass completed its grade step for the first
+time since 2026-09-21T14:00Z: `graded 3422 signals | skipped {'already-graded': 9904, 'budget-spent': 56,
+'not-found': 995, 'not-resolved': 8}` at 11:41:10Z. All three halves of the fix are in that one line - the rebuilt
+cursor honoured (`already-graded: 9904`), the wall-clock budget engaging instead of the task being killed
+(`budget-spent: 56`), and the cursor then advancing and saving: `state.json` parses, `graded` is 13,326 against
+9,904 before, no `.tmp` left behind. `selftest` 17/0, with the new block deliberately broken twice first — a no-op `dedupe` fails
+`dedupe keeps one row per key`, and the old truncate-in-place write fails `a failed write leaves the old state
+readable`. `npx tsc --noEmit` clean, `electron-vite build` clean, review-fixes **671/0**, ladder **177/0**,
+adversarial **99/0**. Nothing under `src/` was touched, so the app was deliberately **not** restarted. Backup
+`oracle-trader-MAINT-2026-09-30-20260930-071013.zip` (2,393 files, 1,362 MB) was taken before the repair. New
+BACKLOG 259 (delete the 2.9 GB of proven-duplicate `.bak` files after tomorrow confirms the fix) and 260
+(`state.json` is 112 MB because `recent` is now the journal's whole 72 h union — the correct set, and the first
+pass may emit a burst of signals it previously could not see).
