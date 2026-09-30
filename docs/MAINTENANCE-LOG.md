@@ -6495,7 +6495,7 @@ loader silently returned an empty cursor.** Fixing it also overturned the number
 | today's nightly review | **present**, `reviews\2026-09-30.md` at 02:27 local, model `openai/gpt-5.6-sol` |
 | `OracleTrader-HrrrShadow` | ran **06:20** local, `forecasts.jsonl` written 06:20 |
 | `OracleTrader-MetaculusShadow` | ran **06:35** local |
-| `OracleTrader-PolyConsensus` | ran hourly; **stopped and restarted by this session** for the repair below |
+| `OracleTrader-PolyConsensus` | ran hourly. **Its in-flight pass was stopped by this session** (it had been running 4 h 10 min of an hourly job) so the journals could be repaired; the task was left `Ready` on its own schedule rather than started by hand, and its next run is 11:55Z. `lastTaskResult 267014` is the stopped-by-request code, not a failure. |
 | `OracleTrader-MentionShadow` | **Disabled, correctly** — read 12/68b FAILed 2026-09-25 and its registration's action is to close the line and disable the task. Not to be re-enabled on a freshness signal. |
 | `OracleTrader-SportsBooks`, `-SpotShadow` | **Disabled**, each by its own registered read |
 | sentinel | `status.json` at **11:20:03Z**, task Ready, **0 repair sessions** of the 3 allowed, disk 839 GB free, Ollama up, IB Gateway **up** |
