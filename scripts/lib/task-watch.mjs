@@ -16,7 +16,14 @@ export const DEFAULT_STALE_MS = 130 * MIN
 /** [key, repo-relative file whose mtime is the liveness signal, Windows task name, staleMs?] */
 export const TASK_WATCH = [
   ['hrrr-stale', 'data/hrrr-shadow/forecasts.jsonl', 'OracleTrader-HrrrShadow'],
-  ['metaculus-stale', 'data/metaculus-shadow/last-mc.json', 'OracleTrader-MetaculusShadow'],
+  // Retired 2026-10-01 (section 176, BACKLOG 256), task disabled:
+  //   OracleTrader-MetaculusShadow - build-queue item 10's trigger (>= 100 graded pairs beating the Kalshi
+  //     mid after fees) is unreachable on its matcher, not merely unmet. It pairs on title tokens, which
+  //     cannot see the resolution DATE or the resolution THRESHOLD, and those are what decide whether two
+  //     questions are the same claim. Measured by scripts/backtests/metaculus_matcher_read.mjs: of 696 open
+  //     binary Metaculus questions, 27 resolve inside 90 days and 4 of those clear the event-match bar,
+  //     three being vote-percent ladders paired to a "will X win" question. 13 distinct pairs in 24 days,
+  //     earliest resolving 2026-11-04. A horizon filter cannot fix a claim-identity problem.
   // Retired 2026-09-23 (section 163), their tasks disabled: the spot-first recorder after its FAIL (section 157), and the
   // consensus shadow after the arm's hard stop (section 152) - its state file had been torn since the 09-21 power loss.
   // Retired 2026-09-25 (section 169), their tasks disabled by their own registered reads, NOT by a freshness signal:
@@ -26,7 +33,8 @@ export const TASK_WATCH = [
   //   OracleTrader-SportsBooks - read 163 found nothing: the post-final Kalshi book is at 1c/99c wherever
   //     Polymarket's is, and the wide cases are the stale in-play book read 234 already retired. Its note said to
   //     disable the recorder unless the read found something.
-  // Neither is stale and neither is a bug. Do not re-enable either on a freshness or "a strategy is off" signal.
+  // None of these is stale and none is a bug. Do not re-enable any of them on a freshness or "a strategy
+  // is off" signal; each was closed by a dated read and only a new read can re-open it.
 ]
 
 /**

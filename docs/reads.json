@@ -4,12 +4,12 @@
   {
    "id": "233",
    "owner": "app",
-   "due": "2026-10-01",
+   "due": "2026-10-02",
    "what": "Lead-lag at event speed",
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-09-30: CONTINUE, ninth day, and both instruments still straddle zero. App read 00:23:27Z: +0.13c/contract, 80% [-0.45, 0.71], n=3422 over 9 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: +0.01c, 80% [-0.53, +0.56], n=3679 over 9 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch. Speed as registered: 9,368 gaps at the 6c floor over 181.2 h (51.7/hour), median life 0.8 s, p90 5.3 s, 88% gone inside 5 s. The 2c and 4c floors stay clearly negative (-1.43c and -1.00c, both bands wholly below zero), which is the 6c floor doing its job. Ninth day running: the speed is real and the edge is not. Reads daily to 2026-10-03."
+   "note": "2026-10-01: CONTINUE, tenth day, and both instruments agree the band still spans zero - and both moved DOWN, not up. In-app fastLeadLagRead (registered-reads.json, lastEvalDay 2026-10-01): -0.16c/contract, 80% [-0.73, 0.41], n=3965 over 10 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: -0.32c, 80% [-0.91, +0.27], n=4140 over 10 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch, for the tenth consecutive day. The point estimate has drifted +0.13c -> -0.16c (app) and +0.01c -> -0.32c (grader) in one day on ~500 new decisions, so the trend is away from PASS, not toward it. Speed as registered: 10,684 gaps at the 6c floor over 205.2 h (52.1/hour), median life 0.5 s, p90 5.0 s, 89% gone inside 5 s - unchanged, the speed is real and the edge is not. The 2c and 4c floors are -1.39c 80% [-1.63, -1.14] (n=8962) and -0.88c [-1.14, -0.62] (n=6282), both wholly below zero, which is the 6c floor earning its place. One reading left: the registration's final date is 2026-10-03, and a still-open result there leaves leadLagFastLive off for good."
   },
   {
    "id": "234",
@@ -55,12 +55,12 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-10-01",
+   "due": "2026-10-02",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-09-30 (fresh 11:01Z dump): the sample bar is MET for the first time and the verdict is UNDECIDED, so neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 458 settlements, 845.11 contracts. New coins 443.06 of the required 400 (up from 389.04) over 12 day-clusters, so both gates are open: +3.40c, 95% [-1.86, +8.67] - the lower bound is below zero and the upper above it, which is the registration's 'neither' branch, keep collecting and re-read daily. Established BTC/ETH +9.56c [-0.74, +19.86]; pooled +6.33c [-0.87, +13.54]. Per coin: BTC +14.57c (n=112, [+6.24, +22.90], still the only one clear of zero), HYPE +12.61c (58), XRP +4.33c (60), SOL +2.71c (60), BNB +2.56c (69), ZEC -1.25c (7), ETH -3.09c (69), DOGE -16.10c (23). Four days to the 2026-10-04 final, after which the registration narrows back to BTC, ETH by default."
+   "note": "2026-10-01 (fresh 11:00Z dump): the sample bar is MET for the second day and the verdict is UNDECIDED again, so neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 510 settlements, 980.11 contracts. New coins 524.06 of the required 400 (up from 443.06) over 13 day-clusters: +3.55c, 95% [-1.94, +9.03] - the lower bound below zero and the upper above it, the registration's explicit 'neither' branch. Established BTC/ETH +7.47c [-3.31, +18.25]; pooled +5.37c [-1.18, +11.92]. Per coin: BTC +13.93c (n=120, [+5.93, +21.92], still the ONLY coin clear of zero), HYPE +11.98c (63), BNB +4.95c (85), SOL +1.87c (65), XRP +1.73c (63), ZEC -1.25c (7), ETH -5.45c (81), DOGE -12.89c (26). Worth stating because it decides the default: in two days at the bar the new-coin interval has moved +3.40c -> +3.55c and its lower bound -1.86c -> -1.94c, i.e. 81 more contracts bought no narrowing at all. Three days to the 2026-10-04 final, after which the registration narrows leadLagCoins back to BTC, ETH by default - and on this evidence that is the likely outcome."
   },
   {
    "id": "146b",
@@ -195,12 +195,12 @@
   },
   {
    "id": "191",
-   "due": "2026-10-01",
+   "due": "2026-10-08",
    "what": "IBKR fade gate",
    "how": "ibkr-lab status gateBlockers",
    "rule": "lab gate: 15 sampled losses or 250 closes",
    "action": "if it qualifies -> backlog 110",
-   "note": "2026-09-26: the gate is NOT reached and the arm has turned over. fade is 21/30 closed (19W/2L, 17 events, 7 day-clusters), realised -$1.18, lower bound -0.32c, liveEligible false, blockers '21/30 closed | 2/15 losses sampled | lower bound -0.32c'. On 09-20 it was +4.20c/contract over 10 trades with a band of [+2.89, +5.51]; eleven more trades took it to a negative realised total and a lower bound below zero. Against the control, as the read required: benchmark has 4 closed on 1 day over 3 events, -$0.77, so its own n cannot anchor anything and the benchmark-relative column (BACKLOG 181/199) is still not computable - reported against zero only, and said so. Read again at 30 closed, ~2/day from 21."
+   "note": "2026-10-01: the gate is NOT reached and the reason changed - fade's current-rule cohort is EMPTY, not short. IBKR_RULES_SINCE moved from 2026-09-17T07:31:43Z to 2026-09-29T11:10:00Z on 09-29 (section 173(b): every weather arm now prices off weatherForecast.forecastSigma, so the cohort had to reset), and status() counts only trades with openedAt >= that stamp. So fade reads 0/30 closed, 0/10 events, 0/3 day-clusters, 0/15 losses sampled, lower bound unavailable - against 21/30 closed and -0.32c on 09-26. Not a defect and not a regression: the whole lab has 10 closed trades in the current cohort (spot-first 7, convergence 2, settle-control 1) because the hold-to-settlement arms' 82 open positions have not settled yet; fade holds 12, of which 2 were opened after the reset, earliest expiry 2026-10-01 and latest 2026-11-06. The lab itself is healthy: 28,623 scans, lastScanAt 11:07:10Z, lastError empty. Measured with the new scripts/ibkr-lab-gate.ts, which replays ibkrLab.ts:95-137 on ibkr-lab.json read-only and imports every threshold from source rather than copying it - written today because this registration says 'ibkr-lab status gateBlockers' and no such CLI existed. Daily re-reading at 0 closed is noise: next read 2026-10-08, by which time the November election contracts are still open but the daily weather and crypto arms will have rebuilt a cohort."
   },
   {
    "id": "2",
@@ -330,12 +330,12 @@
   },
   {
    "id": "1",
-   "due": "2026-10-01",
+   "due": "2026-10-02",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-09-30: trigger MET, action DECLINED, and the script's own verdict line agrees for the fifth day. critic-skill.py on the 11:01Z dump: 2,595 decisions; VETO -0.039/contract (n=315) against the rest at +0.035, so amended conditions (i) and (ii) pass; skilled in 1 of 2 strategies present in both cohorts among currently enabled arms, so (iii) fails. Last line: 'KEEP veto mode OFF - veto -0.039 vs rest +0.035; skilled in 1 of 2 shared enabled strategies'. intelligenceMode stays 'shadow', intelligenceEnabled stays true."
+   "note": "2026-10-01: trigger MET, action DECLINED for the sixth day, and the script's own verdict line agrees. critic-skill.py on the 11:00Z dump: VETO -0.040/contract (n=318) against the rest at +0.033, so amended conditions (i) and (ii) pass; condition (iii) fails at 'skilled in 0 of 1 shared enabled strategies'. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.033; skilled in 0 of 1 shared enabled strategies'. Note WHY the denominator fell from 2 to 1: the ladder stopped kalshi-fade at 2026-09-30T19:23:24Z, so mean-reversion is now the only enabled arm present in both cohorts - and on it the critic is anti-skilled (VETO +0.144/contract over 11 against ABSTAIN +0.029 over 46), i.e. it vetoed the winners. intelligenceMode stays 'shadow', intelligenceEnabled stays true. The 200-settled 'disable it' clause is still not reached: skill is composition-dependent, not absent."
   },
   {
    "id": "65b/80c",
@@ -357,12 +357,12 @@
   },
   {
    "id": "110",
-   "due": "2026-10-01",
+   "due": "2026-10-08",
    "what": "First live IBKR order",
    "how": "ibkr-lab status gateBlockers (the first arm with none)",
    "rule": "backlog 110",
    "action": "push the operator: adding an arm to liveStrategies is his",
-   "note": "2026-09-26: NOTHING QUALIFIES, and the operator is not asked. The read is 'the first arm with no gateBlockers'; across all 22 reachable lab arms every one has at least one blocker, the closest being fade at 21/30 closed and settle-control, which is a control and never promoted. The lab stays paper with liveStrategies: []. Re-read with 191 when fade reaches 30 closed."
+   "note": "2026-10-01: NOTHING QUALIFIES, and the operator is not asked. Measured with the new read-only scripts/ibkr-lab-gate.ts: across all 22 reachable ForecastEx arms every one has at least one gateBlocker, and after the 2026-09-29 cohort reset (IBKR_RULES_SINCE -> 2026-09-29T11:10:00Z, section 173) the closest is no longer fade at 21/30 but spot-first at 7/30 closed with a lower bound of -75.30c on 2 day-clusters. The lab stays paper with liveStrategies: []. Read again with 191 on 2026-10-08; nothing here can change before a hold-to-settlement arm books closes under the new rules."
   },
   {
    "id": "10",

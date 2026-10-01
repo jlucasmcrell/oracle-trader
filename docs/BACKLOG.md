@@ -526,7 +526,16 @@ the report section. One item per day unless trivial. Record the trigger check in
    band; it must clear the taker fee (1.47c per contract at 70c) before it goes on the ladder at micro size.
    Build when nothing above is triggered.
 9. **SportsGameOdds role.** No trigger; when convenient, cut the poll to lifecycle-only or remove it.
-10. **Metaculus community forecast as a shadow anchor** - **BUILT 2026-09-07**, awaiting the token: hourly task
+10. **Metaculus community forecast as a shadow anchor** - **RETIRED 2026-10-01 (BACKLOG 256, section 176).**
+    The trigger below (100+ resolved pairs) is unreachable on this matcher, not merely unmet: 24 days produced
+    13 distinct pairs and 0 grades, and of 696 open binary Metaculus questions only 27 resolve inside 90 days
+    with 4 clearing the event-match bar - three of those being vote-percent ladders paired to a "will X win"
+    question. A title-token score cannot see a resolution DATE or a resolution THRESHOLD, which is what decides
+    whether two questions are the same bet, so a horizon filter cannot fix it. Task disabled, out of
+    `scripts/lib/task-watch.mjs` (a test keeps it out), `report()` now prints the distinct count, evidence
+    reproducible via `node scripts/backtests/metaculus_matcher_read.mjs`. The item leaves the queue; only a new
+    pre-registration with a claim-identity matcher re-opens it. History below.
+10a. (history) **BUILT 2026-09-07**, awaiting the token: hourly task
     `OracleTrader-MetaculusShadow` runs `scripts/metaculus-shadow.cjs` (matches open binary Metaculus questions to
     open non-sports Kalshi markets by title tokens and resolution date, stores pairs in data/metaculus-shadow/,
     grades at settlement; `report` mode prints Brier vs the Kalshi mid). It idles until the operator pastes his token in
@@ -3101,7 +3110,28 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   disabled also print the fair-value count the live line carries, since "fair-value on 0 of M" is half of the
   registered silence check and is invisible while the arm is off. Log-only; no behaviour. Trigger: any day
   `quoter.ts` is touched.
-- **256. Build-queue 10's trigger is UNREACHABLE, not merely unmet: the Metaculus shadow has ten pairs, and the
+- **256. DONE 2026-10-01 (section 176): build-queue item 10 is RETIRED, on the measurement rather than on a
+  shrug - and the horizon turned out to be the symptom, not the cause.** Option (b) was measured offline against
+  the last run's own artefacts by the new `scripts/backtests/metaculus_matcher_read.mjs`, which reproduces the
+  shipped matcher token for token: of **696** open binary Metaculus questions only **27 resolve inside 90 days**
+  and only **4 of those clear the event-match bar** - and three of the four are vote-percent or
+  margin-of-victory LADDERS (`At least 52%`, `Karen Bass, >=10%`) paired to a "will X win" question, which is
+  not the same claim. The matcher drops them today only by accident (its market-selection step needs one strike
+  to share strictly more rare tokens than the runner-up, and every strike in a ladder has the identical
+  subtitle). The same fault is already in the stored pairs: hantavirus paired twice (once to an **H5 virus**
+  question), EU **member** by 2030 scored **1.00** against EU **associate member** in 2026, 6.5+ magnitude
+  before 2030 against 8.0+ before 2035, and "recognize **Taiwan**" against "recognize **Reza Pahlavi**". **A
+  title-token score cannot see a date or a threshold, and those are what decide whether two questions are the
+  same bet**, so no horizon filter could have reached it. Option (a) is discharged too, and the count was lying
+  by more than 256 said: 236 rows are **13** distinct pairs, re-appended once per UTC DAY (not hourly) because
+  `collect()` scopes its dedupe to `today`. Done: task `OracleTrader-MetaculusShadow` disabled; the
+  `metaculus-stale` row removed from `scripts/lib/task-watch.mjs` with a test asserting it stays out (the
+  liveness file stops being written the moment the task is disabled, which that table reads as *died*, so the
+  row would have failed a revive every 15 minutes for ever); `report()` now prints the distinct count and the
+  earliest resolution so 256's instruction is enforced by code rather than by memory; and the retirement is
+  written into `docs/MAINTENANCE-PROMPT.md` §11, which is what tomorrow's runner reads. Data kept. Only a new
+  pre-registration with a claim-identity matcher re-opens the line.
+- **256. (history) Build-queue 10's trigger is UNREACHABLE, not merely unmet: the Metaculus shadow has ten pairs, and the
   earliest resolves 2026-11-04 (2026-09-28, section 172).** `data/metaculus-shadow/pairs.jsonl` has **199 rows and
   exactly 10 distinct `(mcId, ticker)` pairs** - the hourly task re-appends the same matches, the same shape as
   BACKLOG 248's duplication, so "189 pairs on file" on 09-27 and "199" today are both really *ten*. `0 graded` is
@@ -3406,7 +3436,17 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
 
 ### New
 
-- **259. The de-duplication backups are 2.9 GB of proven duplicates and should not become permanent
+- **259. DONE 2026-10-01 (section 176): both conditions held, so 2,907 MB was deleted - after checking the
+  files were in today's backup rather than asserting it.** The hourly pass is writing a fresh cursor (ten
+  consecutive completed grade passes 01:00Z-11:00Z, `already-graded` 13,915 -> 14,161, new trades per pass down
+  from ~12,900 to 2,139-2,850) and `report` reads **15,338** distinct graded, well past the 11,073 bar. All
+  three `.dup-...bak` files were confirmed present inside
+  `oracle-trader-MAINT-2026-10-01-20261001-071450.zip` by listing its entries, then deleted: trades 2,406 MB,
+  grades 483 MB, signals 18 MB. `state.json.corrupt-20260930T111318Z.bak` (172 MB) is **kept to 2026-10-07** as
+  directed - it is the only physical evidence of the truncate-in-place failure mode. Not optional housekeeping:
+  today's backup came in at **1,610 MB against 1,362 MB yesterday** because 3 GB of proven duplicates was being
+  re-archived every day.
+- **259. (history) The de-duplication backups are 2.9 GB of proven duplicates and should not become permanent
   (2026-09-30, section 175).** `repair` kept `trades.jsonl.dup-20260930T111318Z.bak` (2,405 MB),
   `grades.jsonl.dup-...bak` (482 MB), `signals.jsonl.dup-...bak` (17 MB) and
   `state.json.corrupt-20260930T111318Z.bak` (172 MB) rather than deleting anything on the day of the change. They
@@ -3466,8 +3506,56 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
   cost exactly nothing, which is the whole problem. Trigger: **any day; it is one of tomorrow's two candidates
   with 256.**
 
+- **262. A fault that ramps up slowly is invisible to the sentinel, because its own first window marks it
+  "seen" (2026-10-01, section 176).** `scripts/sentinel.mjs:479-489` raises a `repair` finding only when
+  `isNew` (`!prev || now - prev.last > 24 h`) **and** `rec.count >= 3` in the tick's window - but
+  `state.seen[sig]` is written for **every** signature on **every** tick, *before* the count gate. The
+  Polymarket US 503 storm began 2026-10-01T10:17Z; the 10:20Z tick saw **2** occurrences, one short of the bar,
+  and still stamped the signature as seen. From 10:35Z `prev.last` was 15 minutes old, so `isNew` was false for
+  the next 24 h, and the only escalation left is the `grown` branch, which needs `count >= 20` in a 15-minute
+  window against an actual rate of ~15. **47 occurrences produced no finding at all**, while the identical
+  fault on 2026-09-24 - which happened to put 37 lines into its first window - raised an incident within one
+  tick. Proven from `data/sentinel/state.json`: the 09-24 row reads `first 2026-09-24T10:35:02Z count 48
+  lastWindow 6`, today's reads `first 2026-10-01T10:20:02Z count 47 lastWindow 15` - and they are **two
+  signatures for one fault**, because the venue's JSON whitespace changed (`{"code":N, "message":...}` ->
+  `{"code":N,"message":...}`) and `normalize()` collapses whitespace runs but not the comma-space that forks
+  them. Two small independent fixes: stamp `state.seen` only for signatures that clear the count gate (or keep
+  a `firstSeenAt` the count gate cannot touch), and have `normalize()` strip whitespace after punctuation. Not
+  fixed today because no Polymarket US arm is armed, so the blindness is costing nothing - which is exactly the
+  condition under which to fix it. Trigger: **any day; it is tomorrow's leading candidate.**
+- **263. `venue-pnl.py` raises on a venue dump that is honest about being unavailable (2026-10-01, section
+  176).** Today's Polymarket US dump is well-formed and carries `balances_error`, `positions_error` and
+  `open_error` (all 503) plus two complete activity feeds; `scripts/venue-pnl.py:213` does not recognise that
+  shape and raises `ValueError: Unrecognized account export` **after** printing the Kalshi side. So the daily
+  report's headline command half-fails whenever a venue is down, and today's Polymarket US figure (0
+  resolutions; newest resolution anywhere 2026-09-29T06:22Z, newest trade 2026-09-29T00:18Z) had to be
+  reconstructed by hand from the activity feed. Fix: treat a dump carrying `*_error` keys as
+  recognised-but-unavailable, print `venue unavailable: <error>` and `0 resolutions` from the activity feed,
+  and exit 0. Trigger: **any day**; it costs nothing until it makes the one command this report is built on
+  unreliable exactly when the report most needs to be careful.
+
 ### Build-queue trigger checks — every item, as the rule requires
 
+**2026-10-01.**
+- **1 critic skill** — MET daily, declined for the sixth day; the denominator fell to 1 shared enabled arm
+  because the ladder stopped `kalshi-fade` last night, and on that one arm the critic is anti-skilled.
+- **2 WebSocket book** — built 2026-09-28, holding; BACKLOG 254's own trigger is **2026-10-05**, not met.
+- **3 HRRR** — done; the shadow keeps favouring HRRR (648 station-days, MAE 1.94 vs 2.18, closer 346/284).
+- **4 / 5 quoter items** — NOT met: ALLOWED cohort 67 settled proxy fills over **37** events against 30/40;
+  the event count is still the binding half and has not moved in three days.
+- **6 sports anchor on Polymarket US** — NOT met (anchor disabled on an operator hold, -5.67c).
+- **7 player props** — NOT met (anchor notch 1).
+- **8c market-maker rest patterns** — NOT met but **closest it has been**: `kalshi-mean-reversion` 37 settled,
+  +$4.50, checkpoint at 40. Three settlements away, so this is the likely next trigger.
+- **9 SportsGameOdds role** — no trigger; still the next untriggered build.
+- **10 Metaculus** — **RETIRED today (256, section 176)**; it leaves the queue.
+- **11 forecaster v2** — weekly, next read **2026-10-05**.
+- **12 mention base rates** — closed; task disabled by its own FAIL.
+- **13 consensus arm** — shadow trigger **met** on the registered cohort (758 graded, +2.81c) and the
+  registration's **promotion** bound still **not** met (day-clustered 95% lower bound -0.52c), for the second
+  day. The arm stays on its operator hold; nothing changed.
+
+**2026-09-30.**
 - **1 critic skill** — MET daily, declined by the amended rule for the fifth day (above).
 - **2 WebSocket book** — MET and built 2026-09-28; the promotion is holding. Open half is **BACKLOG 254**, whose
   own trigger is *seven days of the promotion being live* = **2026-10-05**; not met, deliberately, so the served

@@ -14,6 +14,16 @@
 // 300 questions, the page does not), store the pair (community p, Kalshi mid), and
 // grade pairs whose Kalshi market has settled. The ladder never sees this until a
 // report shows the community forecast beating the price on 100+ resolved pairs.
+//
+// RETIRED 2026-10-01 (build-queue item 10, BACKLOG 256, REVIEW-CHANGES section 176). The hourly task
+// OracleTrader-MetaculusShadow is disabled and the sentinel no longer watches it. The reason is the
+// matcher, not the token and not the grader: it pairs on title tokens, which cannot see the two things
+// that decide whether two questions are the same claim - the resolution DATE and the resolution
+// THRESHOLD. Measured by scripts/backtests/metaculus_matcher_read.mjs on the 2026-10-01 06:35Z
+// artefacts: of 696 open binary Metaculus questions only 27 resolve inside 90 days and only 4 of those
+// clear the event-match bar, three of which are vote-percent ladders ("at least 52%") paired to a
+// "will X win" question - not the same claim. 100 graded pairs is therefore unreachable, which is why
+// the item is closed rather than widened. Kept runnable, read-only, for the record.
 const { app, safeStorage } = require('electron')
 const { execFile } = require('child_process')
 const fs = require('fs')
@@ -299,11 +309,23 @@ async function grade() {
 }
 
 function report() {
+  // BACKLOG 256: "pairs on file: N" counted one row per pair per UTC day, so it climbed from 189 to 236
+  // over three weeks while the real figure never left thirteen, and three sessions read the climb as
+  // progress. The distinct count and the earliest resolution date are what the trigger is about, so
+  // they are printed together or not at all.
+  const pairs = readRows(PAIRS)
+  const distinct = new Set(pairs.map((r) => `${r.mcId}|${r.ticker}`))
+  const soonest = pairs
+    .map((r) => r.mcResolveAt)
+    .filter((x) => Number.isFinite(x))
+    .sort((a, b) => a - b)[0]
+  const census = `${distinct.size} distinct pair(s) over ${pairs.length} row(s); earliest resolution ${soonest ? new Date(soonest).toISOString().slice(0, 10) : 'unknown'}`
   const g = readRows(GRADES)
   if (g.length === 0) {
-    console.log('no graded pairs yet; pairs on file: ' + readRows(PAIRS).length)
+    console.log(`no graded pairs yet; ${census} (item 10 RETIRED 2026-10-01, BACKLOG 256)`)
     return
   }
+  console.log(census)
   const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length
   const closer = g.filter((r) => r.brierMc < r.brierMid).length
   console.log(`Metaculus community vs Kalshi mid on ${g.length} resolved pairs: Brier ${mean(g.map((r) => r.brierMc)).toFixed(4)} vs ${mean(g.map((r) => r.brierMid)).toFixed(4)} (lower is better); community closer on ${closer}`)

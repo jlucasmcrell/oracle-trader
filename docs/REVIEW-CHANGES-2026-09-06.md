@@ -7436,3 +7436,168 @@ adversarial **99/0**. Nothing under `src/` was touched, so the app was deliberat
 BACKLOG 259 (delete the 2.9 GB of proven-duplicate `.bak` files after tomorrow confirms the fix) and 260
 (`state.json` is 112 MB because `recent` is now the journal's whole 72 h union — the correct set, and the first
 pass may emit a burst of signals it previously could not see).
+
+## §176 - 2026-10-01 11:50Z: a shadow retired on a measurement, and two instruments that did not exist
+
+**Nothing under `src/` changed today, so the app was not restarted.** Everything below is scripts, tests, docs
+and one Windows task. `npx tsc --noEmit` clean, `electron-vite build` clean, review-fixes **671/0**, ladder
+**177/0**, adversarial **99/0**, `scripts/tests/task-watch.test.mjs` passes. Backup
+`oracle-trader-MAINT-2026-10-01-20261001-071450.zip` (1,610 MB).
+
+### (a) Build-queue item 10 (the Metaculus shadow) is retired, and the reason is claim identity
+
+BACKLOG 256 called the item's trigger "UNREACHABLE, not merely unmet" on 2026-09-28, listed three options and
+took none, and set its trigger as "any day; **before item 10 is described as 'awaiting grades' once more**".
+This morning's report printed `no graded pairs yet; pairs on file: 236`, so it fired by its own terms.
+
+**The count was lying by a larger factor than 256 thought.** `data/metaculus-shadow/pairs.jsonl` holds **236
+rows and 13 distinct `(mcId, ticker)` pairs**. `collect()` scopes its dedupe to the current UTC day
+(`readRows(PAIRS).filter(r => r.at.slice(0,10) === today)`), so every pair is re-appended once a day for ever:
+189 on 09-27, 199 on 09-28, 236 today, thirteen throughout. 256 guessed the re-append was hourly; it is daily,
+which is precisely why the number grew slowly enough to read as progress to three sessions in a row.
+
+**256's option (b) is now measured rather than proposed.** New read-only, offline instrument
+`scripts/backtests/metaculus_matcher_read.mjs` replays the shipped matcher over the last run's own artefacts
+(`last-mc.json`, `last-kalshi.json`), reproducing the stop-list, `tokens()`, the inverse-document-frequency
+weighting and the `score >= 0.85 || (score >= 0.6 && shared >= 3)` bar token for token, so the answer is about
+the rule that runs and not a paraphrase of it:
+
+| horizon | open binary Metaculus questions | clearing the event-match bar |
+|---|---|---|
+| within 30 days | 5 | **0** |
+| within 90 days | 27 | **4** |
+| within 180 days | 164 | 13 |
+| any (696 in the listing) | 696 | 29 |
+
+**And three of the four near-dated matches are not the same claim.** "Will Karen Bass be reelected Mayor of Los
+Angeles" matches the margin-of-victory ladder (`Karen Bass, >=10%` ... `>=2%`); "Will Mary Peltola win the 2026
+US Senate election in Alaska" the vote-percent ladder (`At least 58%` ... `At least 48%`); Vivek Ramaswamy /
+Ohio likewise. The matcher drops all three today, but **by accident**: its market-selection step needs one
+strike to share strictly more rare tokens than the runner-up, and every strike in a ladder carries the identical
+subtitle, so the tie saves it. One extra token on one strike and a "will X win" question is paired to "X polls
+at least 52%". The fourth, Lisa Cook, pairs "cease to be a member of the Federal Reserve Board of Governors"
+with "**Will Trump try to fire** Lisa Cook again" - adjacent, not identical.
+
+**The same fault is already in the stored pairs, in both directions.** The hantavirus event is paired twice,
+once correctly and once to "Will the WHO declare an **H5 virus** a PHEIC before 2028"; "Will Ukraine become a
+**member** of the EU by the end of 2030" scores **1.00** against "Will Ukraine become an EU **associate member**
+in 2026"; "6.5+ magnitude earthquake before 2030" against "at least 8.0 magnitude ... before 2035"; and "Will
+the US recognize **Taiwan**" against "Will the US recognize **Reza Pahlavi** as the leader of Iran", on the
+shared tokens `recognize`/`united`/`states`. **A title-token score cannot see a date or a threshold, and those
+are the two things that decide whether two questions are the same bet.** The horizon was the symptom; claim
+identity is the cause, and a horizon filter cannot reach it.
+
+So the registered trigger - 100 graded pairs beating the Kalshi mid after fees - is unreachable: 24 days of
+collection have produced 13 distinct pairs, 0 graded, earliest resolving 2026-11-04, and the question supply a
+*perfect* matcher could reach is single digits a year. The line closes on a dated verdict, the way reads 12/68b
+and 163 closed theirs, not on a freshness signal. Five things, all verified:
+
+1. **`OracleTrader-MetaculusShadow` disabled** (confirmed by `Get-ScheduledTask`).
+2. **`scripts/lib/task-watch.mjs`**: the `metaculus-stale` row is removed, with the measurement in a comment at
+   the point of removal. Mechanically load-bearing: the liveness file stops being written the instant the task is
+   disabled, which is exactly the shape that table reads as *died*, so the row would have produced a failed
+   revive every fifteen minutes for ever. **`scripts/tests/task-watch.test.mjs`** now asserts the key stays out,
+   beside the two rows retired on 2026-09-25.
+3. **`scripts/metaculus-shadow.cjs` `report()`** prints `13 distinct pair(s) over 236 row(s); earliest resolution
+   2026-11-04 (item 10 RETIRED 2026-10-01, BACKLOG 256)`, and prints the same census above the graded figures if
+   grades ever appear. The distinct count and the earliest resolution are what the trigger is about, so they are
+   printed together or not at all - 256's instruction ("do not report N pairs on file as progress again without
+   the distinct count beside it") is now enforced by the code rather than by a reader remembering it.
+4. **The evidence is a re-runnable script, not a paragraph** (the matcher read above). Re-run it on a later pair
+   of artefacts before anyone re-opens the item.
+5. **`docs/MAINTENANCE-PROMPT.md` §11** - the headless runner's own source of truth - records the retirement,
+   says the task must not be re-enabled on a freshness signal or on the standing "nothing stays off without a
+   ladder verdict" rule, and names the one thing that re-opens the line: a new pre-registration with a
+   claim-identity matcher. Without this edit tomorrow's session would have filed a liveness failure against a
+   task this one deliberately stopped.
+
+The collected data is kept.
+
+### (b) `scripts/ibkr-lab-gate.ts`: the reads said "ibkr-lab status gateBlockers" and no such CLI existed
+
+Registered reads **191** (the IBKR fade gate) and **110** (first live IBKR order) both name
+`ibkr-lab status gateBlockers` as their instrument. There is no such command: `gateBlockers` and `liveEligible`
+are computed only inside `IbkrLab.status()` (`src/main/strategies/ibkrLab.ts:95-137`), which needs a live engine
+and a live venue. Previous sessions reached the figures by other means; today they are a script.
+
+`npx tsx scripts/ibkr-lab-gate.ts [--json]` reads `%APPDATA%/oracle-trader/ibkr-lab.json` and replays that
+arithmetic. The design decision worth recording: it **imports every threshold and arm list from the source of
+record** - `IBKR_MIN_LOSSES`, `IBKR_LOSS_WAIVER_TRADES`, `IBKR_RULES_SINCE`, `IBKR_STRATEGIES`,
+`IBKR_UNAVAILABLE`, `IBKR_RETIRED`, `ibkrHoldsToSettlement` - rather than copying them, so the only thing that
+can drift from the app is the twelve lines of contract-weighted, day-clustered arithmetic, and the header states
+the two fields it deliberately does not compute (`unrealized`/`unpriced`, which need live quotes and a slippage
+constant, and which no gate reads) so the tool cannot be mistaken for the panel. Type-checked against the
+project's own compiler options, which found one real error: `IBKR_UNAVAILABLE`'s ids are a disjoint union from
+`IBKR_STRATEGIES`', so the row `id` has to be widened to `string`.
+
+**What it found is the day's second reportable fact.** `IBKR_RULES_SINCE` moved from `2026-09-17T07:31:43Z` to
+**`2026-09-29T11:10:00Z`** two days ago (§173(b): every weather arm now prices off
+`weatherForecast.forecastSigma`, so the cohort had to reset). `status()` counts only trades with `openedAt` at
+or after that stamp, so the whole lab has **10 closed trades** in the current cohort - spot-first 7,
+convergence 2, settle-control 1 - while **82 positions are open and unsettled**. fade therefore reads
+**0/30 closed, 0/10 events, 0/3 day-clusters, 0/15 losses sampled, lower bound unavailable**, against 21/30 and
+-0.32c on 09-26. Not a regression and not a defect: fade holds 12 positions, two opened after the reset,
+earliest expiry 2026-10-01 and latest 2026-11-06, and the lab is scanning normally (28,623 scans, `lastScanAt`
+11:07:10Z, `lastError` empty). Read 191 does not qualify, read 110 finds no arm with zero blockers - the closest
+is now **spot-first at 7/30 closed, lower bound -75.30c** - the operator is not asked, and both reads move to
+**2026-10-08** rather than re-reading a zero every morning.
+
+**The general lesson, because this is the fifth registration in two weeks whose named source could not answer it
+as written:** when a registration names a command, run the command *when the registration is written*, not when
+it comes due. Four of the five (147b's file, 198's statistic, 149's parameters, 202's log line) were caught at
+read time; this one is now a script so it cannot recur for 191 and 110.
+
+### (c) BACKLOG 259 discharged: 2.9 GB of proven duplicates deleted, after checking they were in the backup
+
+259 set its trigger as "2026-10-01, after the day's first consensus report" with two conditions. Both hold:
+ten consecutive hourly passes completed their grade step (`graded 21/14/26/50/25/47/31/24/8/10 signals` from
+01:00Z to 11:00Z, against 213 passes that reached it zero times before yesterday's fix), `already-graded`
+advances monotonically **13,915 -> 14,161**, `new trades` per pass fell from ~12,900 to **2,139-2,850**, and
+`report` reads **15,338 distinct graded**. Checked rather than asserted before deleting: all three files are
+inside today's backup zip, verified by listing its entries. Deleted
+`trades.jsonl.dup-20260930T111318Z.bak` (2,406 MB), `grades.jsonl.dup-...bak` (483 MB),
+`signals.jsonl.dup-...bak` (18 MB) - **2,907 MB reclaimed**. `state.json.corrupt-20260930T111318Z.bak` (172 MB)
+is kept to **2026-10-07** as 259 directs: it is the only physical evidence of the truncate-in-place failure
+mode. The reason this was not optional housekeeping: today's backup is **1,610 MB against 1,362 MB yesterday**,
+because 3 GB of proven duplicates was being re-archived daily.
+
+### (d) Two defects found and filed with their proof rather than fixed (one behavioural change a run)
+
+**262. A fault that ramps up slowly is invisible to the sentinel.** `scripts/sentinel.mjs:479-489` raises a
+`repair` finding only when `isNew` (`!prev || now - prev.last > 24 h`) **and** `rec.count >= 3` in the tick's
+window - but `state.seen[sig]` is written for **every** signature on **every** tick, *before* the count gate.
+The Polymarket US 503 storm began 2026-10-01T10:17Z; the 10:20Z tick saw **2** occurrences, one short of the
+bar, and still stamped the signature as seen. From 10:35Z `prev.last` was fifteen minutes old, so `isNew` was
+false for the next 24 h, and the only escalation left is the `grown` branch, which needs `count >= 20` in a
+15-minute window against an actual rate of ~15. **47 occurrences produced no finding at all**, while the
+identical fault on 2026-09-24 - which happened to put 37 lines into its first window - raised an incident within
+one tick. Proven from `data/sentinel/state.json`: the 09-24 row reads `first 2026-09-24T10:35:02Z count 48
+lastWindow 6`, today's reads `first 2026-10-01T10:20:02Z count 47 lastWindow 15`, and they are **two separate
+signatures for one fault** because the venue's JSON whitespace changed (`{"code":N, "message":...}` ->
+`{"code":N,"message":...}`) and `normalize()` collapses whitespace runs but not the comma-space that forks them.
+Two small independent fixes: stamp `state.seen` only for signatures that clear the count gate (or keep a
+`firstSeenAt` the count gate cannot touch), and have `normalize()` strip whitespace after punctuation so a
+vendor's formatting change cannot fork a signature. Not fixed today because no Polymarket US arm is armed, so
+the blindness is currently costing nothing - which is exactly the condition under which it should be fixed.
+
+**263. `venue-pnl.py` raises on a venue dump that is honest about being unavailable.** Today's Polymarket US
+dump is well-formed and carries `balances_error`, `positions_error` and `open_error` (all 503) plus two complete
+activity feeds; `scripts/venue-pnl.py:213` does not recognise that shape and raises
+`ValueError: Unrecognized account export` **after** printing the Kalshi side. So the daily report's headline
+command half-fails whenever a venue is down, and today's Polymarket US figure (0 resolutions; newest resolution
+anywhere 2026-09-29T06:22Z, newest trade 2026-09-29T00:18Z) had to be reconstructed by hand from the activity
+feed. Fix: treat a dump carrying `*_error` keys as recognised-but-unavailable, print `venue unavailable: <error>`
+and `0 resolutions` from the activity feed, and exit 0.
+
+### (e) A latched string that reads like an outage, for the second time in two weeks
+
+A log scan flagged `[leadlag] poly ws: ... last error Unexpected server response: 504` as a brand-new signature
+- first occurrence anywhere in 62 MB at 2026-10-01T09:24:26Z, a hundred repetitions, still on the newest line -
+on the socket feed the one live money-making arm reads. **It is not an outage.** `last error` is a latch:
+the state word on the same lines reads `connected` on **101 of the last 114** minute-lines (11.4% down against
+**6.9%** over the preceding nine hours), `reconnects` has been **frozen at 210** for half an hour while the
+string persisted, `books` and `changes` keep climbing (153,605 and 186,952,810 at 11:16Z), and the arm's own
+output is inside its range - the 10:00Z hour averaged **5.40 live CLOB books** of 8 pairs and found 3
+dislocations against a 2.33-6.80 band over the previous 34 hours. Same family as BACKLOG 2's `wsStats.lastError`
+(§172), and the same rule applies: **read the writer before treating a field named `lastError` as evidence of a
+fault.** Recorded, not filed.

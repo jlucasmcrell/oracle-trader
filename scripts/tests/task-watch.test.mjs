@@ -40,6 +40,12 @@ const keys = TASK_WATCH.map((r) => r[0])
 assert.equal(new Set(keys).size, keys.length, 'watch keys must be unique - state.revived is keyed by them')
 // Retired recorders are not watched: their tasks are disabled, and a revive would fail every three hours.
 assert.ok(!keys.includes('spot-shadow-stale') && !keys.includes('polyconsensus-stale'), 'retired recorders stay out of the watch list')
+// Metaculus joined them on 2026-10-01 (BACKLOG 256): build-queue item 10's trigger is unreachable on its
+// title-token matcher, so the hourly task is disabled. The sentinel must not revive it on a freshness
+// signal - last-mc.json stops being written the moment the task is disabled, which is exactly the shape
+// this watch list reads as "died". Named here so re-adding the row fails a test rather than a quiet $0 of
+// scheduler churn every fifteen minutes.
+assert.ok(!keys.includes('metaculus-stale'), 'the retired Metaculus shadow stays out of the watch list (BACKLOG 256)')
 
 for (const [key, file, task, staleMs] of TASK_WATCH) {
   assert.match(key, /-stale$/)
