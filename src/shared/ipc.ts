@@ -48,7 +48,7 @@ export interface PortfolioSnapshot {
 
 
 
-export type AutoStrategyId = 'momentum' | 'volume-spike' | 'book-imbalance' | 'cross-venue' | 'news' | 'dutch' | 'fade' | 'settlement' | 'sports-anchor' | 'flow-follow' | 'mean-reversion' | 'weather-morning' | 'consensus'
+export type AutoStrategyId = 'momentum' | 'volume-spike' | 'book-imbalance' | 'cross-venue' | 'news' | 'dutch' | 'fade' | 'settlement' | 'sports-anchor' | 'flow-follow' | 'mean-reversion' | 'weather-morning' | 'consensus' | 'rest-pattern'
 
 export interface AutoTraderConfig {
   enabled: boolean
@@ -92,6 +92,14 @@ export interface AutoTraderConfig {
   meanReversionMinEntryPrice?: number
   /** Ceiling on hours to close for mean reversion; 0 disables. The arm holds to settlement, so this is how long a slot stays occupied. */
   meanReversionMaxHoursToClose?: number
+  // ---- market-maker rest patterns (build-queue 8c, docs/PREREGISTERED-rest-pattern.md) ----
+  restPatternEnabled?: boolean
+  /** Multiple of its own baseline a side's resting depth must reach. */
+  restPatternMinMultiple?: number
+  /** Dollars the grown side must rest; a doubled $2 wall is noise. */
+  restPatternMinSideDepthDollars?: number
+  /** Minutes of depth history the baseline median is taken over. */
+  restPatternWindowMinutes?: number
   // ---- time-of-day: the morning forecast update on overnight weather brackets ----
   weatherMorningEnabled: boolean
   /** Station-local hour the window opens (the morning model run has landed by then). */

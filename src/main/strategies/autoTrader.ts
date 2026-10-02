@@ -31,6 +31,7 @@ import { fetchNews } from './news'
 import { SportsAnchor, defaultSportsShadow, isSportsMarket, type SportsShadowStats } from './sportsAnchor'
 import { SportsGameOddsAnchor } from './sportsGameOdds'
 import { FLOW_DEFAULTS, FlowMonitor, flowVerdict } from './flowMonitor'
+import { DepthHistory, REST_DEFAULTS, restVerdict, type RestRule } from './restPattern'
 import { computeCandidate, midOf, momentumCandidatesActive, recordMomentumCandidates, type MomentumCandidateRow } from './momentumCandidates'
 import { LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT } from './leadLag'
 import { ConsensusFeed, CONSENSUS_NOT_WINNER, CONSENSUS_RULE, consensusAgeHours, consensusRefusal, type ConsensusRule } from './consensus'
@@ -87,6 +88,15 @@ const DEFAULT_CONFIG: AutoTraderConfig = {
   meanReversionMinHoursToClose: 6,
   meanReversionMinEntryPrice: 0.35,
   meanReversionMaxHoursToClose: 24,
+  // ---- market-maker rest patterns (build-queue 8c, pre-registered
+  // docs/PREREGISTERED-rest-pattern.md). The 2026-09-08 move audit priced a
+  // maker resting on the reverting side at +3.6 to +5.3c "at last price"; this
+  // arm takes the seat that figure describes by joining the side whose resting
+  // depth just doubled. Off until the ladder arms it.
+  restPatternEnabled: false,
+  restPatternMinMultiple: 2,
+  restPatternMinSideDepthDollars: 25,
+  restPatternWindowMinutes: 20,
   // ---- time-of-day effect: the morning forecast update (pre-registered
   // 2026-09-08, docs/PREREGISTERED-weather-morning.md). Daily temperature
   // brackets are listed the evening before and trade overnight against the
@@ -283,7 +293,10 @@ const DEFAULT_CONFIG: AutoTraderConfig = {
   // (GWU 2026 on Kalshi's own data: makers -9.6% vs takers -31.5% after
   // fees). Momentum, settlement, dutch, lead-lag and convergence stay takers
   // by design (transient gaps, certainties, multi-leg baskets).
-  makerStrategies: ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor', 'flow-follow']
+  // 'rest-pattern' is a maker by construction: the hypothesis is the resting
+  // seat the move audit priced, and crossing the spread to join a maker would
+  // pay the taker fee to buy exactly what that maker is resting for.
+  makerStrategies: ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor', 'flow-follow', 'rest-pattern']
 }
 
 /** Calibration buckets for hold-to-settle win probabilities (cluster near 1). */
@@ -358,6 +371,7 @@ export function holdsToSettlement(strategy: string, cfg: { fadeExitEnabled?: boo
     strategy === 'mean-reversion' ||
     strategy === 'weather-morning' ||
     strategy === 'consensus' ||
+    strategy === 'rest-pattern' ||
     (strategy === 'fade' && !cfg.fadeExitEnabled)
   )
 }
@@ -735,6 +749,8 @@ export class AutoTrader {
   /** Latest sharp-anchor observation per Kalshi market (from the shadow polls). */
   private lastAnchorObs = new Map<string, import('./sportsAnchor').AnchorObservation>()
   private flowMonitor = new FlowMonitor()
+  /** Resting depth per market across scans, for the rest-pattern arm (build-queue 8c). */
+  private restDepth = new DepthHistory()
   /** Per-market churn record (in memory): entries today and the last exit time. */
   private churn = new Map<string, { day: string; entries: number; lastExitAt: number }>()
 
@@ -753,7 +769,8 @@ export class AutoTrader {
       'sports-anchor': 'sportsAnchorLiveEnabled',
       'flow-follow': 'flowFollowEnabled',
       'weather-morning': 'weatherMorningEnabled',
-      consensus: 'consensusEnabled'
+      consensus: 'consensusEnabled',
+      'rest-pattern': 'restPatternEnabled'
     }
     const key = flag[strategy]
     return key === undefined ? true : Boolean(this.config[key] ?? true)
@@ -1430,7 +1447,7 @@ export class AutoTrader {
         // then score, and book-imbalance capped at a third of the budget. Before
         // this, ~30 book-imbalance signals per scan took the first `budget`
         // slots in generation order and every fade/momentum signal was 'deferred'.
-        const prio = (sig: AutoSignal): number => ({ dutch: 0, settlement: 1, fade: 2, 'sports-anchor': 2, 'weather-morning': 2, 'flow-follow': 3, news: 3, 'cross-venue': 4, momentum: 5, 'mean-reversion': 5, 'volume-spike': 6, 'book-imbalance': 7 } as Record<string, number>)[sig.strategy] ?? 8
+        const prio = (sig: AutoSignal): number => ({ dutch: 0, settlement: 1, fade: 2, 'sports-anchor': 2, 'weather-morning': 2, 'flow-follow': 3, news: 3, 'cross-venue': 4, momentum: 5, 'mean-reversion': 5, 'volume-spike': 6, 'rest-pattern': 6, 'book-imbalance': 7 } as Record<string, number>)[sig.strategy] ?? 8
         approved.sort((a, b) => prio(a) - prio(b) || b.score - a.score)
         const bookCap = Math.max(1, Math.ceil(budget / 3))
         const toVet: AutoSignal[] = []
@@ -1913,6 +1930,9 @@ export class AutoTrader {
     // Observation only, and before the enabled check: every momentum candidate window, under the flat bar
     // or over it, so the population a log-odds bar would admit is measured before it is traded (§76).
     this.recordMomentumCandidates(calm, data)
+    // Same discipline for resting depth: recorded every scan, read only when the arm is armed.
+    this.recordRestDepth(calm, data)
+    if (this.config.restPatternEnabled) out.push(...this.restPatternSignals(calm, data))
     if (this.config.momentumEnabled) out.push(...this.momentumSignals(calm, data))
     if (this.config.meanReversionEnabled) {
       // Momentum and mean reversion read the same move in opposite
@@ -2472,6 +2492,63 @@ export class AutoTrader {
         volWindow: round2(volWindow),
         trades: inWindow.length
       }))
+    }
+    return out
+  }
+
+  /** The rest-pattern rule as configured (one place, so the signal and the test read the same numbers). */
+  private restRule(): RestRule {
+    return {
+      ...REST_DEFAULTS,
+      minMultiple: this.config.restPatternMinMultiple ?? REST_DEFAULTS.minMultiple,
+      minSideDepthDollars: this.config.restPatternMinSideDepthDollars ?? REST_DEFAULTS.minSideDepthDollars,
+      windowMs: (this.config.restPatternWindowMinutes ?? 20) * 60_000,
+      // The horizon band is mean-reversion's, for the same reason: in-play books churn and a
+      // near-settled book is pinned. It follows that config rather than carrying a second copy.
+      minHoursToClose: this.config.meanReversionMinHoursToClose,
+      maxHoursToClose: this.config.meanReversionMaxHoursToClose ?? REST_DEFAULTS.maxHoursToClose
+    }
+  }
+
+  /**
+   * Record every scanned market's resting depth, armed or not. The flag gates
+   * the signal; the observation is unconditional, so the history is already
+   * there the moment the ladder switches the arm on.
+   */
+  private recordRestDepth(markets: VenueMarket[], data: ScanData): void {
+    const at = Date.now()
+    for (const m of markets) {
+      const book = data.books.get(m.id)
+      if (!book) continue
+      this.restDepth.record(m.id, {
+        at,
+        bidDepth: DepthHistory.depthOf(book.bids),
+        askDepth: DepthHistory.depthOf(book.asks)
+      })
+    }
+  }
+
+  private restPatternSignals(markets: VenueMarket[], data: ScanData): AutoSignal[] {
+    const out: AutoSignal[] = []
+    const now = Date.now()
+    const rule = this.restRule()
+    for (const m of markets) {
+      if (!data.books.get(m.id)) continue
+      const hoursToClose = m.closeTime ? (m.closeTime - now) / 3600_000 : 0
+      const v = restVerdict(this.restDepth.get(m.id), now, hoursToClose, m.probability ?? 0, rule)
+      if (!v) continue
+      const score = Math.min(100, Math.round(50 + (v.multiple / rule.minMultiple) * 25))
+      const confidence = Math.min(1, v.multiple / (2 * rule.minMultiple))
+      out.push(
+        this.makeSignal(m, 'rest-pattern', v.direction, score, confidence, {
+          side: v.side,
+          multiple: round2(v.multiple),
+          baselineDepth: round2(v.baselineDepth),
+          depth: round2(v.depth),
+          samples: v.samples,
+          hoursToClose: round2(hoursToClose)
+        })
+      )
     }
     return out
   }
@@ -3252,6 +3329,13 @@ export class AutoTrader {
     // and so the maker path, which has no place to record the Polymarket
     // source market, stays unreachable for it.
     if (strategy === 'consensus') return false
+    // rest-pattern is maker-only by pre-registration for the same reason, and
+    // enforced here for a second one: an existing install's `makerStrategies`
+    // is PERSISTED, so a new entry in the defaults above never reaches it (the
+    // live config on 2026-10-02 still held the pre-flow-follow list). Leaving
+    // this arm to that list would have made it a taker on its first fill,
+    // against the document that defines it. See BACKLOG 264.
+    if (strategy === 'rest-pattern') return true
     if (strategy === 'fade') return this.config.fadeEntryMode === 'maker'
     return (this.config.makerStrategies ?? ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor', 'flow-follow']).includes(strategy)
   }

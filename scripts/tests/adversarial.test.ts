@@ -459,8 +459,9 @@ async function main(): Promise<void> {
     await ladder.run()
     // The count is a drift alarm: a new arm must arrive with its GENERIC_STRATEGIES entry,
     // its config flag and this number, or it is not on the ladder at all.
-    // 20 since 2026-09-14 (kalshi-consensus, build-queue item 13); 21 since 2026-09-22 (polyus-lag, section 160).
-    eq('G: all twenty-one strategies are tracked', ladder.status().strategies.length, 21)
+    // 20 since 2026-09-14 (kalshi-consensus, build-queue item 13); 21 since 2026-09-22 (polyus-lag, section 160);
+    // 22 since 2026-10-02 (kalshi-rest-pattern, build-queue item 8c, section 177).
+    eq('G: all twenty-two strategies are tracked', ladder.status().strategies.length, 22)
     eq('G: the Polymarket US lag arm is one of them', ladder.status().strategies.some((s) => s.id === 'polyus-lag'), true)
     eq('G: the consensus arm is one of them', ladder.status().strategies.some((s) => s.id === 'kalshi-consensus'), true)
     // park the four core strategies so the signal strategies get the promotions

@@ -7601,3 +7601,76 @@ output is inside its range - the 10:00Z hour averaged **5.40 live CLOB books** o
 dislocations against a 2.33-6.80 band over the previous 34 hours. Same family as BACKLOG 2's `wsStats.lastError`
 (§172), and the same rule applies: **read the writer before treating a field named `lastError` as evidence of a
 fault.** Recorded, not filed.
+
+## §177 - 2026-10-02 11:30Z: the twenty-second arm, and the list that would have made its registration a lie
+
+Build-queue item **8(c)** was triggered by `kalshi-mean-reversion` reaching its 40-settled checkpoint positive
+(**42 settled, +$4.75, +8.85c/contract, 80% [+2.79, +14.90]**), which is the gating condition item 8c has carried
+since 2026-09-08: *"build (c) only if MR v3 shows fills and a positive checkpoint."* Both halves held, so the arm
+was built: **`kalshi-rest-pattern`**, pre-registered in `docs/PREREGISTERED-rest-pattern.md` before a single order,
+promoted to tiny-live by the ladder itself at **11:14:40Z** ("trade-small mode: real-money micro test 1 (stop -$5)").
+
+### (a) What it is
+
+`src/main/strategies/restPattern.ts` - a pure `restVerdict` plus a bounded `DepthHistory`, in the shape of
+`flowMonitor.ts` (verdict pure and unit-tested, caller owns the data). One depth sample per market per scan, dollars
+at the top three levels of each side, the same measure `bookSignals` uses so the two book arms cannot disagree about
+what depth means. The baseline is the **median** of the prior samples in a 20-minute window - a median and not the
+previous sample, so one scan that caught a book mid-refresh cannot manufacture a doubling on its own. Fire when one
+side (and only one) reaches 2x its own baseline with at least $25 resting; join the grown side (doubled bid -> YES,
+doubled ask -> NO); maker rest, hold to settlement, micro size, 6-24 h to close, 15-85c.
+
+The refusals are the arm, so each is an assertion: both sides doubling (liquidity arriving, no direction), a zero
+baseline (a new book, not a maker adding to a seat), a doubled $2 wall, the horizon band, the price band, and a
+current sample older than the window. 24 assertions in `review-fixes.test.ts`.
+
+Recording is **unconditional** - `recordRestDepth` runs before the flag is read, so the history is already there
+the moment the ladder arms the arm. That is backlog 64's lesson in code: evidence that only begins accruing when an
+arm is armed cannot answer the question that armed it.
+
+### (b) The defect found while wiring it: `makerStrategies` in the defaults is dead for every existing install
+
+The registration fixes this arm as a **maker** - the +3.6c-to-+5.3c the 2026-09-08 move audit priced is a resting
+seat, and crossing the spread to join a maker pays the taker fee to buy what that maker is resting for. The obvious
+wiring is to add `'rest-pattern'` to `DEFAULTS.makerStrategies`. **That would have had no effect on the running
+app.** `makerEntryFor` reads `this.config.makerStrategies ?? [...]`, and the live config has the key **persisted**,
+so the `??` branch is unreachable; the persisted value on this machine today is
+`['fade','book-imbalance','volume-spike','news','cross-venue','sports-anchor']` - the list as it stood before
+`flow-follow` was added to the defaults. The arm would have entered as a taker on its first fill, against the
+document that defines it, and nothing would have said so.
+
+Fixed the way `consensus` already is: enforced in code (`if (strategy === 'rest-pattern') return true`), with the
+reason written at the call site, and asserted against a deliberately stale persisted list in the test. The general
+case is filed as **BACKLOG 264**, and it has a second victim that is not fixed today: mean-reversion's own v3
+addendum (2026-09-08) says its entry is a maker rest "(`makerStrategies` now includes `mean-reversion`)", and the
+live config says otherwise - so **the arm whose positive checkpoint triggered today's build has been trading the
+taker seat its registration says it is not**. That is an evidence-integrity finding, not a bug to patch in the same
+run: switching it to maker mid-cohort would void the 42 settled trades at the exact moment they became useful, and
+one behavioural change a run is the rule. It is 264's first question.
+
+### (c) Read 147b is the Metaculus shape, measured
+
+`leadlag_endgame_read.py` on today's dump: the registered source holds **82** endgame contracts-equivalent against
+a bar of 100, where it held 53 on 09-25. Measured today, the reason it will not get there: that file is written only
+inside the dislocation branch and only when the gap clears the fee, so with the floor at 6c it has gained **17**
+raw-sub-6c rows in fourteen days - the read cannot be answered by its own source **while the rule it is testing is
+in force**. Meanwhile the corroboration source, which can see the orderbook era, clears the bar twice over and
+answers it decisively the other way: endgame **-15.07c, 95% [-21.65, -8.50], n=220** over 11 clusters. Filed as
+**BACKLOG 265** with one decision for the 10-16 read: retire it, or re-register it on the source that can see it.
+This is §176's lesson arriving on a second item in two days - *when a backlog item says "do not report X again
+without Y beside it", put Y in the code* - and the count the next reader needs is now in the script's own output.
+
+### (d) The other four reads, and the one clause that did not fire
+
+**233** CONTINUE for the eleventh and last open day; the app ran it itself at 00:23:28Z (-0.30c, 80% [-0.84,
++0.23], n=4375) and the maintenance grader agrees on fresher rows (-0.28c, n=4560). The mean has now been negative
+three days running, so a still-open read tomorrow leaves `leadLagFastLive` off, which is what the registration says.
+Standing clause reported regardless: 51.3 gaps/hour at 6c, median 0.5 s, p90 5.0 s - seconds, so co-location is
+still not the answer. **72b/161** UNDECIDED a third day: new coins +3.95c 95% [-0.67, +8.57] over 588 contracts and
+14 clusters, the lower bound 0.67c from clearing; BTC is the only coin whose own band excludes zero (+14.69c
+[+7.56, +21.82]); default narrowing on 10-04 stands. **146b** INCONCLUSIVE, and the clause that mattered is the one
+that did **not** fire: "starved at 2026-10-02 -> report to the operator" does not apply, because the cohort is
+**1,099 contracts over 15 clusters** against a bar of 60 over 5 - well fed and merely undecided (+5.45c,
+[-0.19c, +11.09c]), which needs nothing from the operator. Five times the 09-23 sample for a third of the width, so
+it is converging; next read a week out, since the band moves on clusters. **1** DECLINED a seventh day on condition
+(iii), the denominator still a single shared enabled arm.

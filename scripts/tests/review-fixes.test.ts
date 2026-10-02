@@ -6,13 +6,14 @@ import { bracketState, inBlackout, inBlackoutLocal, printFills, stationLocalHour
 import { bracketFairValue, forecastSigma, HRRR_MIN_FORWARD_HOURS, normalCdf, parseOpenMeteoHourly, parseUsTempSlug, quoteAroundFair, remainingExtremes } from '../../src/main/strategies/weatherForecast'
 import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, observationConsistent, pacedBudget, parseLineMarket, pollPlan, ruleOutcome, sportFor, SPORTS_SERIES, SportsAnchor, subjectTeam, teamCodes, tickerDateMatches } from '../../src/main/strategies/sportsAnchor'
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
+import { DepthHistory, REST_DEFAULTS, restVerdict, type DepthSample } from '../../src/main/strategies/restPattern'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
 import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type LeadLagFill, type RegisteredRead, weekdayReadStats, weekdayReadVerdict } from '../../src/main/ladder/registeredReads'
 import { etDay } from '../../src/main/util/etDay'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
-import { shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
+import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
 import { KalshiWsClient, WS_BOOK_MAX_AGE_MS, WS_PROMOTION_BAR, WS_PROMOTION_DAYS, wsBookPromoted, type WsDayAgreement, type WsStats } from '../../src/main/venues/kalshiWs'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter, resolvedLongPrice } from '../../src/main/venues/polymarketUs'
@@ -992,6 +993,7 @@ await appendTests()
 await legFailCountTests()
 consensusTests()
 wsBookPromotionTests()
+restPatternTests()
 console.log(`review-fixes: ${pass} passed, ${fail} failed`)
   if (fail > 0) process.exit(1)
 })
@@ -1965,4 +1967,64 @@ function wsBookPromotionTests(): void {
   eq('ws serve: a tripped guard serves nothing', client.serveFresh(books2, NOW), 0)
   eq('ws serve: a tripped guard leaves the REST book in place', books2.get('FRESH')?.bids[0]?.price, 0.4)
   eq('ws serve: the reason is recorded in words', (c.stats.promotion ?? '').startsWith('guard tripped'), true)
+}
+
+// ---- market-maker rest patterns (build-queue 8c, 2026-10-02) ----
+// Pre-registration: docs/PREREGISTERED-rest-pattern.md. The verdict is pure; the
+// refusals are the arm, so each one is asserted rather than described.
+function restPatternTests(): void {
+  const T = 1_790_000_000_000
+  const H = 12 // hours to close, inside the band
+  const P = 0.5 // price, inside the band
+  // Four samples: three baseline at $20 a side, then the bid doubles.
+  const grow = (bids: number[], asks: number[]): DepthSample[] =>
+    bids.map((b, i) => ({ at: T - (bids.length - 1 - i) * 60_000, bidDepth: b, askDepth: asks[i] }))
+
+  const bidDoubled = grow([20, 20, 20, 60], [20, 20, 20, 20])
+  eq('rest: a doubled bid joins YES', restVerdict(bidDoubled, T, H, P)?.direction, 'YES')
+  eq('rest: the grown side is named', restVerdict(bidDoubled, T, H, P)?.side, 'bid')
+  eq('rest: the multiple is depth over its own baseline', restVerdict(bidDoubled, T, H, P)?.multiple, 3)
+  eq('rest: the baseline is the median of the prior samples', restVerdict(bidDoubled, T, H, P)?.baselineDepth, 20)
+  eq('rest: only the prior samples are the baseline', restVerdict(bidDoubled, T, H, P)?.samples, 3)
+
+  const askDoubled = grow([20, 20, 20, 20], [20, 20, 20, 60])
+  eq('rest: a doubled ask joins NO', restVerdict(askDoubled, T, H, P)?.direction, 'NO')
+
+  // Refusals.
+  eq('rest: both sides doubling has no direction', restVerdict(grow([20, 20, 20, 60], [20, 20, 20, 60]), T, H, P), null)
+  eq('rest: no doubling is no signal', restVerdict(grow([20, 20, 20, 25], [20, 20, 20, 20]), T, H, P), null)
+  eq('rest: too few baseline samples', restVerdict(grow([20, 20, 60], [20, 20, 20]), T, H, P), null)
+  eq('rest: a doubled but tiny wall is noise', restVerdict(grow([5, 5, 5, 20], [5, 5, 5, 5]), T, H, P), null)
+  eq('rest: an empty baseline cannot be doubled', restVerdict(grow([0, 0, 0, 60], [20, 20, 20, 20]), T, H, P), null)
+  eq('rest: in-play horizon refused', restVerdict(bidDoubled, T, 1, P), null)
+  eq('rest: a horizon past the ceiling is refused', restVerdict(bidDoubled, T, 48, P), null)
+  eq('rest: a price in the settle pin is refused', restVerdict(bidDoubled, T, H, 0.97), null)
+  eq('rest: a price below the band is refused', restVerdict(bidDoubled, T, H, 0.05), null)
+  // One scan catching a mid-refresh book must not manufacture a doubling: the median of
+  // {20, 20, 60} is 20, so a single high prior sample does not lift the baseline.
+  eq('rest: the median ignores one outlier prior sample', restVerdict(grow([20, 60, 20, 60], [20, 20, 20, 20]), T, H, P)?.multiple, 3)
+  // A stale current sample is not the current book.
+  const stale: DepthSample[] = grow([20, 20, 20, 60], [20, 20, 20, 20]).map((s) => ({ ...s, at: s.at - REST_DEFAULTS.windowMs - 1 }))
+  eq('rest: a current sample older than the window is refused', restVerdict(stale, T, H, P), null)
+
+  // Depth history: dollars at the top three levels, oldest samples dropped.
+  eq('rest: depth is price x size over the top three levels',
+    DepthHistory.depthOf([{ price: 0.5, size: 10 }, { price: 0.49, size: 10 }, { price: 0.48, size: 10 }, { price: 0.47, size: 1000 }]), 14.7)
+  const hist = new DepthHistory()
+  hist.record('M', { at: T - REST_DEFAULTS.windowMs - 1, bidDepth: 1, askDepth: 1 })
+  hist.record('M', { at: T, bidDepth: 2, askDepth: 2 })
+  eq('rest: samples older than the window are dropped', hist.get('M').length, 1)
+  eq('rest: the surviving sample is the newest', hist.get('M')[0]?.bidDepth, 2)
+
+  // The arm is on the ladder, as a Kalshi arm behind its own flag.
+  const spec = GENERIC_STRATEGIES.find((g) => g.id === 'kalshi-rest-pattern')
+  eq('rest: the arm is registered on the ladder', [spec?.venue, spec?.key, spec?.flag], ['kalshi', 'rest-pattern', 'restPatternEnabled'])
+  eq('rest: the arm holds to settlement', holdsToSettlement('rest-pattern', {}), true)
+
+  // The maker seat is the registration, so it cannot depend on a PERSISTED makerStrategies
+  // list that predates the arm - which is exactly the live config's state (BACKLOG 264).
+  const makerEntryFor = (AutoTrader.prototype as unknown as { makerEntryFor: (s: string) => boolean }).makerEntryFor
+  const staleCfg = { config: { makerStrategies: ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor'] } }
+  eq('rest: the maker seat survives a stale persisted list', makerEntryFor.call(staleCfg, 'rest-pattern'), true)
+  eq('rest: a stale list still leaves other arms as it found them', makerEntryFor.call(staleCfg, 'mean-reversion'), false)
 }

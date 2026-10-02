@@ -65,6 +65,7 @@ export type GenericStrategyId =
   | 'kalshi-flow-follow'
   | 'kalshi-mean-reversion'
   | 'kalshi-weather-morning'
+  | 'kalshi-rest-pattern'
   | 'polyus-fade'
   | 'polyus-book-imbalance'
   | 'polyus-weather-fair'
@@ -145,6 +146,11 @@ export const GENERIC_STRATEGIES: GenericSpec[] = [
   { id: 'kalshi-consensus', venue: 'kalshi', key: 'consensus', flag: 'consensusEnabled' },
   { id: 'kalshi-flow-follow', venue: 'kalshi', key: 'flow-follow', flag: 'flowFollowEnabled' },
   { id: 'kalshi-mean-reversion', venue: 'kalshi', key: 'mean-reversion', flag: 'meanReversionEnabled' },
+  // Market-maker rest patterns, build-queue 8c, pre-registered 2026-10-02
+  // (docs/PREREGISTERED-rest-pattern.md). Micro size; the ladder's tiny-live
+  // stop is the first stop and the doc adds a -$6 hard money stop and a
+  // 2026-11-02 no-flow deadline.
+  { id: 'kalshi-rest-pattern', venue: 'kalshi', key: 'rest-pattern', flag: 'restPatternEnabled' },
   { id: 'kalshi-weather-morning', venue: 'kalshi', key: 'weather-morning', flag: 'weatherMorningEnabled' },
   { id: 'polyus-fade', venue: 'polymarket-us', key: 'fade', flag: 'fadeEnabled' },
   { id: 'polyus-book-imbalance', venue: 'polymarket-us', key: 'book-imbalance', flag: 'bookEnabled' },

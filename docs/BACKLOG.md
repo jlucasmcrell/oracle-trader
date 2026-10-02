@@ -3534,7 +3534,85 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
   and exit 0. Trigger: **any day**; it costs nothing until it makes the one command this report is built on
   unreliable exactly when the report most needs to be careful.
 
+- **264. `DEFAULTS.makerStrategies` is dead code for every existing install, and it has already made one
+  registration untrue (2026-10-02, section 177).** `makerEntryFor` (`autoTrader.ts`) reads
+  `this.config.makerStrategies ?? ['fade','book-imbalance','volume-spike','news','cross-venue','sports-anchor','flow-follow']`,
+  and the live config has the key **persisted**, so the `??` default is unreachable. The persisted value today is
+  `['fade','book-imbalance','volume-spike','news','cross-venue','sports-anchor']` — the list as it stood before
+  `flow-follow` was ever added to the defaults. Two consequences, one handled and one open. **Handled:** today's new
+  `rest-pattern` arm is maker-only by pre-registration and would have entered as a **taker** on its first fill;
+  it is now enforced in code the way `consensus` already is, with a test that asserts it against a deliberately
+  stale persisted list. **Open, and the reason this item exists:** `docs/PREREGISTERED-mean-reversion.md`
+  addendum (d), 2026-09-08, states that v3's entry is a maker rest "(`makerStrategies` now includes
+  `mean-reversion`)" — and the live config says it does not, so **the arm whose 42-settled positive checkpoint
+  triggered today's build has been trading the taker seat its own registration says it is not**. Not changed
+  today: flipping it to maker mid-cohort would void those 42 settled trades at the moment they became useful, and
+  one behavioural change a run is the rule. Three honest options, in the order they should be considered:
+  (a) amend the mean-reversion registration to record that v3 shipped as a taker and score it as one from
+  2026-09-08, since that is what the ledger measured; (b) start a v4 maker cohort with a fresh baseline and keep
+  v3's record intact; (c) a config migration that unions new maker strategies into the persisted list — which is
+  the general fix and should be written whichever of (a)/(b) is chosen, because the next arm added to that list
+  will hit this again. Note the shape: a defaults array is a value for **new installs and nothing else**, and
+  every edit to one needs a migration beside it or it is a comment. Trigger: **any day; it is tomorrow's leading
+  candidate.**
+
+- **265. Read 147b cannot be answered by its own source while the rule it tests is in force — and the source that
+  CAN see it has already answered the other way (2026-10-02, section 177).** `leadlag-cadence-shadow.jsonl` is
+  written only inside the dislocation branch and only when the gap clears the fee (`leadLag.ts:966,1002`), so once
+  `leadLagMinDislocationCents` went to 6 on 2026-09-18 it stopped accruing sub-6c rows at any useful rate:
+  **17** raw-sub-6c rows in the fourteen days since, of which only a fraction land inside the last three minutes
+  of a window. The endgame bucket stands at **82** contracts-equivalent against a bar of **100** (it was 53 on
+  09-25); the missing 18 are months away and can only arrive if the floor this read exists to qualify is first
+  lowered. Meanwhile `leadlag-quotes-shadow.jsonl` — written once per observed pair per scan, so it carries the
+  gaps the floor refused — clears the bar twice over and is decisively **negative**: endgame
+  **-15.07c/contract, 95% [-21.65, -8.50], n=220** over 11 day-clusters, against the rest at -4.85c
+  [-11.57, +1.88]. So the exception is not unproven, it is contraindicated. This is BACKLOG 256's shape (an
+  unreachable trigger, not an unmet one) on a second item in two days. The 2026-10-16 read has exactly one
+  decision on the table and must not simply re-report "n=82, under the bar": either (a) retire 147b on the
+  corroboration evidence, or (b) write a new pre-registration naming `leadlag-quotes-shadow.jsonl` as the source
+  of record, with its own bar, before looking at it again. Trigger: **2026-10-16, or any day a session has a free
+  slot — retiring it is a doc change, not a build.**
+
 ### Build-queue trigger checks — every item, as the rule requires
+**2026-10-02.**
+- **1 critic skill** — MET daily, declined for the **seventh** day: VETO -0.039/contract against the rest at
+  +0.033 (conditions i and ii pass, the gap is 7.2c), condition (iii) fails at "skilled in 0 of 1 shared enabled
+  strategies" — the denominator is still the single arm (mean-reversion) that appears in both cohorts among
+  enabled arms, and there the critic is anti-skilled (+0.144 VETO against +0.033 ABSTAIN). `intelligenceMode`
+  stays `shadow`, `intelligenceEnabled` stays true.
+- **2 WebSocket book** — built 2026-09-28, holding; BACKLOG 254's own trigger is **2026-10-05**, not met.
+- **3 HRRR** — done; the shadow keeps favouring HRRR (**675** station-days, MAE **1.93** vs **2.17**, closer
+  357/300 with 18 ties).
+- **4 / 5 quoter items** — NOT met, and the binding half finally moved: ALLOWED cohort **69** settled proxy fills
+  over **38** events against a bar of 30 over **40**. Two events short. At -1.61c [-13.38, +10.16] the gate would
+  not pass if it were read today, but the sample rule decides when it is read at all.
+- **6 sports anchor on Polymarket US** — NOT met (the Kalshi anchor is disabled on an operator hold at -5.67c;
+  there is no checkpoint that could be positive).
+- **7 player props** — NOT met (anchor notch 1).
+- **8c market-maker rest patterns** — **MET AND BUILT TODAY (section 177).** The gating condition
+  ("build (c) only if MR v3 shows fills and a positive checkpoint") held for the first time:
+  `kalshi-mean-reversion` is at **42 settled, +$4.75, +8.85c/contract, 80% [+2.79, +14.90]**, past its
+  40-settlement checkpoint and positive with 80% confidence. Built end to end:
+  `src/main/strategies/restPattern.ts` (pure `restVerdict` + bounded `DepthHistory`),
+  `recordRestDepth`/`restPatternSignals` in `autoTrader.ts`, `kalshi-rest-pattern` in `GENERIC_STRATEGIES`,
+  `docs/PREREGISTERED-rest-pattern.md` written **before** any order, 24 new assertions, the 21→22 arm-count
+  drift alarm moved, `tsc` + `electron-vite build` + all three suites green (695 / 177 / 99, 0 failed), app
+  restarted 11:12Z, and the **ladder promoted it to tiny-live by itself at 11:14:40Z**. Backup
+  `MAINT-2026-10-02`. Item 8's list advances to **(d)**, which is already DECLINED on the 09-08 favourites audit,
+  so item 8 is closed after this.
+- **9 SportsGameOdds role** — no trigger; now the next untriggered build.
+- **10 Metaculus** — retired 2026-10-01; out of the queue.
+- **11 forecaster v2** — weekly, next read **2026-10-05**.
+- **12 mention base rates** — closed; the task is disabled by its own FAIL of 09-25. Reported anyway because it
+  costs one command: 182 graded, base Brier 0.2441 against the market's 0.1551, counterfactual -2.17c/contract.
+  Still counter-indicated.
+- **13 consensus arm** — the shadow's trigger is met on the registered cohort and it is now moving **toward** the
+  promotion bound rather than away from it: the post-matcher cohort reads **+3.29c/contract, 95% [+0.18, +6.41]
+  over 810 matched rows and 14 day-clusters**, where the registered read was -2.76c over 156 rows and 3 clusters
+  on 09-30 and a lower bound of -0.52c on 10-01. The lower bound now **excludes zero**. **Nothing changed**: the
+  arm is `disabled` on an **operator hold**, and an operator hold is the one gate this session may not lift. It is
+  the one item flagged for the operator in today's report, and the first candidate the day the hold is cleared.
+
 
 **2026-10-01.**
 - **1 critic skill** — MET daily, declined for the sixth day; the denominator fell to 1 shared enabled arm

@@ -4,12 +4,12 @@
   {
    "id": "233",
    "owner": "app",
-   "due": "2026-10-02",
+   "due": "2026-10-03",
    "what": "Lead-lag at event speed",
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-10-01: CONTINUE, tenth day, and both instruments agree the band still spans zero - and both moved DOWN, not up. In-app fastLeadLagRead (registered-reads.json, lastEvalDay 2026-10-01): -0.16c/contract, 80% [-0.73, 0.41], n=3965 over 10 days. Maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z) at the registered 6c floor, 11:03Z: -0.32c, 80% [-0.91, +0.27], n=4140 over 10 days. PASS needs n >= 150 AND lo80 > 0; the lower bound is negative on both, so leadLagFastLive stays absent from config, i.e. off - the registration's non-PASS branch, for the tenth consecutive day. The point estimate has drifted +0.13c -> -0.16c (app) and +0.01c -> -0.32c (grader) in one day on ~500 new decisions, so the trend is away from PASS, not toward it. Speed as registered: 10,684 gaps at the 6c floor over 205.2 h (52.1/hour), median life 0.5 s, p90 5.0 s, 89% gone inside 5 s - unchanged, the speed is real and the edge is not. The 2c and 4c floors are -1.39c 80% [-1.63, -1.14] (n=8962) and -0.88c [-1.14, -0.62] (n=6282), both wholly below zero, which is the 6c floor earning its place. One reading left: the registration's final date is 2026-10-03, and a still-open result there leaves leadLagFastLive off for good."
+   "note": "2026-10-02: CONTINUE for the eleventh day, and the LAST open day - the registration leaves leadLagFastLive OFF on a still-open result tomorrow. The app ran the read itself at 00:23:28Z (main.log [reads] leadlag-fast): -0.30c/contract, 80% [-0.84, 0.23], n=4375 over 11 days. The maintenance grader on rows to 10:58Z agrees: -0.28c, 80% [-0.79, +0.23], n=4560, 11 days. Both bands still span zero and the mean has now been negative three days running (+0.13c on 09-30, -0.16c on 10-01, -0.30c today), so the direction of travel is away from PASS, not toward it. Reported whatever the verdict (the registration's standing clause), at the 6c primary threshold: 11,759 gaps, 51.3 per hour, lasting median 0.5 s, p90 5.0 s, 60% under 1 s and 89% under 5 s - seconds, not sub-100ms, so the honest answer to 'do we need to co-locate' is still no. No config touched; leadLagFastLive remains unset/off."
   },
   {
    "id": "234",
@@ -55,21 +55,21 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-10-02",
+   "due": "2026-10-03",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-10-01 (fresh 11:00Z dump): the sample bar is MET for the second day and the verdict is UNDECIDED again, so neither branch fires; leadLagCoins keeps the eight and leadLagProvenCoins stays absent. 510 settlements, 980.11 contracts. New coins 524.06 of the required 400 (up from 443.06) over 13 day-clusters: +3.55c, 95% [-1.94, +9.03] - the lower bound below zero and the upper above it, the registration's explicit 'neither' branch. Established BTC/ETH +7.47c [-3.31, +18.25]; pooled +5.37c [-1.18, +11.92]. Per coin: BTC +13.93c (n=120, [+5.93, +21.92], still the ONLY coin clear of zero), HYPE +11.98c (63), BNB +4.95c (85), SOL +1.87c (65), XRP +1.73c (63), ZEC -1.25c (7), ETH -5.45c (81), DOGE -12.89c (26). Worth stating because it decides the default: in two days at the bar the new-coin interval has moved +3.40c -> +3.55c and its lower bound -1.86c -> -1.94c, i.e. 81 more contracts bought no narrowing at all. Three days to the 2026-10-04 final, after which the registration narrows leadLagCoins back to BTC, ETH by default - and on this evidence that is the likely outcome."
+   "note": "2026-10-02 (fresh 11:00Z dump): sample bar MET for the third day, verdict UNDECIDED for the third day. node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z on tmp/kalshi-2026-10-02.json: new-coin cohort 588.09 contracts over 14 day-clusters, net $23.23, +3.95c/contract, 95% [-0.67, +8.57] - the lower bound is 0.67c from clearing zero, closer than yesterday but not clear. Established BTC/ETH +7.47c [-2.34, +17.29] over 495.05 contracts; pooled +5.56c [-0.20, +11.32]. Per coin: BTC +14.69c [+7.56, +21.82] (the only coin whose band excludes zero), HYPE +14.74c, BNB +3.43c, SOL +3.38c, XRP -0.52c, DOGE -6.68c, ETH -7.23c, ZEC -1.25c on 12 contracts. Neither bound clears zero, so nothing is proved in either direction and no config was touched (leadLagCoins unchanged at all eight; leadLagProvenCoins still unset). Due moves to 10-03; the registration's default-narrowing date is 2026-10-04 and on that day an undecided read narrows the list to BTC, ETH."
   },
   {
    "id": "146b",
-   "due": "2026-10-02",
+   "due": "2026-10-09",
    "what": "Lead-lag 6c gap floor",
    "how": "venue ledger, orderbook rows only (python scripts/venue-pnl.py on fresh read-only dumps)",
    "rule": "backlog 146b: >= 60 settled contracts over >= 5 days; upper bound < 0 -> revert leadLagMinDislocationCents to 4; starved at 2026-10-02 -> report to the operator",
    "action": "config leadLagMinDislocationCents",
-   "note": "read 2026-09-23 on the venue ledger (scripts/backtests/leadlag_gap_floor_read.py on the 08:01Z read-only dump): 221 contracts over 6 day-clusters since the 09-18 19:50Z registration, net $5.07, +2.29c/contract, day-clustered 95% band [-9.65c, +14.24c]. Sample rule MET (>=60 contracts, >=5 clusters); every dislocation row under the rule is kalshiSource=orderbook (618/618), so the 09-19 amendment is satisfied by construction. INCONCLUSIVE: the upper bound is not below zero, so no revert to 4c; the lower bound is not above zero, so nothing is proved. leadLagMinDislocationCents stays 6. Re-read at the registration deadline 2026-10-02; the band is wide because one day (09-19, +10.56c on 99) carries the mean."
+   "note": "2026-10-02 READ on the venue ledger: INCONCLUSIVE for the second time, the floor stays at 6c, and the starvation clause does NOT apply. scripts/backtests/leadlag_gap_floor_read.py on the 11:00Z read-only dump: 1,099 contracts over 15 day-clusters since the 09-18 19:50Z registration, net $59.95, +5.45c/contract, day-clustered 95% [-0.19c, +11.09c]. The sample rule (>=60 contracts, >=5 clusters) is MET five times over, so 'starved at 2026-10-02 -> report to the operator' is NOT triggered: the cohort is well fed and simply undecided, which is a different finding and needs nothing from the operator. Upper bound is not below zero, so no revert to 4c; lower bound is 0.19c short of proving the floor earns. Note the band tightened a lot since the 09-23 read (221 contracts, +2.29c, [-9.65, +14.24]) and the mean rose: five times the sample, a third of the width. The spread is still cluster-driven - 09-27 is +19.73c on 162 contracts against -10.89c on 09-28 - so one more week should decide it either way. Re-read 2026-10-09 (a week, not a day: the band moves on clusters, not on contracts)."
   },
   {
    "id": "144a",
@@ -91,12 +91,12 @@
   },
   {
    "id": "147b",
-   "due": "2026-10-02",
+   "due": "2026-10-16",
    "what": "Lead-lag endgame exception",
    "how": "grade leadlag-cadence-shadow.jsonl rows with a gap under 6c and under 3 minutes left",
    "rule": "backlog 147b: positive at 95% over >= 100 contracts-equivalent -> register",
    "action": "registration only; otherwise the 6c floor stays alone",
-   "note": "2026-09-25: NOT YET, and the statistic had to be built first - nothing computed it (the same hole as backlog 198 on 09-24). New read-only grader scripts/backtests/leadlag_endgame_read.py. The registered source cannot answer it alone: leadlag-cadence-shadow.jsonl is written only inside the dislocation branch and only when the gap clears the fee, so it holds a sub-6c gap only from the pre-09-18 4c-floor era. On it: endgame (<3 min left) n=81, +2.75c [-12.64, +18.15]; rest n=546, -0.62c [-4.28, +3.05]. On leadlag-quotes-shadow.jsonl, which records every observed pair including the gaps the floor refused and is the only orderbook-era view: endgame n=52, -23.24c [-55.58, +9.11]; rest n=299, +4.98c [-11.13, +21.08]. Both endgame buckets are under the 100 contracts-equivalent bar and neither is positive at 95%, and the two sources disagree in sign, which is itself a reason not to register. The 6c floor stays alone. Re-read with the gap-floor read on 2026-10-02."
+   "note": "2026-10-02 READ: NOT YET on the registered source, and the registered source is now provably frozen - this is the Metaculus shape (BACKLOG 256) and the next read should decide whether to retire it. scripts/backtests/leadlag_endgame_read.py on the 11:00Z dump. REGISTERED SOURCE leadlag-cadence-shadow.jsonl, sub-6c raw gaps, 635 graded: endgame (<3 min left) n=82 over 6 day-clusters, +2.41c, 95% [-11.31, +16.13] - under the 100 bar, as on 09-25 (n=53). Measured today, the reason it will stay under it: the file is written only inside the dislocation branch and only when the gap clears the fee, so with the floor at 6c it has gained just 17 raw-sub-6c rows in the 14 days since the registration (~1.2/day, and only a fraction of those land in the last 3 minutes of a window). At that rate the 18 missing endgame contracts-equivalent are months away, and they can only arrive if the 6c floor is lowered - i.e. the read cannot be answered by its own source while the rule it is testing is in force. CORROBORATION leadlag-quotes-shadow.jsonl (every observed sub-6c gap that clears its fee) already clears the bar twice over and answers it decisively in the NEGATIVE: endgame n=220 over 11 day-clusters, -15.07c, 95% [-21.65, -8.50]; rest -4.85c [-11.57, +1.88]. So the exception is not merely unproven, it is contraindicated by the only instrument that can see the orderbook era. Nothing registered, no config touched, the 6c floor stays alone. Next read 2026-10-16 with ONE decision on the table: retire 147b on the corroboration evidence (BACKLOG 265), or write a new pre-registration naming leadlag-quotes-shadow.jsonl as the source of record. Do NOT simply re-report 'n=82, under the bar' again."
   },
   {
    "id": "149",
@@ -330,12 +330,12 @@
   },
   {
    "id": "1",
-   "due": "2026-10-02",
+   "due": "2026-10-03",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-10-01: trigger MET, action DECLINED for the sixth day, and the script's own verdict line agrees. critic-skill.py on the 11:00Z dump: VETO -0.040/contract (n=318) against the rest at +0.033, so amended conditions (i) and (ii) pass; condition (iii) fails at 'skilled in 0 of 1 shared enabled strategies'. Last line: 'KEEP veto mode OFF - veto -0.040 vs rest +0.033; skilled in 0 of 1 shared enabled strategies'. Note WHY the denominator fell from 2 to 1: the ladder stopped kalshi-fade at 2026-09-30T19:23:24Z, so mean-reversion is now the only enabled arm present in both cohorts - and on it the critic is anti-skilled (VETO +0.144/contract over 11 against ABSTAIN +0.029 over 46), i.e. it vetoed the winners. intelligenceMode stays 'shadow', intelligenceEnabled stays true. The 200-settled 'disable it' clause is still not reached: skill is composition-dependent, not absent."
+   "note": "2026-10-02: trigger MET, action DECLINED for the seventh day, and the script's own verdict line agrees. critic-skill.py on the fresh 11:00Z dump (2,632 decisions; settled 666 ABSTAIN / 322 VETO / 65 ERROR / 30 ALLOW_UNCHANGED): VETO -0.039/contract against the rest at +0.033, so amended conditions (i) VETO's own net below zero and (ii) at least 2c below the rest both pass (the gap is 7.2c). Condition (iii) fails as it has all week - 'skilled in 0 of 1 shared enabled strategies'. The denominator is still 1: of the enabled arms only mean-reversion appears in both cohorts, and there VETO is +0.144/contract (n=11) against ABSTAIN's +0.033 (n=51), i.e. anti-skilled. intelligenceMode stays shadow, intelligenceEnabled stays true (the 200-settled disable clause is not reached: skill is composition-dependent, not absent). Due moves to 10-03."
   },
   {
    "id": "65b/80c",
