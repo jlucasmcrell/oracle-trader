@@ -9,7 +9,8 @@
    "how": "in-app fastLeadLagRead (grader: python scripts/backtests/leadlag_fast_shadow.py --since 2026-09-22T21:48Z)",
    "rule": "docs/PREREGISTERED-leadlag-fast-shadow.md",
    "action": "PASS switches leadLagFastLive on by itself; FAIL or still open on 10-03 leaves it off",
-   "note": "2026-10-02: CONTINUE for the eleventh day, and the LAST open day - the registration leaves leadLagFastLive OFF on a still-open result tomorrow. The app ran the read itself at 00:23:28Z (main.log [reads] leadlag-fast): -0.30c/contract, 80% [-0.84, 0.23], n=4375 over 11 days. The maintenance grader on rows to 10:58Z agrees: -0.28c, 80% [-0.79, +0.23], n=4560, 11 days. Both bands still span zero and the mean has now been negative three days running (+0.13c on 09-30, -0.16c on 10-01, -0.30c today), so the direction of travel is away from PASS, not toward it. Reported whatever the verdict (the registration's standing clause), at the 6c primary threshold: 11,759 gaps, 51.3 per hour, lasting median 0.5 s, p90 5.0 s, 60% under 1 s and 89% under 5 s - seconds, not sub-100ms, so the honest answer to 'do we need to co-locate' is still no. No config touched; leadLagFastLive remains unset/off."
+   "note": "2026-10-03: CLOSED, and closed by the app itself on the registration's own terminal branch. main.log 00:12:42.462Z: '[reads] leadlag-fast: INCONCLUSIVE - 6c net, first gap per market and side: -0.45c/contract, 80% [-0.97, 0.08], n=4881 over 11 days (band spans zero)', immediately followed by 'leadLagFastLive stays OFF: still inconclusive at the final read'. The maintenance grader (leadlag_fast_shadow.py --since 2026-09-22T21:48Z, rows to 11:03Z) is one step past that: at the registered 6c floor -0.51c, 80% [-1.01, -0.01], n=5190 over 12 days - the band is now WHOLLY BELOW ZERO for the first time, and the mean has fallen on each of the last four days (+0.13 -> -0.16 -> -0.30 -> -0.45/-0.51c). The 2c and 4c floors read -1.37c [-1.58, -1.16] and -1.00c [-1.29, -0.72]. PASS needed n >= 150 AND lo80 > 0; it never held on any instrument. Verified in config: leadLagFastLive = false. Standing speed clause, last time of asking: at the 6c floor 13,670 gaps over 253.2 h = 54.0/hour, lasting median 0.5 s, p75 1.8 s, p90 5.0 s, 61% under 1 s and 89% under 5 s. Seconds, not milliseconds; co-location was never the missing piece. No further read.",
+   "done": "2026-10-03"
   },
   {
    "id": "234",
@@ -55,12 +56,12 @@
   },
   {
    "id": "72b/161",
-   "due": "2026-10-03",
+   "due": "2026-10-04",
    "what": "Lead-lag coin cohort (frozen window from 09-19)",
    "how": "node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z",
    "rule": "docs/PREREGISTERED-leadlag-coins.md: needs >= 400 new-coin contracts and >= 5 days; 95% upper bound < 0 -> narrow back to BTC, ETH; lower bound > 0 -> add the coin(s) to leadLagProvenCoins; still undecided on 2026-10-04 -> narrow",
    "action": "config leadLagCoins / leadLagProvenCoins in kalshi-auto.json (edit with the app stopped); if the sample is not there yet, move due to the next day, final 2026-10-04",
-   "note": "2026-10-02 (fresh 11:00Z dump): sample bar MET for the third day, verdict UNDECIDED for the third day. node scripts/leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z on tmp/kalshi-2026-10-02.json: new-coin cohort 588.09 contracts over 14 day-clusters, net $23.23, +3.95c/contract, 95% [-0.67, +8.57] - the lower bound is 0.67c from clearing zero, closer than yesterday but not clear. Established BTC/ETH +7.47c [-2.34, +17.29] over 495.05 contracts; pooled +5.56c [-0.20, +11.32]. Per coin: BTC +14.69c [+7.56, +21.82] (the only coin whose band excludes zero), HYPE +14.74c, BNB +3.43c, SOL +3.38c, XRP -0.52c, DOGE -6.68c, ETH -7.23c, ZEC -1.25c on 12 contracts. Neither bound clears zero, so nothing is proved in either direction and no config was touched (leadLagCoins unchanged at all eight; leadLagProvenCoins still unset). Due moves to 10-03; the registration's default-narrowing date is 2026-10-04 and on that day an undecided read narrows the list to BTC, ETH."
+   "note": "2026-10-03 (fresh 11:01Z dump): sample bar MET for the fourth day, verdict UNDECIDED for the fourth day, and TOMORROW IS THE DEFAULT-NARROWING DATE. leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z: new-coin cohort 740.1 contracts over 15 day-clusters, +$23.21, +3.14c/contract, 95% [-1.32, +7.59]; BTC/ETH +8.66c [-0.40, +17.72]; pooled +5.49c [+0.06, +10.93]. Per coin: BTC is again the only one whose own band excludes zero (+15.76c [+8.91, +22.61]); HYPE +13.85c [-1.46, +29.16], ZEC +9.61c on 14 contracts, SOL +2.97c, BNB +1.48c, XRP +0.96c, DOGE -8.74c, ETH -5.39c. Note the band moved the WRONG way in a day (lower bound -0.67c -> -1.32c as the mean fell +3.95c -> +3.14c), so patience is not being rewarded. No config touched today - the registration judges on 2026-10-04 and says an undecided read that day narrows LEADLAG_COINS back to BTC, ETH by default. Due 2026-10-04, final."
   },
   {
    "id": "146b",
@@ -171,7 +172,8 @@
    "how": "data/implication-scan",
    "rule": "backlog 162: none in a week closes the family",
    "action": "on none: disable OracleTrader-ImplicationScan",
-   "note": "2026-09-26: the family stays OPEN, barely. Flagged rows exist on 09-19, 09-20, 09-21, 09-22 and 09-26, so it is not 'none in a week' and OracleTrader-ImplicationScan is NOT disabled. Today's single row is KXNHLSPREAD-26SEP25NYRNYI-NYI2 inside its moneyline at 0.65c surplus after fees, and the last five half-hourly passes read '0 flagged, 0 confirmed' over ~3,100 spreads and ~6,200 pairs. One 0.65c pair a week is not a strategy, and is why this family has no arm. Next read 2026-10-03: none in that week closes it."
+   "note": "2026-10-03: CLOSED - the family is closed and OracleTrader-ImplicationScan is DISABLED. The 8-day recording window the registration set up ran 2026-09-19T09:50Z to 2026-09-27T09:24Z and then expired on its own trigger boundary (task State Ready, NextRun empty, last run 09-27 05:22 local) - so this read has a COMPLETE record and no further source, which is why it is answered now rather than deferred. 385 half-hourly passes over ~2,200-3,300 spread-vs-moneyline pairs each: 33 flagged rows on 6 days, of which 15 were confirmed at the live orderbook (positive surplus after fees on both legs) on 5 distinct days. The strict 'none in a week' branch is NOT what closes it - there was one on 09-26 (0.65c, 60.9 contracts deep). What closes it is the bar the recording existed to test, backlog 76's: 'violations over fee plus 1c persist for more than one scan on books deeper than one contract'. Exactly ONE pair ever persisted across two consecutive passes in the whole record - KXWNBASPREAD-26SEP20SEALV-SEA2 at 0.02c, two hundredths of a cent - and the best single reading ever seen was 5.47c at size 8 on a Lithuanian basketball spread, on one pass, once. Nine of the 33 rows priced positive at the list and NEGATIVE at the live book (down to -11.35c), which is the shape of a stale list, not an arb. Third family in this project to die at the fee line (backlog 70 same-event sums, backlog 76 single ladders, this one across series). Reopen only with a websocket-cadence recorder AND a reason to think fees are not the binding constraint; nothing here says so.",
+   "done": "2026-10-03"
   },
   {
    "id": "164",
@@ -250,11 +252,12 @@
   },
   {
    "id": "177",
-   "due": "2026-10-03",
+   "due": "2026-11-03",
    "what": "Stop-loss / take-profit read",
    "how": "python scripts/stop-analysis.py",
    "rule": "backlog 177: adopt only if it beats holding by more than its own day-clustered SE over >= 40 trades and >= 5 days, in shadow first",
-   "action": "report"
+   "action": "report",
+   "note": "2026-10-03 READ PERFORMED, REPORT ONLY, NOTHING ADOPTED - and for fade the answer is decisive rather than merely short. scripts/stop-analysis.py over 386 paired trades / 364 markets / 35 book files: FADE, the only cohort past the bar (110 settled with a >=5-snapshot book path, 103W/7L, hold-to-settlement +2.63c/contract, mean entry 94c), is beaten by holding under EVERY one of the eleven rules tested - stops cost 6.36c to 8.06c/contract and takes cost 0.08c to 2.16c, so there is no threshold anywhere on the grid that helps. The mechanism is in the table and is not a sampling artefact: only 1 of 7 losers was ever up 3c at the bid and none was ever up 5c (so a take-profit cannot rescue a loser), while 58 of 103 winners were ever DOWN 5c, 31 down 10c and 17 down 20c (so a stop sells winners). MEAN-REVERSION (14 with a book path, +25.32c held) is the same shape harder - 9 of its 10 winners went 10c against it first and every rule loses 4.4c to 31.9c - but is under the 40-trade bar. MOMENTUM (28) shows the only positives on the board (stop 5c +1.30c, take 8c +4.25c) and is both under the bar and a disabled arm whose own hold-to-settlement is -6.52c; fitting an exit to it would be fitting an exit to a losing arm on 28 observations. CONSENSUS 7. Nothing is registered and no exit rule exists to shadow: the registered bar is 'beats holding by more than its own day-clustered SE over >= 40 trades and >= 5 days' and no arm clears even the first clause in the right direction. Moved to 2026-11-03 rather than closed: the one thing that could change the answer is mean-reversion or rest-pattern reaching 40 book-path settlements, and at roughly one or two a day that is weeks away, not days."
   },
   {
    "id": "240",
@@ -330,12 +333,12 @@
   },
   {
    "id": "1",
-   "due": "2026-10-03",
+   "due": "2026-10-04",
    "what": "Critic skill check (daily)",
    "how": "python scripts/critic-skill.py <fresh kalshi dump> (the amended rule is encoded; its last line is the verdict)",
    "rule": "backlog 1 amended: veto only if VETO's own net < 0, >= 2c below the rest, and a strict majority of the enabled arms",
    "action": "config intelligenceMode / intelligenceEnabled; then move due to the next day",
-   "note": "2026-10-02: trigger MET, action DECLINED for the seventh day, and the script's own verdict line agrees. critic-skill.py on the fresh 11:00Z dump (2,632 decisions; settled 666 ABSTAIN / 322 VETO / 65 ERROR / 30 ALLOW_UNCHANGED): VETO -0.039/contract against the rest at +0.033, so amended conditions (i) VETO's own net below zero and (ii) at least 2c below the rest both pass (the gap is 7.2c). Condition (iii) fails as it has all week - 'skilled in 0 of 1 shared enabled strategies'. The denominator is still 1: of the enabled arms only mean-reversion appears in both cohorts, and there VETO is +0.144/contract (n=11) against ABSTAIN's +0.033 (n=51), i.e. anti-skilled. intelligenceMode stays shadow, intelligenceEnabled stays true (the 200-settled disable clause is not reached: skill is composition-dependent, not absent). Due moves to 10-03."
+   "note": "2026-10-03: trigger MET, action DECLINED for the eighth day, on the script's own verdict line. critic-skill.py on the fresh 11:01Z dump: 2,639 decisions (674 ABSTAIN / 322 VETO / 65 ERROR / 30 ALLOW_UNCHANGED settled). VETO -0.039/contract against the rest at +0.033 - amended conditions (i) 'VETO's own net < 0' and (ii) '>= 2c below the rest' both pass on a 7.2c gap, unchanged from yesterday to three decimals - and (iii) fails again at 'skilled in 0 of 1 shared enabled strategies'. The denominator is still the single arm mean-reversion, where the critic is ANTI-skilled (VETO +0.144 against ABSTAIN +0.049), so a strict majority of enabled arms is unreachable while one arm is the whole set. intelligenceMode stays 'shadow'; intelligenceEnabled stays true (the skill is composition-dependent, not absent). Due 2026-10-04."
   },
   {
    "id": "65b/80c",

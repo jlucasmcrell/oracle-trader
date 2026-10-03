@@ -7674,3 +7674,99 @@ that did **not** fire: "starved at 2026-10-02 -> report to the operator" does no
 [-0.19c, +11.09c]), which needs nothing from the operator. Five times the 09-23 sample for a third of the width, so
 it is converging; next read a week out, since the band moves on clusters. **1** DECLINED a seventh day on condition
 (iii), the denominator still a single shared enabled arm.
+
+## §178 - 2026-10-03 11:15Z: a defaults array that finally reaches the install, a family dead at the fee line, and a shadow that ran out of open days
+
+Headless maintenance run. Liveness clean (app up, `main.log` current, ladder tick 37 min, collector up, today's
+nightly review present, sentinel `at` 10:50:02Z, HRRR 06:20Z, PolyConsensus 06:55Z, StateBackup 06:20Z). No
+`[error]` line in 24 h; 71 `[warn]` lines, 46 of them the IBKR outage the 04:35Z repair session already closed
+NOT-A-DEFECT. Venue-true last 24 h: **Kalshi +$10.39** after $3.05 fees over 93 settlements, **Polymarket US
+$0.00** (0 resolutions). Five registered reads were due and all five were performed.
+
+### The build: `DEFAULTS.makerStrategies` reaches an existing install for the first time (BACKLOG 264 (c))
+
+Yesterday's run found that `makerEntryFor` reads `this.config.makerStrategies ?? [...]` and that the key is
+**persisted** on this install, so the `??` default is unreachable and every edit to the defaults array since the
+key was last written had been a comment. The live value was
+`['fade','book-imbalance','volume-spike','news','cross-venue','sports-anchor']` - the list as it stood before
+`flow-follow` was ever added. Three fixes, one behavioural:
+
+- **One literal instead of three.** The list was hand-copied into `DEFAULT_CONFIG`, into `makerEntryFor`'s `??`
+  fallback and into a test, and **the copies had already drifted by one entry**: the fallback omitted
+  `rest-pattern`. It is now `export const MAKER_STRATEGIES_DEFAULT` and the other two reference it.
+- **A v28 migration**, in the shape of the twenty-seven before it: `mergeMakerStrategies(persisted)` unions in
+  whatever the defaults have gained and returns `undefined` when there is nothing to add, so the migration is a
+  no-op on an install that is already current. On the live config it added exactly **`flow-follow`** (arm
+  disabled - `flowFollowEnabled: false` - so inert today) and **`rest-pattern`** (already forced maker in code
+  yesterday, so also inert). Verified in `main.log` at `11:14:26.573Z`:
+  `[auto-trader] v28 maker-seat defaults: added flow-follow, rest-pattern to the persisted makerStrategies list`,
+  and `kalshi-auto.json` now reads `configVersion 28` with all eight entries.
+- **The limitation is asserted, not argued away.** A union cannot tell "never had it" from "removed it in the
+  panel", so a default the operator deleted by hand is reinstated once. A test pins that behaviour rather than
+  claiming the opposite; the alternative (persisting a watermark of the last-applied defaults) is filed under 264
+  and was not built, because on this install the persisted list is exactly the defaults minus the two later
+  additions and there is nothing for a watermark to protect.
+
+### And the half of 264 that was never a defect: mean-reversion is a REGISTERED taker
+
+264's open half read: `PREREGISTERED-mean-reversion.md` addendum (d) says v3's entry is a maker rest
+"(`makerStrategies` now includes `mean-reversion`)", the live config says it does not, therefore "the arm whose
+positive checkpoint triggered today's build has been trading the seat its registration denies". **It has not.**
+`docs/PREREGISTERED-mean-reversion-taker.md`, written **2026-09-18 19:05Z before any trade under the rule**,
+moves the arm to the taker seat in those words - *"Seat: **taker at the current ask** (the arm leaves
+`makerStrategies`)"* - because the move audit behind it graded a taker, and because `weatherSeatBlock` vetoed all
+34 of v3's maker setups. The current cohort's baseline, `stageSince` 2026-09-18T19:05:00.898Z, is that
+registration to the millisecond. So the live config is **right** for this arm and the stale line is addendum (d)
+of a superseded document; the migration cannot touch it either, because `mean-reversion` is deliberately absent
+from the defaults. The lesson is not about maker seats: **a registration with addenda has a governing version,
+and a quote from an addendum is not evidence until you check whether a later document replaced it.** 264's
+"handled / open" split was itself the artefact of reading one file.
+
+### Read 162: the cross-series implication family is closed, and the task is disabled
+
+The registration gave the recorder an 8-day window; it ran 2026-09-19T09:50Z to 2026-09-27T09:24Z and the task's
+trigger then **expired itself** (State Ready, `NextRun` empty). That is why this read is answered rather than
+deferred: the record is complete and no more is coming. 385 half-hourly passes over 2,200-3,300 spread-vs-
+moneyline pairs each; **33 flagged rows on 6 days, 15 of them confirmed at the live orderbook on 5 days.**
+
+The strict "none in a week" branch is not what closes it - there was one on 09-26. What closes it is the bar the
+recording existed to feed, backlog 76's: *violations over fee plus 1c that persist for more than one scan on
+books deeper than one contract.* Exactly **one** pair ever survived two consecutive passes in the whole record -
+`KXWNBASPREAD-26SEP20SEALV-SEA2`, at **0.02c** - and the largest reading ever seen was 5.47c at size 8 on a
+Lithuanian basketball spread, once. Nine of the 33 rows priced positive at the list and **negative at the live
+book**, down to -11.35c: the shape of a stale list, not an arb. Third family in this project to die at the fee
+line, after backlog 70 (same-event sums) and backlog 76 (single ladders). `OracleTrader-ImplicationScan` is
+Disabled; it was never in `TASK_WATCH` and a comment there now records why, so no freshness signal re-opens it.
+
+### Read 233: the fast lead-lag shadow runs out of open days, and the app closed it itself
+
+`main.log` 00:12:42.462Z, the app's own terminal branch: `INCONCLUSIVE - 6c net ... -0.45c/contract, 80%
+[-0.97, 0.08], n=4881 over 11 days`, then `leadLagFastLive stays OFF: still inconclusive at the final read`. The
+maintenance grader at 11:03Z is one step further on: **-0.51c, 80% [-1.01, -0.01], n=5190 over 12 days** - the
+band is wholly below zero for the first time, and the mean has fallen on each of the last four days
+(+0.13 -> -0.16 -> -0.30 -> -0.51c). `leadLagFastLive` is `false` in config and stays there. Standing speed
+clause, last time of asking: 13,670 gaps over 253.2 h = **54.0/hour**, median life **0.5 s**, p90 **5.0 s**, 89%
+gone inside 5 s. Seconds, not milliseconds - co-location was never the missing piece.
+
+### Read 177: no exit rule beats holding, and the table says why
+
+`scripts/stop-analysis.py` over 386 paired trades / 364 markets. **Fade** is the only cohort past the 40-trade
+bar (110 with a book path, hold-to-settlement +2.63c/contract) and holding beats **all eleven** rules tested:
+stops cost 6.36-8.06c/contract, takes cost 0.08-2.16c. The mechanism is in the data, not in the noise: only
+**1 of 7** losers was ever up 3c at the bid and **none** was ever up 5c, so a take-profit cannot rescue a loser;
+while **58 of 103** winners were once down 5c, 31 down 10c and 17 down 20c, so a stop sells winners. Mean-
+reversion is the same shape harder (9 of 10 winners went 10c against it first) on 14 trades; momentum shows the
+only positives on the board and is both under the bar and a disabled arm that loses 6.52c held. Nothing
+registered, nothing shadowed - there is no candidate rule to shadow. Re-read 2026-11-03.
+
+### Read 72b/161 and read 1
+
+**72b/161 - UNDECIDED for the fourth day, and tomorrow is the default-narrowing date.** New-coin cohort 740.1
+contracts over 15 clusters, +3.14c/contract, 95% **[-1.32, +7.59]**. The band moved the **wrong** way in a day
+(lower bound -0.67c -> -1.32c as the mean fell from +3.95c), so the sample is not converging on a verdict.
+Per coin, BTC is again the only one whose own band excludes zero (+15.76c [+8.91, +22.61]). No config touched;
+the registration decides on 2026-10-04 and narrows to BTC/ETH by default on an undecided read.
+
+**1 - critic skill MET and DECLINED, eighth day.** VETO -0.039/contract against the rest at +0.033: conditions
+(i) and (ii) pass on a 7.2c gap, (iii) fails at "skilled in 0 of 1 shared enabled strategies". The denominator is
+still one arm, and on that arm the critic is anti-skilled. `intelligenceMode` stays `shadow`.

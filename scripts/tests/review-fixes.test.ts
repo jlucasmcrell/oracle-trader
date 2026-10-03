@@ -13,7 +13,7 @@ import { etDay } from '../../src/main/util/etDay'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
-import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
+import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, MAKER_STRATEGIES_DEFAULT, mergeMakerStrategies, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
 import { KalshiWsClient, WS_BOOK_MAX_AGE_MS, WS_PROMOTION_BAR, WS_PROMOTION_DAYS, wsBookPromoted, type WsDayAgreement, type WsStats } from '../../src/main/venues/kalshiWs'
 import { ACTIVITY_PAGE_PACE_MS, deriveUsCloseTime, isUsFutures, PolymarketUsAdapter, resolvedLongPrice } from '../../src/main/venues/polymarketUs'
@@ -2027,4 +2027,32 @@ function restPatternTests(): void {
   const staleCfg = { config: { makerStrategies: ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor'] } }
   eq('rest: the maker seat survives a stale persisted list', makerEntryFor.call(staleCfg, 'rest-pattern'), true)
   eq('rest: a stale list still leaves other arms as it found them', makerEntryFor.call(staleCfg, 'mean-reversion'), false)
+
+  // BACKLOG 264 (c): the v28 migration that makes a defaults edit reach an
+  // install which already persisted the key. `mean-reversion` is a TAKER by
+  // its own 2026-09-18 registration and is absent from the defaults, so the
+  // migration cannot add it back.
+  eq('maker: the defaults carry flow-follow and rest-pattern',
+    [MAKER_STRATEGIES_DEFAULT.includes('flow-follow'), MAKER_STRATEGIES_DEFAULT.includes('rest-pattern')], [true, true])
+  eq('maker: mean-reversion is NOT a default maker (it is a registered taker)',
+    MAKER_STRATEGIES_DEFAULT.includes('mean-reversion'), false)
+  const liveList = ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor']
+  eq('maker: the migration unions what the defaults gained',
+    mergeMakerStrategies(liveList), [...liveList, 'flow-follow', 'rest-pattern'])
+  eq('maker: the migration keeps the persisted order and adds nothing else',
+    mergeMakerStrategies(liveList)?.filter((s) => !MAKER_STRATEGIES_DEFAULT.includes(s)), [])
+  eq('maker: the migration is a no-op once applied',
+    mergeMakerStrategies([...MAKER_STRATEGIES_DEFAULT]), undefined)
+  eq('maker: the migration is idempotent',
+    mergeMakerStrategies(mergeMakerStrategies(liveList)), undefined)
+  eq('maker: an unset key is left unset so the ?? fallback still owns it',
+    mergeMakerStrategies(undefined), undefined)
+  // The limitation, asserted rather than claimed away: a union cannot tell
+  // "never had it" from "removed it in the panel", so a default the operator
+  // deleted by hand IS reinstated once. On the live config that is harmless
+  // (its list is exactly the defaults minus the two later additions), and the
+  // alternative - a persisted watermark of the last-applied defaults - is
+  // filed, not built. Pinned here so the next edit sees the trade-off.
+  eq('maker: a union reinstates a hand-removed default (known limitation)',
+    mergeMakerStrategies(['book-imbalance'])?.includes('fade'), true)
 }

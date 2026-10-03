@@ -33,6 +33,12 @@ export const TASK_WATCH = [
   //   OracleTrader-SportsBooks - read 163 found nothing: the post-final Kalshi book is at 1c/99c wherever
   //     Polymarket's is, and the wide cases are the stale in-play book read 234 already retired. Its note said to
   //     disable the recorder unless the read found something.
+  // Retired 2026-10-03 (section 178), task disabled by its own registered read:
+  //   OracleTrader-ImplicationScan - read 162. It was never in this table: the registration gave it an
+  //     8-day recording window and the task's trigger expired itself at 2026-09-27T09:24Z, so a staleness
+  //     row would have fired on a completed job. The record it left is complete and answers the question:
+  //     385 half-hourly passes, 33 flagged rows, 15 confirmed at the live book, and exactly ONE pair that
+  //     persisted past a single scan - at 0.02c. Dead at the fee line, like backlog 70 and 76 before it.
   // None of these is stale and none is a bug. Do not re-enable any of them on a freshness or "a strategy
   // is off" signal; each was closed by a dated read and only a new read can re-open it.
 ]

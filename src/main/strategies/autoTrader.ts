@@ -51,6 +51,50 @@ const VENUE = 'kalshi' as const
 /** How long after close we wait before checking for a resolution. */
 const SETTLE_GRACE_MS = 30 * 60_000
 
+/**
+ * The maker-seat list, in one place (BACKLOG 264). It was hand-copied into
+ * three literals - `DEFAULT_CONFIG`, `makerEntryFor`'s `??` fallback and a
+ * test - and the copies had already drifted apart by one entry.
+ */
+export const MAKER_STRATEGIES_DEFAULT: readonly string[] = [
+  'fade',
+  'book-imbalance',
+  'volume-spike',
+  'news',
+  'cross-venue',
+  'sports-anchor',
+  'flow-follow',
+  'rest-pattern'
+]
+
+/**
+ * Union a persisted `makerStrategies` list with the defaults, for the v28
+ * migration. Returns `undefined` when there is nothing to add, so the
+ * migration can stay a no-op on an install that is already current.
+ *
+ * Why this exists (BACKLOG 264, 2026-10-02): `makerEntryFor` reads
+ * `this.config.makerStrategies ?? DEFAULT`, and the key is PERSISTED on every
+ * existing install, so the `??` branch is unreachable and every later edit to
+ * the defaults array was a comment. The live config still held the list as it
+ * stood before `flow-follow` was ever added. A defaults array is a value for
+ * NEW installs and nothing else; an edit to one needs a migration beside it.
+ *
+ * A union and not a replacement, so a key the panel has grown entries of its
+ * own keeps them. The limitation is real and is not argued away: a union
+ * cannot tell "never had it" from "removed it in the panel", so a default the
+ * operator deleted by hand is reinstated once. On this install that is
+ * harmless - the persisted list is exactly the defaults minus the two entries
+ * added after it was last written - and the alternative (persisting a
+ * watermark of the last-applied defaults) is filed under BACKLOG 264 rather
+ * than built on the day the simple version is enough.
+ */
+export function mergeMakerStrategies(persisted: string[] | undefined): string[] | undefined {
+  if (persisted === undefined) return undefined
+  const missing = MAKER_STRATEGIES_DEFAULT.filter((s) => !persisted.includes(s))
+  if (missing.length === 0) return undefined
+  return [...persisted, ...missing]
+}
+
 const DEFAULT_CONFIG: AutoTraderConfig = {
   enabled: false,
   autoPoll: false,
@@ -296,7 +340,7 @@ const DEFAULT_CONFIG: AutoTraderConfig = {
   // 'rest-pattern' is a maker by construction: the hypothesis is the resting
   // seat the move audit priced, and crossing the spread to join a maker would
   // pay the taker fee to buy exactly what that maker is resting for.
-  makerStrategies: ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor', 'flow-follow', 'rest-pattern']
+  makerStrategies: [...MAKER_STRATEGIES_DEFAULT]
 }
 
 /** Calibration buckets for hold-to-settle win probabilities (cluster near 1). */
@@ -1126,6 +1170,29 @@ export class AutoTrader {
         console.log(`[auto-trader] v27 fee-model fix: cleared net-cents evidence for ${cleared} strategy(ies); n/wins/brierSum retained`)
       }
       this.persist(27)
+    }
+    if ((persisted.configVersion ?? 1) < 28) {
+      // v28 (2026-10-03, BACKLOG 264) - make an edit to DEFAULT_CONFIG's
+      // makerStrategies reach an install that already persisted the key.
+      // Until now it could not: makerEntryFor reads `?? DEFAULT`, the key is
+      // written on every panel save, and the live config still held the list
+      // as it stood before `flow-follow` was ever added to the defaults. The
+      // seat an arm trades is part of its registration, so a defaults array
+      // that silently never applies is worse than no default at all.
+      //
+      // On the live config this adds exactly `flow-follow` (arm disabled, so
+      // inert today) and `rest-pattern` (already forced maker above, so also
+      // inert). `mean-reversion` is absent from the defaults on purpose -
+      // PREREGISTERED-mean-reversion-taker.md (2026-09-18) puts it on the
+      // TAKER seat in those words - so the live config is already right for
+      // it and this migration cannot touch it.
+      const merged = mergeMakerStrategies(this.config.makerStrategies)
+      if (merged) {
+        const added = merged.filter((s) => !(this.config.makerStrategies ?? []).includes(s))
+        this.config.makerStrategies = merged
+        console.log(`[auto-trader] v28 maker-seat defaults: added ${added.join(', ')} to the persisted makerStrategies list`)
+      }
+      this.persist(28)
     }
   }
 
@@ -3337,7 +3404,7 @@ export class AutoTrader {
     // against the document that defines it. See BACKLOG 264.
     if (strategy === 'rest-pattern') return true
     if (strategy === 'fade') return this.config.fadeEntryMode === 'maker'
-    return (this.config.makerStrategies ?? ['fade', 'book-imbalance', 'volume-spike', 'news', 'cross-venue', 'sports-anchor', 'flow-follow']).includes(strategy)
+    return (this.config.makerStrategies ?? MAKER_STRATEGIES_DEFAULT).includes(strategy)
   }
 
   /**

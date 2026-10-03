@@ -3188,7 +3188,11 @@ book-relative leg (the modal bracket's ask) is added when the count is in reach.
   or write, and the hand-over logged at **error** so the sentinel can see it. **Still open:** nothing watches
   `ibkr-lab.json` `lastScanAt` - the sentinel's own suppression text for 232 says "read ibkr-lab.json
   lastScanAt/scans, never this signature's silence", and no code does. Same family as 249. Trigger: **the next time
-  `sentinel.mjs` is touched**, with 249 and 253; and the wedge line itself should be watched by name.
+  `sentinel.mjs` is touched**, with 249 and 253; and the wedge line itself should be watched by name. Sharpened
+  2026-10-03 (incident `2026-10-03T04-35`): the sentinel's `gateway` field is a bare TCP accept on 4001/4002
+  (`sentinel.mjs:624-639`), so `status.json` said `gateway: up` at 04:50:01Z while the gateway was 17 minutes into an
+  unauthenticated re-authentication loop that answered no request at all - `up` means only that the socket answers,
+  and that night's 23.5-minute collection gap was visible in the `[ibkr-lab]` warn and nowhere else.
 - **258. DONE 2026-09-29 (section 174): option (a) built - a read whose arm the ladder has stopped for good is final (`Ladder.stoppedForGood`, PREREGISTERED-polyus-fade.md amendment 2).** The ladder's two-strike stop has frozen read 235's cohort eleven losses short of its bar (2026-09-29,
   section 173).** `docs/PREREGISTERED-polyus-fade.md` reads at **15 losses or 250 settled**; the arm stands at
   **10 losses / 69 settled** and the ladder disabled it at 2026-09-29T01:33:42Z on its own checkpoint rule (56
@@ -3556,6 +3560,23 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
   every edit to one needs a migration beside it or it is a comment. Trigger: **any day; it is tomorrow's leading
   candidate.**
 
+- **264 (c) DONE 2026-10-03 (section 178), and 264's "open" half was never a defect.** **The build:** the list is
+  now one exported constant (`MAKER_STRATEGIES_DEFAULT`) instead of three hand-copied literals — which had
+  already drifted, the `??` fallback omitting `rest-pattern` — and a **v28 migration** (`mergeMakerStrategies`)
+  unions whatever the defaults have gained into a persisted list, returning `undefined` when there is nothing to
+  add so it is a no-op on a current install. On the live config it added exactly `flow-follow`
+  (`flowFollowEnabled: false`, so inert today) and `rest-pattern` (already forced maker in code yesterday, so
+  also inert); `main.log` 11:14:26.573Z `[auto-trader] v28 maker-seat defaults: added flow-follow, rest-pattern
+  to the persisted makerStrategies list`, and `kalshi-auto.json` reads `configVersion 28` with all eight entries.
+  **The correction:** option (a) is not needed and option (b) must not be taken, because
+  `docs/PREREGISTERED-mean-reversion-taker.md` — written **2026-09-18 19:05Z, before any trade under the rule** —
+  already puts the arm on the taker seat in those words: *"Seat: **taker at the current ask** (the arm leaves
+  `makerStrategies`)"*. The ladder's `kalshi-mean-reversion` baseline is `stageSince`
+  **2026-09-18T19:05:00.898Z**, that registration to the millisecond. So the live config is **right** for this
+  arm, the arm is **not** trading a seat its registration denies, and the stale sentence is addendum (d) of a
+  **superseded** document. The migration cannot touch it either: `mean-reversion` is deliberately absent from the
+  defaults, and a test asserts that. What is left of 264 is in **266**.
+
 - **265. Read 147b cannot be answered by its own source while the rule it tests is in force — and the source that
   CAN see it has already answered the other way (2026-10-02, section 177).** `leadlag-cadence-shadow.jsonl` is
   written only inside the dislocation branch and only when the gap clears the fee (`leadLag.ts:966,1002`), so once
@@ -3574,6 +3595,45 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
   slot — retiring it is a doc change, not a build.**
 
 ### Build-queue trigger checks — every item, as the rule requires
+**2026-10-03.**
+- **1 critic skill** — MET daily, declined for the **eighth** day. 2,639 decisions; VETO -0.039/contract against
+  the rest at +0.033 (conditions i and ii pass on a 7.2c gap, unchanged to three decimals), condition (iii) fails
+  at "skilled in 0 of 1 shared enabled strategies" and on that one arm — mean-reversion — the critic is
+  anti-skilled (VETO +0.144 against ABSTAIN +0.049). `intelligenceMode` stays `shadow`.
+- **2 WebSocket book** — built 2026-09-28 and holding. Its open half is **BACKLOG 254**, whose own trigger is
+  seven days of the promotion being live = **2026-10-05**; not met, deliberately.
+- **3 HRRR** — done 2026-09-21; the shadow keeps favouring HRRR, and by a slightly wider margin than yesterday:
+  **702** station-days, MAE **1.98 vs 2.19**, bias -0.41 vs -1.05, closer on **368** against **316** with 18 ties.
+- **4 Kalshi private fill channel / 5 Avellaneda-Stoikov skew** — NOT met: quoter notch 1, disabled on an
+  operator hold, ALLOWED cohort **69 settled proxy fills over 38 events** against a bar of 30 over 40, at -1.61c
+  [-13.38, +10.16]. The **events** count is still the binding half; 37 → 38 in a day, so the bar is ~two weeks
+  away at this rate. The BLOCKED cohort is -3.79c [-5.91, -1.67] over 427 events, i.e. the gates are still
+  refusing quotes that would have lost.
+- **6 sports anchor on Polymarket US** — NOT met: `kalshi-sports-anchor` is disabled on an operator hold and has
+  no checkpoint that could be positive (-5.67c [-10.52, -0.82] over 8, 4 events, 2 days).
+- **7 player props** — NOT met (anchor notch 1).
+- **8 new generic strategies** — **CLOSED**: (c) `kalshi-rest-pattern` was built 2026-10-02 and the list's
+  remaining entry (d) was already DECLINED on the 2026-09-08 favourites audit. The arm itself is now evidence:
+  tiny-live, **2 settled, -$2.01**, next checkpoint at 20, with two open positions entered at their own side mid
+  (0.19 on KXBTCD, 0.76 on KXTRUMPAPPROVE) as a maker rest should be.
+- **9 SportsGameOdds role** — no trigger; still the next untriggered build, deferred because 264's dated claim
+  ("tomorrow's leading candidate") outranked it.
+- **10 Metaculus** — retired 2026-10-01; out of the queue.
+- **11 forecaster v2** — weekly, next read **2026-10-05**.
+- **12 mention base rates** — closed; task disabled by its own 09-25 FAIL. Reported anyway because it costs one
+  command and the numbers have not moved: base Brier against market on every cohort (trump 0.2535 vs 0.1748,
+  trump-period 0.2846 vs 0.1776), counterfactual 15c-gap taker **-2.17c/contract** over 54 trades. The base rate
+  is also badly calibrated at the ends (0.0-0.1 bucket hits 22%, 0.1-0.2 hits 26%). Still counter-indicated.
+- **13 consensus arm** — the shadow's trigger is met and its promotion bound holds for a **second** day: the
+  registered post-matcher cohort reads **+3.24c/contract, 95% [+0.19, +6.28] over 857 matched rows and 15
+  day-clusters** (yesterday +3.29c [+0.18, +6.41] over 810/14; -0.52c on 10-01 and -2.76c on 09-30). The lower
+  bound excludes zero. **Nothing changed**: `kalshi-consensus` is `disabled` on an **operator hold**, the one
+  gate this session may not lift. It is again the single item flagged for the operator.
+- **Dated milestones.** 70 mmsim verdict **2026-10-17**, not before (`--interim` only). 72b/161 read today,
+  UNDECIDED, due **2026-10-04** and narrowing by default that day. 75/40 anti-flood cap: `state.openTrades` is
+  **4** against "60 or more on three consecutive days" — nowhere near; weekly, next **2026-10-05**. 76 and 162
+  are both closed at the fee line (162 today). 77 waits on the 10-17 mmsim read.
+
 **2026-10-02.**
 - **1 critic skill** — MET daily, declined for the **seventh** day: VETO -0.039/contract against the rest at
   +0.033 (conditions i and ii pass, the gap is 7.2c), condition (iii) fails at "skilled in 0 of 1 shared enabled
@@ -3660,3 +3720,87 @@ candidates, would quote 0 (4 gated)`, which is 4 chosen and all 4 gated, not a s
 - **13 consensus arm** — built and on the ladder (disabled on an operator hold); its shadow's trigger is **NOT
   met**, and as of today for a better reason: the registered post-matcher cohort is **-2.76c over 156 rows and 3
   day-clusters**, not the +4.63c the raw file prints (above).
+
+## 2026-10-03 daily maintenance (see docs/reports/2026-10-03.md, section 178)
+
+### Registered reads due today — all five performed
+
+- **233 lead-lag at event speed — CLOSED on the registration's own terminal branch, `leadLagFastLive` stays
+  off.** The app ran it itself at 00:12:42.462Z: `INCONCLUSIVE - 6c net, first gap per market and side:
+  -0.45c/contract, 80% [-0.97, 0.08], n=4881 over 11 days (band spans zero)`, immediately followed by
+  `leadLagFastLive stays OFF: still inconclusive at the final read`. The maintenance grader
+  (`leadlag_fast_shadow.py --since 2026-09-22T21:48Z`, rows to 11:03Z) is one step past that: at the registered
+  6c floor **-0.51c, 80% [-1.01, -0.01], n=5,190 over 12 days** — the band is **wholly below zero for the first
+  time**, and the mean has fallen on each of the last four days (+0.13 → -0.16 → -0.30 → -0.51c). The 2c and 4c
+  floors read -1.37c [-1.58, -1.16] and -1.00c [-1.29, -0.72]. PASS needed n ≥ 150 **and** lo80 > 0 and never
+  held on either instrument. Verified: `leadLagFastLive = false` in the live config. Standing speed clause, last
+  time of asking — at the 6c floor **13,670 gaps over 253.2 h = 54.0/hour**, median life **0.5 s**, p75 1.8 s,
+  p90 **5.0 s**, 61% under 1 s and 89% under 5 s. Seconds, not milliseconds: co-location was never the missing
+  piece. No further read; `done` set in `docs/reads.json`.
+- **72b/161 lead-lag coin cohort — UNDECIDED for the fourth day, and tomorrow is the default-narrowing date.**
+  `leadlag-coins.mjs --json --since 2026-09-19T00:00:00Z` on the fresh 11:01Z dump: new-coin cohort **740.1
+  contracts over 15 day-clusters, +$23.21, +3.14c/contract, 95% [-1.32, +7.59]**; BTC/ETH +8.66c [-0.40, +17.72];
+  pooled +5.49c [+0.06, +10.93]. Both sample conditions (≥ 400 contracts, ≥ 5 clusters) are met for the fourth
+  day and neither bound clears zero, so **no config was touched**. Worth recording because it cuts against
+  patience: the band moved the **wrong** way in a day — lower bound -0.67c → **-1.32c** as the mean fell +3.95c →
+  +3.14c. Per coin, BTC is again the only one whose own band excludes zero (**+15.76c [+8.91, +22.61]**);
+  HYPE +13.85c [-1.46, +29.16], ZEC +9.61c on 14 contracts, SOL +2.97c, BNB +1.48c, XRP +0.96c, DOGE -8.74c,
+  ETH -5.39c. Due **2026-10-04**, when an undecided read narrows `LEADLAG_COINS` back to BTC, ETH by default.
+- **162 cross-series implication scan — CLOSED, family dead, `OracleTrader-ImplicationScan` DISABLED.** The
+  registration gave the recorder an 8-day window; it ran 2026-09-19T09:50Z → 2026-09-27T09:24Z and the task's
+  trigger then **expired itself** (State Ready, `NextRun` empty, last run 09-27 05:22 local). That is why this is
+  answered rather than deferred — the record is complete and no more is coming. **385 half-hourly passes** over
+  2,200–3,300 spread-vs-moneyline pairs each; **33 flagged rows on 6 days, 15 of them confirmed at the live
+  orderbook on 5 days.** The strict "none in a week" branch is **not** what closes it (there was one on 09-26, at
+  0.65c). What closes it is the bar the recording existed to feed — backlog 76's *"violations over fee plus 1c
+  persist for more than one scan on books deeper than one contract"*: exactly **one** pair ever survived two
+  consecutive passes in the whole record, `KXWNBASPREAD-26SEP20SEALV-SEA2` at **0.02c**, and the largest reading
+  ever seen was 5.47c at size 8 on a Lithuanian basketball spread, once. Nine of the 33 rows priced positive at
+  the list and **negative at the live book**, down to -11.35c — the shape of a stale list, not an arb. Third
+  family to die at the fee line after backlog 70 (same-event sums) and 76 (single ladders). It was never in
+  `TASK_WATCH`; a comment there now records why, so no freshness signal re-opens it.
+- **177 stop-loss / take-profit — REPORT ONLY, nothing adopted, and for fade the answer is decisive rather than
+  short.** `scripts/stop-analysis.py` over 386 paired trades / 364 markets / 35 book files. **Fade** is the only
+  cohort past the 40-trade bar (110 settled with a ≥ 5-snapshot book path, 103W/7L, hold-to-settlement
+  **+2.63c/contract**) and holding beats **all eleven** rules tested: stops cost **6.36–8.06c**/contract, takes
+  cost 0.08–2.16c. The mechanism is in the table, not in the noise: only **1 of 7** losers was ever up 3c at the
+  bid and **none** was ever up 5c, so a take-profit cannot rescue a loser; while **58 of 103** winners were once
+  down 5c, 31 down 10c and 17 down 20c, so a stop sells winners. Mean-reversion is the same shape harder (9 of 10
+  winners went 10c against it first; every rule loses 4.4–31.9c) on 14 book-path trades. Momentum holds the only
+  positives on the board (stop 5c +1.30c, take 8c +4.25c) and is both under the bar (28) and a disabled arm whose
+  own hold-to-settlement is -6.52c — fitting an exit to it would be fitting an exit to a loser on 28
+  observations. Consensus 7. Nothing registered and nothing to shadow: there is no candidate rule. Moved to
+  **2026-11-03** rather than closed, because the one thing that could change the answer is mean-reversion or
+  rest-pattern reaching 40 book-path settlements, which is weeks away.
+- **1 critic skill — MET, DECLINED, eighth day.** 2,639 decisions (674 ABSTAIN / 322 VETO / 65 ERROR / 30
+  ALLOW_UNCHANGED settled). VETO **-0.039**/contract against the rest at **+0.033**: amended conditions (i) and
+  (ii) pass on a 7.2c gap, (iii) fails at *"skilled in 0 of 1 shared enabled strategies"*. The denominator is
+  still the single arm mean-reversion and there the critic is **anti-skilled** (VETO +0.144 against ABSTAIN
+  +0.049), so a strict majority of enabled arms is unreachable while one arm is the whole set.
+  `intelligenceMode` stays `shadow`, `intelligenceEnabled` stays true. Due **2026-10-04**.
+
+### New
+
+- **266. What is left of 264: a union migration cannot tell "never had it" from "removed it", and nobody has
+  asked it to yet (2026-10-03, section 178).** The v28 migration unions `MAKER_STRATEGIES_DEFAULT` into a
+  persisted `makerStrategies`, so a default the operator deleted **in the panel** would be reinstated once. A
+  test pins that behaviour rather than claiming the opposite, because the honest fix — persisting a watermark of
+  the last-applied defaults and unioning only entries added since — is more machinery than the problem has yet
+  earned: the live list was exactly the defaults minus the two later additions, so there was nothing for a
+  watermark to protect. Build it the first time a maker strategy is removed deliberately, or the first time this
+  migration pattern is copied to a second array. Trigger: **the next edit to `MAKER_STRATEGIES_DEFAULT`, or any
+  day a session has a free slot.**
+- **267. A registration with addenda has a governing version, and a quote from an addendum is not evidence until
+  you check what replaced it (2026-10-03, section 178).** 264's "open" half said
+  `kalshi-mean-reversion` "has been trading the taker seat its own registration says it is not", quoting
+  `PREREGISTERED-mean-reversion.md` addendum (d) of 2026-09-08. A separate file —
+  `PREREGISTERED-mean-reversion-taker.md`, 2026-09-18 19:05Z, *before any trade under the rule* — moves the arm
+  to the taker seat in those words, and the ladder's own `stageSince` for the arm is that timestamp to the
+  millisecond. The live config was right all along. Note what made the error cheap to make and cheap to find: the
+  two documents are *different files*, and `ls docs/PREREGISTERED-*` is one command. Both halves of 264 were
+  diagnosed in one sitting from one file; one was real and one was not. **The cheap diagnostic: before filing a
+  registration as violated, list every registration file for that arm and read the newest one.** Fourth sighting
+  of this family in two weeks (BACKLOG 256 Metaculus, 265 read 147b, the `IBKR_RULES_SINCE` constant on 10-01):
+  a document, a constant or a counter is quoted without checking whether something later moved it. No trigger —
+  this is a standing rule, like 74.
+
