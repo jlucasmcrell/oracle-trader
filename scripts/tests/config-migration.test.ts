@@ -16,11 +16,11 @@ try {
   const { AutoTrader } = require('../../src/main/strategies/autoTrader')
   const file = join(home, 'auto.json')
   const first = new AutoTrader({}, file)
-  assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27)
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 28)
   first.setConfig({ maxOpenPositions: 7, enabled: false, autoPoll: false, bookLogging: false })
   const second = new AutoTrader({}, file)
   assert.equal(second.getConfig().maxOpenPositions, 7)
-  assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27)
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 28)
 
   // ---- audit 2026-09-19 B-01: reset() is paper-only, whoever calls it ----
   {
@@ -211,7 +211,7 @@ try {
       const file = join(adir, 'quarantine.json')
       writeFileSync(file, '\ufeff{"config": {')
       new AutoTrader({}, file)
-      assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 27, 'migrations ran on the fresh state')
+      assert.equal(JSON.parse(readFileSync(file, 'utf8')).configVersion, 28, 'migrations ran on the fresh state')
       assert.ok(readdirSync(adir).some((f) => f.startsWith('quarantine.json.corrupt-')), 'the bad file was moved aside')
     }
     auditDone = true
@@ -246,7 +246,7 @@ try {
 
   const third = new AutoTrader({}, file)
   const after = JSON.parse(readFileSync(file, 'utf8'))
-  assert.equal(after.configVersion, 27)
+  assert.equal(after.configVersion, 28)
   const s = after.state.calib.byStrategy.fade
   assert.equal(s.netN, undefined)
   assert.equal(s.netSum, undefined)

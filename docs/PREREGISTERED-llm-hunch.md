@@ -68,3 +68,14 @@ capped), never money directly.
   that the rule never intended. Fixes: JSON response mode with full headroom; any market with a
   floor or cap strike is excluded. The rule, thresholds, and gate are unchanged; data starts
   from the next pass.
+
+## Closed 2026-10-04 (section 179): stopped on the operator's rule
+
+Operator: "if we aren't getting anything out of our prediction LLMs or we can't tweak it so it's looking at markets
+that actually trade, we'll stop that also." Measured first: the hunch universe's median bid-ask spread was 95c, so the
+model's Brier win (0.077 against 0.220) was against the mid of empty books. On the markets it was asked about that DID
+have a real book (spread <= 10c): incumbent 81 settled, Brier 0.1563 against the mid's 0.1551; challenger 32 settled,
+0.1287 against 0.1196 - no better than the price in either case, and no threshold traded positive with any width
+behind it. Restricting the universe to tradable markets would therefore measure a forecaster that does not beat
+those prices. Both collectors are off (`hunchEnabled` must now be true for any pass to run); no trading was ever
+built on them.

@@ -4794,6 +4794,9 @@ export class AutoTrader {
 
   /** One hunch pass (see hunch.ts). Guarded so overlapping timers cannot double-run. */
   private async runHunches(): Promise<void> {
+    // Off unless switched on (2026-10-04, section 179): on the 81 settled markets with a real two-sided book the
+    // forecaster's Brier was no better than the mid (0.1563 vs 0.1551); its earlier "skill" was against empty books.
+    if (this.config.hunchEnabled !== true) return
     if (this.hunchRunning) return
     this.hunchRunning = true
     try {

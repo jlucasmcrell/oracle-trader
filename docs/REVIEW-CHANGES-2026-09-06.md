@@ -7770,3 +7770,19 @@ the registration decides on 2026-10-04 and narrows to BTC/ETH by default on an u
 **1 - critic skill MET and DECLINED, eighth day.** VETO -0.039/contract against the rest at +0.033: conditions
 (i) and (ii) pass on a 7.2c gap, (iii) fails at "skilled in 0 of 1 shared enabled strategies". The denominator is
 still one arm, and on that arm the critic is anti-skilled. `intelligenceMode` stays `shadow`.
+
+## §179 - 2026-10-04: the LLM forecasters are stopped; the critic stays in shadow
+
+- **Hunch collector and challenger off** (`hunchEnabled` must be true; default now off). The universe's median spread
+  was 95c, so the Brier win was against empty books. On the subset with a real book (spread <= 10c) neither model beat
+  the mid: incumbent 0.1563 vs 0.1551 (81 settled), challenger 0.1287 vs 0.1196 (32). Reads 11 and 65b/80c closed;
+  both registrations carry the closing note. Saves about $0.32 a day of OpenRouter credit.
+- **The critic, measured on 2,733 reviewed candidates (critic-skill.py, 2026-10-04 dump):** its VETOs ran -3.9c per
+  contract against +3.3c for ABSTAIN, with the skill concentrated in arms that are now off (consensus -1.6c vs +7.9c,
+  volume-spike -8.1c vs +13.3c, book-imbalance, sports-anchor). On what it reviews now - fade (+0.5c vs +0.8c) and
+  mean-reversion (+14.4c vs +5.2c over 11) - it shows none, and it cannot review lead-lag (a call takes ~35 s; the
+  gaps last under a second). Veto mode stays off by its registered rule; it stays in shadow.
+- **Reddit:** the trader's only Reddit source is the Bright Data feed to the critic. 136 searches in September put
+  Reddit posts in front of the critic 19 times out of 2,733 reviews, and none since 09-30 (the arms it now reviews are
+  not Reddit-eligible). Left as it is on the operator's word. The terminal window full of failed Reddit requests was
+  the Apify fleet's Intent Radar, whose Reddit scan was removed there (apify-fleet 9511382).

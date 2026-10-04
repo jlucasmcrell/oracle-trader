@@ -319,6 +319,8 @@ export interface AutoTraderConfig {
    */
   maxDailyLossPct: number
   maxLlmPerScan: number
+  /** The LLM hunch collector and its challenger. Off unless true (stopped 2026-10-04: no edge on tradable books). */
+  hunchEnabled?: boolean
   /** Ask a frontier model the SAME hunch prompt, to a separate ledger, for the same pre-registered gate. */
   hunchChallengerEnabled?: boolean
   /** The challenger. Default openai/gpt-5.6-sol - the model whose no-skill verdict as a CRITIC is already measured. */
