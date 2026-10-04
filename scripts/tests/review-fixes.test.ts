@@ -1805,7 +1805,7 @@ async function registeredReadTests(): Promise<void> {
   eq('btc-hour: Polymarket US slug names the starting UTC hour', btcHourSlug(Date.parse('2026-10-04T07:00:00Z')), 'cpc-btc-updown-1h-2026-10-04-0700z')
   eq('btc-hour: the international slug names the New York hour, daylight and standard time',
     [globalHourSlug(Date.parse('2026-10-04T07:00:00Z')), globalHourSlug(Date.parse('2026-10-04T16:00:00Z')), globalHourSlug(Date.parse('2026-12-01T13:00:00Z'))],
-    ['bitcoin-up-or-down-october-4-3am-et', 'bitcoin-up-or-down-october-4-12pm-et', 'bitcoin-up-or-down-december-1-8am-et'])
+    ['bitcoin-up-or-down-october-4-2026-3am-et', 'bitcoin-up-or-down-october-4-2026-12pm-et', 'bitcoin-up-or-down-december-1-2026-8am-et'])
   eq('btc-hour: gaps are net of the Polymarket US taker fee', hourGaps(0.37, 0.38, 0.5), { YES: 10, NO: -15 })
   {
     const mk = (days: number, perDay: number, winRate: number, leader: string): BtcHourOpen[] => Array.from({ length: days * perDay }, (_, i) => ({

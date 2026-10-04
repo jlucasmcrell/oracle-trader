@@ -7806,3 +7806,8 @@ still one arm, and on that arm the critic is anti-skilled. `intelligenceMode` st
   the operator's rule for prediction LLMs (section 179) - and `runForecast` makes no model call once neither is live.
   The controls (`benchmark`, `settle-control`) are measuring sticks and stay. The lab test's fixture arm moved from
   favorite to calibration; the rotation test now expects the seven-minute contract through the new lane.
+- Same day, before any read: the first deploy recorded the spot leader only. The international slug carries the year
+  (`bitcoin-up-or-down-october-4-2026-4am-et`; without it gamma returned the October 2025 market, closed), and the
+  hour's opening price was asked for at the first instant of the hour, before Coinbase publishes that minute's
+  candle, so the 08:00Z hour had no spot fair value either. Both now retry (15 s and 60 s) until found. Rows from the
+  07:00Z hour are spot-only and stand; both leaders record from 08:08Z.

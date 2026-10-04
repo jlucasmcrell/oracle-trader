@@ -19,7 +19,7 @@ the public /bbo, which changed 4 times (median 30 s apart) and ended at 0.29/0.3
 The Polymarket US hourly book lags one of two leaders by more than the taker fee often enough, and long enough, for a
 taker to earn at settlement:
 
-1. **international**: the mid of Polymarket's international market for the same hour (Binance BTC/USDT settled; the
+1. **international**: the mid of Polymarket's international market for the same hour (slug bitcoin-up-or-down-<month>-<day>-<year>-<h><am|pm>-et, Binance BTC/USDT settled; the
    basis is recorded, not assumed away), when its spread is at most 5c and its top is under 5 s old;
 2. **spot**: a lognormal fair value of P(up) from the Coinbase spot tick (under 3 s old), the hour's opening price
    (Coinbase one-minute open at the hour) and Coinbase five-minute realised volatility.

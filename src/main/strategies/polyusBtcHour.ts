@@ -20,7 +20,7 @@ import { polyUsTakerFee } from './polyusLag'
 
 export const BTC_HOUR_LOG_MIN_NET = 2
 const HOUR = 3600_000
-const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric', hour: 'numeric', hour12: true })
+const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', hour12: true })
 
 /** Polymarket US slug of the hourly market that STARTS at hourStartMs (UTC). */
 export function btcHourSlug(hourStartMs: number): string {
@@ -28,11 +28,14 @@ export function btcHourSlug(hourStartMs: number): string {
   return `cpc-btc-updown-1h-${d.toISOString().slice(0, 10)}-${String(d.getUTCHours()).padStart(2, '0')}00z`
 }
 
-/** Polymarket international event slug for the same hour, named by its New York start: bitcoin-up-or-down-october-4-3am-et. */
+/**
+ * Polymarket international event slug for the same hour, named by its New York start:
+ * bitcoin-up-or-down-october-4-2026-3am-et. The year is part of the slug; without it the October 2025 market answers.
+ */
 export function globalHourSlug(hourStartMs: number): string {
   const p: Record<string, string> = {}
   for (const x of ET.formatToParts(new Date(hourStartMs))) p[x.type] = x.value
-  return `bitcoin-up-or-down-${p.month.toLowerCase()}-${p.day}-${p.hour}${p.dayPeriod.toLowerCase()}-et`
+  return `bitcoin-up-or-down-${p.month.toLowerCase()}-${p.day}-${p.year}-${p.hour}${p.dayPeriod.toLowerCase()}-et`
 }
 
 /** Net cents a one-contract taker clears buying YES at the ask, or NO at 1 - bid, against a leader's P(up). */
@@ -44,7 +47,7 @@ export function hourGaps(bid: number, ask: number, leader: number): { YES: numbe
 }
 
 interface Top { bid: number; ask: number; at: number }
-interface Hour { start: number; slug: string; s0?: number; upToken?: string }
+interface Hour { start: number; slug: string; s0?: number; upToken?: string; openTry?: number; globalTry?: number }
 
 export class PolyUsBtcHourShadow {
   private sock: WebSocket | null = null
@@ -139,6 +142,13 @@ export class PolyUsBtcHourShadow {
     this.hour = h
     this.subscribe(start)
     for (const k of [...this.tops.keys()]) if (k !== h.slug && k !== btcHourSlug(start + HOUR)) this.tops.delete(k)
+    await Promise.all([this.loadOpen(h), this.loadGlobal(h)])
+  }
+
+  /** The hour's opening price. Coinbase publishes the first minute's candle only once that minute has begun. */
+  private async loadOpen(h: Hour): Promise<void> {
+    const start = h.start
+    h.openTry = Date.now()
     try {
       const iso = new Date(start).toISOString()
       const r = await fetch(`https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${iso}&end=${new Date(start + 60_000).toISOString()}`, { signal: AbortSignal.timeout(10_000) })
@@ -146,6 +156,11 @@ export class PolyUsBtcHourShadow {
       const first = Array.isArray(rows) ? rows.find((c) => c[0] * 1000 === start) : undefined
       if (first && first[3] > 0) h.s0 = first[3]
     } catch (e) { this.stats.lastError = 'hour open: ' + String(e) }
+  }
+
+  private async loadGlobal(h: Hour): Promise<void> {
+    const start = h.start
+    h.globalTry = Date.now()
     try {
       const r = await fetch(`https://gamma-api.polymarket.com/events?slug=${globalHourSlug(start)}`, { signal: AbortSignal.timeout(10_000) })
       const ev = (await r.json()) as { markets?: { clobTokenIds?: string; outcomes?: string }[] }[]
@@ -170,6 +185,8 @@ export class PolyUsBtcHourShadow {
       void cryptoSpot('CFBTC', now).then((s) => { if (s) this.vol = { v: s.annualVol, at: now } }).catch(() => undefined)
     }
     const h = this.hour
+    if (h.s0 === undefined && now - (h.openTry ?? 0) > 15_000) void this.loadOpen(h)
+    if (h.upToken === undefined && now - (h.globalTry ?? 0) > 60_000) void this.loadGlobal(h)
     const end = start + HOUR, left = end - now
     const top = this.tops.get(h.slug)
     if (!top || now - top.at > 5_000 || left < 60_000) return
