@@ -42,6 +42,7 @@ export class IbkrLab {
   private failure?:string
   private cursor=0
   private activeCursor=0
+  private spotCursor=0
   private lastSettlementAt=0
   private discoveryFailedAt=0
   private modelBusy=false
@@ -203,8 +204,12 @@ export class IbkrLab {
       // a larger group rotates through those 20 slots rather than starving its tail.
       const closing=all.filter(m=>m.closeTime-Date.now()<=6*60000&&/^CF(BTC|ETH|SOL|XRP)$/.test(m.product))
       const soon=closing.length<=20?closing:Array.from({length:20},(_,i)=>closing[(this.cursor+i)%closing.length])
-      const batch=[...new Map([...pri,...soon,...rotated].map(m=>[m.id,m])).values()].slice(0,30)
-      this.cursor+=20;this.activeCursor+=10
+      // spot-first's crypto contracts inside its 24 h window, eight a cycle on their own cursor (section 180): through the
+      // general rotation each was quoted about once in ten minutes, and the arm's only limit was how often it looked.
+      const spotWindow=all.filter(m=>m.closeTime-Date.now()<=24*3600000&&/^CF(BTC|ETH|SOL|XRP)$/.test(m.product))
+      const spotPick=spotWindow.length<=8?spotWindow:Array.from({length:8},(_,i)=>spotWindow[(this.spotCursor+i)%spotWindow.length])
+      const batch=[...new Map([...pri,...soon,...spotPick,...rotated].map(m=>[m.id,m])).values()].slice(0,30)
+      this.cursor+=20;this.activeCursor+=10;this.spotCursor+=8
       const spotByProduct=new Map<string,Awaited<ReturnType<IbkrLabSources['spot']>>>()
       const weatherByMarket=new Map<string,Awaited<ReturnType<IbkrLabSources['weather']>>>()
       await Promise.all([...new Set(batch.map(m=>m.product).filter(p=>/^CF(BTC|ETH|SOL|XRP)$/.test(p)))].map(async product=>{
@@ -350,6 +355,7 @@ export class IbkrLab {
   }
   private async runForecast(frames:LabFrame[],now:number){
     const s=this.state;if(this.modelBusy||!this.sources.forecast||!s.config.enabled)return
+    if(IBKR_RETIRED.has('news')&&IBKR_RETIRED.has('market-conditioned'))return   // no arm reads the forecast (section 180)
     if(s.modelDay!==day(now)){s.modelDay=day(now);s.modelCalls=0}
     if(s.modelCalls>=8){s.notes.news='Daily eight-call forecast budget reached';return}
     const attempts=s.forecastAttempts??={}

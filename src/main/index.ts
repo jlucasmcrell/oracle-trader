@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
+import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
@@ -12,6 +12,7 @@ import { IbkrWatchTrader } from './strategies/ibkrWatch'
 import { IbkrLab } from './strategies/ibkrLab'
 import { PolyPaperLab } from './strategies/polyPaper'
 import { PolymarketUsAdapter } from './venues/polymarketUs'
+import { PolyUsBtcHourShadow } from './strategies/polyusBtcHour'
 import { IbkrReader } from './venues/ibkr'
 import { IBApi } from '@stoqey/ib'
 import { vetWithLlm } from './strategies/vetting'
@@ -26,7 +27,7 @@ import { ConfigStore } from './store/config'
 import { HistoryStore } from './store/history'
 import { FillReconciler } from './store/fillReconciler'
 import { Ladder } from './ladder/ladder'
-import { decidedRead, fastLeadLagRead, leadLagWeekdayRead, polyusFadeRead, ReadRunner } from './ladder/registeredReads'
+import { decidedRead, fastLeadLagRead, leadLagWeekdayRead, polyusBtcHourRead, polyusFadeRead, ReadRunner } from './ladder/registeredReads'
 import { HttpClient } from './util/http'
 import { sendAlert } from './util/alert'
 import { NightlyReview } from './intelligence/nightlyReview'
@@ -479,6 +480,18 @@ app.whenReady().then(async () => {
     mini.start()
     miniAutos.set(venue, mini)
   }
+  // Polymarket US BTC-hour lead-lag SHADOW (section 180): records gaps on the authenticated book, trades nothing.
+  if (polyUs instanceof PolymarketUsAdapter) {
+    const usAdapter = polyUs
+    const btcHour = new PolyUsBtcHourShadow({
+      path: join(app.getPath('userData'), 'polyus-btc-hour-shadow.jsonl'),
+      headers: (p) => usAdapter.streamHeaders(p),
+      enabled: () => miniAutos.get('polymarket-us')?.getConfig().btcHourShadowEnabled !== false,
+      log: (s) => console.log(s)
+    })
+    btcHour.start()
+    app.once('before-quit', () => btcHour.stop())
+  }
 
   // Venue-fill reconciler: publishes every Kalshi fill the shared ledger has
   // not seen (resting orders fill after placement) into history.json,
@@ -528,6 +541,24 @@ app.whenReady().then(async () => {
         shadowPath: join(app.getPath('userData'), 'leadlag-fast-shadow.jsonl'),
         kalshiSettled,
         setFastLive: (on) => void autoTrader.setConfig({ leadLagFastLive: on })
+      }),
+      polyusBtcHourRead({
+        shadowPath: join(app.getPath('userData'), 'polyus-btc-hour-shadow.jsonl'),
+        settled: async (slugs) => {
+          // Settled results are cached beside the shadow so a daily read re-asks only the new hours.
+          const cachePath = join(app.getPath('userData'), 'polyus-btc-hour-results.json')
+          let cache: Record<string, 'yes' | 'no'> = {}
+          try { cache = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, 'yes' | 'no'> } catch { /* first read */ }
+          const venue = engine.getAdapter('polymarket-us')
+          for (const s of slugs) {
+            if (cache[s] || !venue) continue
+            const m = await venue.getMarket(s).catch(() => undefined)
+            if (m?.resolution === 'yes' || m?.resolution === 'no') cache[s] = m.resolution
+          }
+          try { writeFileSync(cachePath, JSON.stringify(cache)) } catch { /* cache only */ }
+          return new Map(Object.entries(cache))
+        },
+        stop: () => void miniAutos.get('polymarket-us')?.setConfig({ btcHourShadowEnabled: false })
       }),
       leadLagWeekdayRead({
         dislocationsPath: join(app.getPath('userData'), 'leadlag-dislocations.jsonl'),

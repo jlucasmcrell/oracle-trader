@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { etDay } from '../util/etDay'
+import { polyUsTakerFee } from '../strategies/polyusLag'
 
 export type Verdict = 'WAIT' | 'CONTINUE' | 'PASS' | 'FAIL' | 'INCONCLUSIVE'
 export interface ReadResult {
@@ -385,6 +386,94 @@ export function leadLagWeekdayRead(deps: {
         return 'leadLagWeekdays switched OFF: lead-lag now trades live on New York weekends only'
       }
       return 'no change: lead-lag keeps trading every day'
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Polymarket US BTC-hour lead-lag shadow (docs/PREREGISTERED-polyus-btc-hour.md)
+// ---------------------------------------------------------------------------------------------------------------
+
+export const BTC_HOUR_MIN_NET = 6
+/** Two leaders are tested, so each band is drawn at z = 1.645 (Bonferroni: an 80% family over two). */
+const BTC_HOUR_Z = 1.645
+
+export interface BtcHourOpen { ts: string; slug: string; leader: string; side: 'YES' | 'NO'; px: number; net: number }
+export interface BtcHourBand { n: number; days: number; meanCents: number; lo: number; hi: number }
+
+/** First gap per market, side and leader at BTC_HOUR_MIN_NET or more, bought at the logged price, held to settlement. */
+export function btcHourStats(opens: BtcHourOpen[], results: Map<string, 'yes' | 'no'>): Record<string, BtcHourBand> {
+  const seen = new Set<string>()
+  const by = new Map<string, { day: string; c: number }[]>()
+  for (const o of [...opens].sort((a, b) => a.ts.localeCompare(b.ts))) {
+    const res = results.get(o.slug)
+    const key = `${o.slug}|${o.leader}|${o.side}`
+    if (o.net < BTC_HOUR_MIN_NET || !res || seen.has(key)) continue
+    seen.add(key)
+    const won = (res === 'yes') === (o.side === 'YES')
+    const rows = by.get(o.leader) ?? []
+    rows.push({ day: o.ts.slice(0, 10), c: (won ? 100 : 0) - 100 * o.px - 100 * polyUsTakerFee(o.px) })
+    by.set(o.leader, rows)
+  }
+  const out: Record<string, BtcHourBand> = {}
+  for (const [leader, rows] of by) {
+    const days = new Map<string, number[]>()
+    for (const r of rows) days.set(r.day, [...(days.get(r.day) ?? []), r.c])
+    const n = rows.length, m = rows.reduce((s, r) => s + r.c, 0) / n, g = days.size
+    const se = g >= 2 ? Math.sqrt((g / (g - 1)) * [...days.values()].reduce((s, v) => s + (v.reduce((a, b) => a + b, 0) - v.length * m) ** 2, 0)) / n : Infinity
+    out[leader] = { n, days: g, meanCents: m, lo: m - BTC_HOUR_Z * se, hi: m + BTC_HOUR_Z * se }
+  }
+  return out
+}
+
+/**
+ * The registered rule. A leader is readable at >= 100 first gaps over >= 7 days. PASS: any readable leader's lower bound
+ * above zero. FAIL: both leaders readable and both upper bounds below zero. Otherwise continue to 2026-11-01.
+ */
+export function btcHourVerdict(s: Record<string, BtcHourBand>): ReadResult {
+  const fmt = (k: string): string => {
+    const b = s[k]
+    return b ? `${k} ${b.meanCents >= 0 ? '+' : ''}${b.meanCents.toFixed(2)}c [${b.lo.toFixed(2)}, ${b.hi.toFixed(2)}] n=${b.n}/${b.days}d` : `${k} none`
+  }
+  const line = `${fmt('international')}; ${fmt('spot')} (first gap >= ${BTC_HOUR_MIN_NET}c, z ${BTC_HOUR_Z})`
+  const readable = ['international', 'spot'].filter((k) => s[k] && s[k].n >= 100 && s[k].days >= 7)
+  if (!readable.length) return { verdict: 'WAIT', summary: line + ' - needs 100 first gaps over 7 days for a leader' }
+  if (readable.some((k) => s[k].lo > 0)) return { verdict: 'PASS', summary: line }
+  if (readable.length === 2 && readable.every((k) => s[k].hi < 0)) return { verdict: 'FAIL', summary: line }
+  return { verdict: 'CONTINUE', summary: line }
+}
+
+export function polyusBtcHourRead(deps: {
+  shadowPath: string
+  settled: (slugs: string[]) => Promise<Map<string, 'yes' | 'no'>>
+  stop: () => void
+}): RegisteredRead {
+  return {
+    id: 'polyus-btc-hour',
+    doc: 'docs/PREREGISTERED-polyus-btc-hour.md',
+    from: Date.parse('2026-10-18T00:00:00Z'),
+    finalAt: Date.parse('2026-11-01T00:00:00Z'),
+    async evaluate(now) {
+      if (!existsSync(deps.shadowPath)) return { verdict: 'WAIT', summary: 'no shadow file yet' }
+      const opens: BtcHourOpen[] = []
+      for (const line of readFileSync(deps.shadowPath, 'utf8').split(/\r?\n/)) {
+        if (!line.includes('"open"')) continue
+        try {
+          const r = JSON.parse(line) as Partial<BtcHourOpen> & { ev?: string }
+          if (r.ev === 'open' && r.ts && r.slug && r.leader && (r.side === 'YES' || r.side === 'NO') && typeof r.px === 'number' && typeof r.net === 'number') opens.push(r as BtcHourOpen)
+        } catch {
+          // skip a torn line
+        }
+      }
+      // A market is graded once it has ended (its slug names the hour it starts).
+      const slugs = [...new Set(opens.filter((o) => o.net >= BTC_HOUR_MIN_NET).map((o) => o.slug))]
+        .filter((s) => { const m = /(\d{4}-\d\d-\d\d)-(\d\d)00z$/.exec(s); return !!m && Date.parse(`${m[1]}T${m[2]}:00:00Z`) + 2 * 3600_000 < now })
+      return btcHourVerdict(btcHourStats(opens, await deps.settled(slugs)))
+    },
+    async apply(verdict) {
+      if (verdict === 'PASS') return 'recorder keeps running; a live arm needs its own registration (sizes and limits are the operator\'s)'
+      deps.stop()
+      return 'btcHourShadowEnabled switched OFF: the BTC-hour recorder stops'
     }
   }
 }

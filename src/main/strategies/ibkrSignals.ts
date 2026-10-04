@@ -59,6 +59,9 @@ export const IBKR_RETIRED:ReadonlyMap<string,string>=new Map([
   ['book-imbalance','Stopped 2026-09-20 (section 143): 51 closed, 15 events, 4 day-clusters, -6.18c/contract, band [-9.73,-2.62]. Same bar, same sign, same cause. A passive re-seat is a different hypothesis and needs its own pre-registration.'],
   ['momentum','Stopped 2026-09-24 (section 168) at the read backlog 190 registered for today: 37 closed over 8 day-clusters, -8.57c/contract, band [-11.04,-6.10]. On 09-20 its band still crossed zero and it was left to run to this read; it no longer does. Reported against ZERO, because the benchmark control has n=4 on one day and cannot anchor (backlog 199).'],
   ['log-momentum','Stopped 2026-09-24 (section 168), same read: 32 closed over 7 day-clusters, -9.34c/contract, band [-12.97,-5.72].'],
+  ['favorite','Stopped 2026-10-04 (section 180): 58 closed over 9 days at -5.0c/contract, 80% [-8.2, -1.9] - wholly below zero. Its rule did not change at the 2026-09-29 reset (that reset was the weather arms\' sigma), so its whole record counts.'],
+  ['news','Stopped 2026-10-04 (section 180): an LLM forecast arm, 3 closed in a month; the operator stopped the prediction LLMs (section 179) and the lab\'s eight daily model calls stop with it.'],
+  ['market-conditioned','Stopped 2026-10-04 (section 180): blends the same LLM forecast as news; 3 closed in a month; stopped with it.'],
   ['breakout','Stopped 2026-09-24 (section 168), same read: 33 closed over 7 day-clusters, -9.82c/contract, band [-12.41,-7.23]. The whole quote-following family is now stopped; a passive re-seat is a different hypothesis and needs its own pre-registration.']
 ])
 /** Hold-to-settlement by ARM: a re-baselined cohort keeps its arm's rule. `calibration:pre-slopes-20260918` held

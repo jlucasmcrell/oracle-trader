@@ -8,8 +8,9 @@ import { defaultSportsShadow, gradeObservation, isSameGame, lineConsensus, obser
 import { FLOW_DEFAULTS, flowStats, flowVerdict } from '../../src/main/strategies/flowMonitor'
 import { DepthHistory, REST_DEFAULTS, restVerdict, type DepthSample } from '../../src/main/strategies/restPattern'
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
-import { fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type LeadLagFill, type RegisteredRead, weekdayReadStats, weekdayReadVerdict } from '../../src/main/ladder/registeredReads'
+import { btcHourStats, btcHourVerdict, type BtcHourOpen, fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type LeadLagFill, type RegisteredRead, weekdayReadStats, weekdayReadVerdict } from '../../src/main/ladder/registeredReads'
 import { etDay } from '../../src/main/util/etDay'
+import { btcHourSlug, globalHourSlug, hourGaps } from '../../src/main/strategies/polyusBtcHour'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
@@ -1800,6 +1801,25 @@ async function registeredReadTests(): Promise<void> {
   eq('reads: polyus-fade with a clear edge at 250 passes', polyusFadeVerdict(miniArmStats(fades(10, 25, (d, i) => (i % 50 === 0 ? -0.93 : 0.07 + d * 0.001))), oct).verdict, 'PASS')
   eq('reads: polyus-fade stopped for good by the ladder is read now: a band below zero fails (backlog 258)', polyusFadeVerdict(miniArmStats(fades(4, 17, (d, i) => (i % 6 === 0 ? -0.93 : 0.05))), oct, true).verdict, 'FAIL')
   eq('reads: ...and the same cohort with the arm still running waits', polyusFadeVerdict(miniArmStats(fades(4, 17, (d, i) => (i % 6 === 0 ? -0.93 : 0.05))), oct, false).verdict, 'WAIT')
+  // Polymarket US BTC-hour shadow (PREREGISTERED-polyus-btc-hour.md).
+  eq('btc-hour: Polymarket US slug names the starting UTC hour', btcHourSlug(Date.parse('2026-10-04T07:00:00Z')), 'cpc-btc-updown-1h-2026-10-04-0700z')
+  eq('btc-hour: the international slug names the New York hour, daylight and standard time',
+    [globalHourSlug(Date.parse('2026-10-04T07:00:00Z')), globalHourSlug(Date.parse('2026-10-04T16:00:00Z')), globalHourSlug(Date.parse('2026-12-01T13:00:00Z'))],
+    ['bitcoin-up-or-down-october-4-3am-et', 'bitcoin-up-or-down-october-4-12pm-et', 'bitcoin-up-or-down-december-1-8am-et'])
+  eq('btc-hour: gaps are net of the Polymarket US taker fee', hourGaps(0.37, 0.38, 0.5), { YES: 10, NO: -15 })
+  {
+    const mk = (days: number, perDay: number, winRate: number, leader: string): BtcHourOpen[] => Array.from({ length: days * perDay }, (_, i) => ({
+      ts: `2026-10-${String(5 + Math.floor(i / perDay)).padStart(2, '0')}T10:00:00Z`, slug: `S${i}`, leader, side: 'YES' as const, px: 0.45, net: 8 }))
+    const results = (opens: BtcHourOpen[], winRate: number) => new Map(opens.map((o, i) => [o.slug, ((i * 7) % 100) < winRate * 100 ? 'yes' as const : 'no' as const]))
+    const good = mk(8, 15, 0.62, 'spot'), bad = mk(8, 15, 0.3, 'international')
+    const res = new Map([...results(good, 0.62), ...results(bad.map((o) => ({ ...o, slug: 'B' + o.slug })), 0.3)])
+    const s = btcHourStats([...good, ...bad.map((o) => ({ ...o, slug: 'B' + o.slug }))], res)
+    eq('btc-hour read: a leader that wins at 45c passes', btcHourVerdict(s).verdict, 'PASS')
+    eq('btc-hour read: below 100 first gaps it waits', btcHourVerdict(btcHourStats(good.slice(0, 60), res)).verdict, 'WAIT')
+    const both = btcHourStats([...bad.map((o) => ({ ...o, slug: 'B' + o.slug })), ...bad.map((o) => ({ ...o, slug: 'B' + o.slug, leader: 'spot' }))], res)
+    eq('btc-hour read: both leaders losing fails', btcHourVerdict(both).verdict, 'FAIL')
+    eq('btc-hour read: a gap under 6c is not graded', btcHourStats([{ ...good[0], net: 5 }], res).spot, undefined)
+  }
   // Lead-lag weekdays against weekends (PREREGISTERED-leadlag-weekday.md): New York days, contract-weighted.
   eq('etDay: Saturday noon New York is a weekend day', etDay(Date.parse('2026-10-03T16:00:00Z')), { date: '2026-10-03', weekend: true })
   eq('etDay: 03:00Z Saturday is still Friday evening in New York', etDay(Date.parse('2026-10-03T03:00:00Z')), { date: '2026-10-02', weekend: false })

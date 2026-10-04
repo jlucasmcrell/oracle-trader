@@ -892,6 +892,11 @@ export class PolymarketUsAdapter implements VenueAdapter {
     }
   }
 
+  /** Signed headers for a WebSocket upgrade (a GET of the stream path); the Bitcoin-hour shadow's market-data socket. */
+  streamHeaders(path: string): Record<string, string> {
+    return this.authHeaders('GET', path)
+  }
+
   private authGet<T>(path: string): Promise<T> {
     return this.api.get<T>(path, this.authHeaders('GET', path))
   }

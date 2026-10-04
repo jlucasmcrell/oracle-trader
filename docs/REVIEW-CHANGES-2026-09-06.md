@@ -7786,3 +7786,23 @@ still one arm, and on that arm the critic is anti-skilled. `intelligenceMode` st
   Reddit posts in front of the critic 19 times out of 2,733 reviews, and none since 09-30 (the arms it now reviews are
   not Reddit-eligible). Left as it is on the operator's word. The terminal window full of failed Reddit requests was
   the Apify fleet's Intent Radar, whose Reddit scan was removed there (apify-fleet 9511382).
+
+## §180 - 2026-10-04: a Polymarket US hourly-Bitcoin lead-lag shadow; the IBKR lab looks at spot-first's markets four times as often and drops three arms
+
+- **Polymarket US "BTC Up or Down Hourly" shadow** (operator: "Let's do that for Poly"). The authenticated market-data
+  socket, never used before, was measured first (`scripts/readonly-polyus-ws-probe.cjs`, read-only): 787 top-of-book
+  updates in two minutes and a change every 0.4 s, against one every 30 s on the public /bbo, which ended 2-8c away
+  from the live book. `src/main/strategies/polyusBtcHour.ts` records, every 250 ms, the gaps between that book and two
+  leaders (Polymarket international's same-hour market; a Coinbase spot fair value against the hour's open), and
+  trades nothing. `PolymarketUsAdapter.streamHeaders` signs the socket upgrade. Read `polyus-btc-hour` decides it from
+  2026-10-18 (`docs/PREREGISTERED-polyus-btc-hour.md`); `btcHourShadowEnabled` false stops it.
+- **IBKR spot-first sampling.** Its only limit was how often it looked: each of the 36 crypto contracts inside its
+  24-hour window was quoted about once in ten minutes through the general rotation, while the arm had no open position
+  against its twelve slots. Eight of the thirty quote slots now rotate through those contracts on their own cursor
+  (each about every two minutes); the general rotation keeps the rest. The arm's rule is unchanged. Record: under the
+  current rules 19 closed, +7.42c/contract, 80% [+0.05, +14.79]; all-time 32 closed, +10.4c [+5.0, +15.8].
+- **IBKR arms stopped** (IBKR_RETIRED): `favorite`, 58 closed over 9 days at -5.0c/contract, 80% [-8.2, -1.9] (its rule
+  did not change at the 09-29 reset); `news` and `market-conditioned`, the lab's LLM-forecast arms, 3 closed each, under
+  the operator's rule for prediction LLMs (section 179) - and `runForecast` makes no model call once neither is live.
+  The controls (`benchmark`, `settle-control`) are measuring sticks and stay. The lab test's fixture arm moved from
+  favorite to calibration; the rotation test now expects the seven-minute contract through the new lane.

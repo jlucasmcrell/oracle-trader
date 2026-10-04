@@ -394,6 +394,15 @@
    "how": "in-app leadLagWeekdayRead on live lead-lag fills from 2026-09-30T04:00Z (leadlag-dislocations.jsonl), settled at Kalshi",
    "rule": "docs/PREREGISTERED-leadlag-weekday.md: needs 10 weekday and 6 weekend days; FAIL weekday upper80 < 0; PASS weekday lower80 > 0; else continue to 2026-11-02, then no change",
    "action": "FAIL sets leadLagWeekdays false (weekends only) by itself; PASS or INCONCLUSIVE changes nothing"
+  },
+  {
+   "id": "polyus-btc-hour",
+   "owner": "app",
+   "due": "2026-10-18",
+   "what": "Lead-lag on Polymarket US's hourly Bitcoin market (shadow)",
+   "how": "in-app polyusBtcHourRead on polyus-btc-hour-shadow.jsonl (recorder src/main/strategies/polyusBtcHour.ts, authenticated market-data socket)",
+   "rule": "docs/PREREGISTERED-polyus-btc-hour.md: first gap >= 6c per market/side/leader; PASS any readable leader (100 gaps, 7 days) lower bound > 0 at z 1.645; FAIL both upper < 0; else continue to 2026-11-01",
+   "action": "PASS pushes the verdict (a live arm needs its own registration); FAIL or INCONCLUSIVE sets btcHourShadowEnabled false"
   }
  ]
 }

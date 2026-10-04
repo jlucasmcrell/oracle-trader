@@ -28,9 +28,9 @@ function setup(){
  const lab=new IbkrLab(path,reader as any,engine as any,venue as any,sources)
  return {lab,path,reader,engine,venue,sources,m,s:(lab as any).state}
 }
-function order(m:IbkrLabMarket,overrides={}){return {id:'order',strategy:'favorite',marketId:m.id,outcome:'YES',quantity:1,limit:.82,maker:false,createdAt:now-30000,expiresAt:now+60000,reason:'Fixture',...overrides}}
+function order(m:IbkrLabMarket,overrides={}){return {id:'order',strategy:'calibration',marketId:m.id,outcome:'YES',quantity:1,limit:.82,maker:false,createdAt:now-30000,expiresAt:now+60000,reason:'Fixture',...overrides}}
 const fill=(x:ReturnType<typeof setup>)=>(x.lab as any).fillOrders(now,new Map([[x.m.id,x.m]]))
-function addPosition(x:ReturnType<typeof setup>,overrides={}){const p={id:'position',strategy:'favorite',market:x.m,outcome:'YES',quantity:1,entry:.4,entryFee:.01,openedAt:now-120000,reason:'Fixture',...overrides};x.s.positions.push(p);return p}
+function addPosition(x:ReturnType<typeof setup>,overrides={}){const p={id:'position',strategy:'calibration',market:x.m,outcome:'YES',quantity:1,entry:.4,entryFee:.01,openedAt:now-120000,reason:'Fixture',...overrides};x.s.positions.push(p);return p}
 async function main(){
  const actualNow=Date.now;Date.now=()=>now
  try{
@@ -68,14 +68,14 @@ async function main(){
   // Paper runs against a globally live engine without invoking any broker writer.
   const x=setup();await x.lab.scan();assert.equal(x.s.positions.length,0);assert.ok(x.s.orders.length>0)
   now+=30000;await x.lab.scan();assert.ok(x.s.positions.length>0);assert.equal(writes,0)
-  const held=x.s.positions.find((p:any)=>p.strategy==='favorite');assert.equal(held.entry,.81);assert.equal(held.entryFee,.01)
-  assert.equal(x.s.cash.favorite,999.18)
+  const held=x.s.positions.find((p:any)=>p.strategy==='calibration');assert.equal(held.entry,.81);assert.equal(held.entryFee,.01)
+  assert.equal(x.s.cash.calibration,999.18)
   const reloaded=new IbkrLab(x.path,x.reader as any,x.engine as any,x.venue as any,x.sources);assert.equal(reloaded.status().positions.length,x.s.positions.length)
-  await assert.rejects(x.lab.configure({mode:'live',liveStrategies:['favorite']}),/30 closed/)
+  await assert.rejects(x.lab.configure({mode:'live',liveStrategies:['calibration']}),/30 closed/)
   await assert.rejects(x.lab.configure({contracts:1.5}),/risk/)
   // Next-quote rule, displayed size, taker price and delayed-data veto.
   const y=setup();y.s.orders=[order(y.m,{quantity:4})];y.s.quotes['200']=quote(200,.8,2);y.s.quotes['201']=quote(201,.22)
-  fill(y);assert.equal(y.s.positions[0].quantity,2);assert.equal(y.s.orders.length,0);assert.equal(y.s.cash.favorite,998.36)
+  fill(y);assert.equal(y.s.positions[0].quantity,2);assert.equal(y.s.orders.length,0);assert.equal(y.s.cash.calibration,998.36)
   const z=setup();z.s.orders=[order(z.m,{createdAt:now})];z.s.quotes['200']=quote(200,.8);z.s.quotes['201']=quote(201,.22);fill(z);assert.equal(z.s.positions.length,0)
   z.s.orders[0].createdAt=now-30000;z.s.quotes['200'].dataType='frozen';fill(z);assert.equal(z.s.positions.length,0)
   z.s.quotes['200']=quote(200,.83);fill(z);assert.equal(z.s.positions.length,0)
@@ -106,22 +106,22 @@ async function main(){
   const basket=setup();addPosition(basket,{basket:'exhaustive'});addPosition(basket,{id:'other-leg',market:{...basket.m,id:'TEST_091626_110'},basket:'exhaustive'});basket.s.quotes['201']=quote(201,.8);(basket.lab as any).closePositions(now);assert.equal(basket.s.positions.length,2,'A completed exhaustive basket is held together for settlement')
   const settlement=setup();addPosition(settlement,{market:{...settlement.m,expiresAt:now-1},outcome:'NO'})
   ;(settlement.lab as any).settle(new Map([[settlement.m.id,0]]),now);assert.equal(settlement.s.trades[0].net,.59)
-  const awaiting:any={id:'awaiting',strategy:'favorite',market:{...settlement.m,expiresAt:now-1},outcome:'YES',quantity:1,status:'open',filled:1,exitFilled:0,entryCost:.4,exitCost:0,fees:.01,ordersComplete:false}
+  const awaiting:any={id:'awaiting',strategy:'calibration',market:{...settlement.m,expiresAt:now-1},outcome:'YES',quantity:1,status:'open',filled:1,exitFilled:0,entryCost:.4,exitCost:0,fees:.01,ordersComplete:false}
   settlement.s.live=[awaiting];(settlement.lab as any).settle(new Map([[settlement.m.id,1]]),now);assert.equal(awaiting.status,'open','Unreconciled live orders cannot be graded early')
   awaiting.ordersComplete=true;(settlement.lab as any).settle(new Map([[settlement.m.id,1]]),now);assert.equal(awaiting.status,'closed');assert.equal(awaiting.net,.59)
   const forecasts=setup();let forecastsMade=0
   ;(forecasts.lab as any).sources.forecast=async()=>{forecastsMade++;return {p:.6,reason:'Insufficient edge',approved:false}}
   await (forecasts.lab as any).runForecast([frame()],now);await (forecasts.lab as any).runForecast([frame()],now)
-  assert.equal(forecastsMade,1,'A veto must not be requested again on every scan');assert.equal(forecasts.s.forecast[market().id].p,.6,'The probability is tested even when the model declines a trade')
-  assert.equal(JSON.parse(readFileSync(forecasts.path+'.forecasts.jsonl','utf8').trim()).verdict.approved,false)
-  forecasts.s.modelCalls=8;await (forecasts.lab as any).runForecast([{...frame(),market:market('OTHER_091626_100')}],now);assert.equal(forecastsMade,1)
+  // news and market-conditioned, the only arms that read the forecast, are retired (section 180): no model call at all.
+  assert.ok(IBKR_RETIRED.has('news')&&IBKR_RETIRED.has('market-conditioned'))
+  assert.equal(forecastsMade,0,'No LLM forecast is requested once no arm reads it')
   const pair=setup();addPosition(pair,{entry:.3});addPosition(pair,{id:'opposite',outcome:'NO',entry:.6});fill(pair);assert.equal(pair.s.positions.length,0);assert.equal(pair.s.trades[0].net,.08)
   // The pair's `entry` is the cost of BOTH legs and can exceed 1, so the row is flagged for any per-contract
   // price statistic to skip (audit B-195).
   assert.deepEqual([pair.s.trades[0].paired,+pair.s.trades[0].entry.toFixed(4)],[true,.9])
   // ...and a directional arm can no longer create one: the opposite leg is refused at admission.
   {const both=setup();addPosition(both,{entry:.3})
-   const sigs=[{strategy:'favorite',marketId:both.m.id,outcome:'NO',limit:.6,maker:false,reason:'flip'}]
+   const sigs=[{strategy:'calibration',marketId:both.m.id,outcome:'NO',limit:.6,maker:false,reason:'flip'}]
    ;(both.lab as any).sources.discover=async()=>[both.m];(both.lab as any).state.markets=[both.m]
    const before=both.s.orders.length
    for(const sig of sigs){const blocked=both.s.positions.some((p:any)=>p.strategy===sig.strategy&&p.market.id===sig.marketId&&p.outcome!==sig.outcome&&!p.basket);assert.equal(blocked,true,'the opposite leg is recognised as already held')}
@@ -146,25 +146,25 @@ async function main(){
   const corrupt=setup();writeFileSync(corrupt.path,'{truncated');const broken=new IbkrLab(corrupt.path,corrupt.reader as any,corrupt.engine as any,corrupt.venue as any,corrupt.sources)
   await broken.scan();assert.match(broken.status().lastError!,/unreadable/);assert.equal(readFileSync(corrupt.path,'utf8'),'{truncated')
   // Qualification is based on net results across independent events and days, never win rate alone.
-  const live=setup();live.s.trades=Array.from({length:30},(_,i)=>({id:String(i),strategy:'favorite',marketId:`EVENT${i}_date_strike`,question:'Fixture',outcome:'YES',quantity:1,entry:.4,exit:.7,fees:.02,net:.28,openedAt:base-i*86400000,closedAt:base-Math.floor(i/10)*86400000,reason:'Fixture'}))
+  const live=setup();live.s.trades=Array.from({length:30},(_,i)=>({id:String(i),strategy:'calibration',marketId:`EVENT${i}_date_strike`,question:'Fixture',outcome:'YES',quantity:1,entry:.4,exit:.7,fees:.02,net:.28,openedAt:base-i*86400000,closedAt:base-Math.floor(i/10)*86400000,reason:'Fixture'}))
   // Qualification counts only trades opened under the current rules; the same record opened earlier is history.
-  let row=live.lab.status().strategies.find(r=>r.id==='favorite')!
+  let row=live.lab.status().strategies.find(r=>r.id==='calibration')!
   assert.deepEqual([row.liveEligible,row.closed,row.legacyClosed,row.legacyRealized],[false,0,30,8.4],'old-rule trades never qualify a strategy')
   const since=IBKR_RULES_SINCE+3600000;live.s.trades=live.s.trades.map((t:any,i:number)=>({...t,openedAt:since+i,closedAt:since+Math.floor(i/10)*86400000}))
-  row=live.lab.status().strategies.find(r=>r.id==='favorite')!
+  row=live.lab.status().strategies.find(r=>r.id==='calibration')!
   // Thirty straight wins on a favourite arm is the MODAL record of a zero-edge arm, not evidence: before the first
   // loss the sample is near-deterministic, the clustered SE collapses and the band tightens around a mean that has
   // never seen the payout the arm is exposed to. BACKLOG 141 measured exactly that on the Kalshi arm at 138 trades
   // and set the bar at 250 trades or 15 losses; a hold-to-settlement arm here carries the same one (section 143).
   assert.deepEqual([row.liveEligible,row.closed,row.legacyClosed],[false,30,0],'an unsampled loss branch cannot qualify a settlement arm')
   assert.ok(row.gateBlockers!.some(b=>/losses sampled/.test(b)),'and the row says which leg of the gate is missing')
-  await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/losses sampled/)
+  await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['calibration']}),/losses sampled/)
   // The same arm with its loss branch sampled: 45 closes over three days, 15 of them real losses at the
   // favourite's own payout, still net positive with a band clear of zero. That is what evidence looks like.
   const shape=[11,10,9].flatMap((wins,d)=>Array.from({length:15},(_,k)=>({d,win:k<wins})))
-  live.s.trades=shape.map(({d,win},i)=>({id:'S'+i,strategy:'favorite',marketId:`EV${i}_date_strike`,question:'Fixture',
+  live.s.trades=shape.map(({d,win},i)=>({id:'S'+i,strategy:'calibration',marketId:`EV${i}_date_strike`,question:'Fixture',
     outcome:'YES',quantity:1,entry:.4,exit:win?.7:.3,fees:.02,net:win?.3:-.1,openedAt:since+i,closedAt:since+d*86400000,reason:'Fixture'}) as any)
-  row=live.lab.status().strategies.find(r=>r.id==='favorite')!
+  row=live.lab.status().strategies.find(r=>r.id==='calibration')!
   assert.equal(row.gateBlockers!.some(b=>/losses sampled/.test(b)),false,'the loss branch is sampled')
   assert.deepEqual([row.liveEligible,row.closed,row.losses>=15],[true,45,true],'sampled losses, positive band, three day-clusters')
   // A quote-dynamics arm never needed the loss bar: it is not held to settlement, so its payout is not one-sided.
@@ -186,15 +186,15 @@ async function main(){
    const crow=ctl.lab.status().strategies.find(r=>r.id==='settle-control')!
    assert.deepEqual([crow.liveEligible,crow.gateBlockers],[false,['control arm: never promoted']],'the record that qualifies favorite above is refused for a control')
    await assert.rejects(ctl.lab.configure({mode:'live',liveStrategies:['settle-control']}),/settle-control: control arm: never promoted/)}
-  await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['favorite']}),/Fund IBKR/)
-  live.venue.getAccount=async()=>({balance:20});await live.lab.configure({mode:'live',liveStrategies:['favorite']})
+  await assert.rejects(live.lab.configure({mode:'live',liveStrategies:['calibration']}),/Fund IBKR/)
+  live.venue.getAccount=async()=>({balance:20});await live.lab.configure({mode:'live',liveStrategies:['calibration']})
   assert.equal(live.lab.status().config.mode,'live');await live.lab.configure({mode:'paper',liveStrategies:[]})
   // Empty/partial IOC lifecycle; definitive terminal evidence before retry, durable execution dedupe.
-  const l=setup();const record={id:'L',strategy:'favorite',market:l.m,outcome:'YES',quantity:2,createdAt:now-120000,status:'open',orderId:'17091:1',filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0}
+  const l=setup();const record={id:'L',strategy:'calibration',market:l.m,outcome:'YES',quantity:2,createdAt:now-120000,status:'open',orderId:'17091:1',filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0}
   // A TWS completed-order row carries orderRef and permId but no orderId/clientId (audit 2026-09-19, B-07): the lab
   // must recognise it by the ref it submitted with, or by the permId the open-order snapshot reported.
-  ;(record as any).entryRef='ibkr-lab:favorite:L:entry'
-  l.s.live=[record];(l.venue.reader as any).completed=async()=>[{order:{orderRef:'ibkr-lab:favorite:L:entry',permId:9001,filledQuantity:0},state:{status:'Cancelled'}}]
+  ;(record as any).entryRef='ibkr-lab:calibration:L:entry'
+  l.s.live=[record];(l.venue.reader as any).completed=async()=>[{order:{orderRef:'ibkr-lab:calibration:L:entry',permId:9001,filledQuantity:0},state:{status:'Cancelled'}}]
   await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'closed','decoder-shaped completed row matched by orderRef');assert.equal(l.s.live[0].net,0)
   record.status='open';delete (record as any).entryRef;(l.lab as any).permIds.set('17091:1',9001)
   await (l.lab as any).reconcileLive(now);assert.equal(l.s.live[0].status,'closed','decoder-shaped completed row matched by permId')
@@ -206,7 +206,7 @@ async function main(){
   await (l.lab as any).reconcileLive(now);assert.equal(record.filled,1);assert.equal(record.fees,.01)
   ;(l.venue.getFills as any)=async()=>[];await (l.lab as any).reconcileLive(now);assert.equal(record.filled,1);assert.equal(record.entryCost,.4)
   // Recovery consumes a uniquely journaled request; it never re-submits an uncertain entry.
-  record.status='uncertain';(record as any).pendingRef='ibkr-lab:favorite:L:entry';(l.engine.orderIntent as any)=()=>({state:'acknowledged',orderId:'17091:1'})
+  record.status='uncertain';(record as any).pendingRef='ibkr-lab:calibration:L:entry';(l.engine.orderIntent as any)=()=>({state:'acknowledged',orderId:'17091:1'})
   await (l.lab as any).reconcileLive(now);assert.equal(record.status,'open');assert.equal(writes,0)
   const partial=setup(),rp:any={...record,id:'partial',quantity:2,filled:0,exitFilled:0,entryCost:0,exitCost:0,fees:0,executions:{},exitOrderId:'17091:2',exitOrderIds:['17091:2']}
   partial.s.live=[rp];partial.s.quotes['201']=quote(201,.49)
@@ -312,7 +312,10 @@ async function main(){
     await x.lab.scan();now+=30000;await x.lab.scan();return asked}
    const soon=[2000,2001,2002].map(k=>cf(k,4)),later=cf(3000,7),asked=await run([...far,...soon,later])
    assert.deepEqual(asked.map(a=>a.slice(0,26)),[[...ids(far.slice(0,10)),...ids(soon)],[...ids([...far.slice(10,12),...far.slice(0,8)]),...ids(soon)]],'the held ten lead, then every contract inside the window, every cycle')
-   assert.ok(asked.every(a=>a.length===60&&!a.includes(later.yes.conId)),'a full batch; seven minutes out waits for the rotation')
+   assert.ok(asked.every(a=>a.length===60&&a.includes(later.yes.conId)),'a full batch; seven minutes out now comes in through spot-first\'s 24-hour lane (section 180)')
+   const dayAhead=Array.from({length:16},(_,i)=>cf(5000+i,180)),spotRun=await run([...far,...dayAhead])
+   assert.ok(spotRun.every(a=>dayAhead.filter(m=>a.includes(m.yes.conId)).length>=8),'spot-first lane: eight crypto contracts inside 24 h every cycle (section 180)')
+   assert.ok(dayAhead.every(m=>spotRun.some(a=>a.includes(m.yes.conId))),'...rotating, so sixteen are all quoted within two cycles')
    const many=Array.from({length:24},(_,i)=>cf(4000+i,5)),crowded=await run([...far,...many])
    assert.ok(crowded.every(a=>a.length===60&&a.slice(0,20).every(id=>ids(far.slice(0,12)).includes(id))),'twenty-four closing together still leave the held ten')
    assert.ok(many.every(m=>crowded.some(a=>a.includes(m.yes.conId))),'and rotate through twenty slots, none starved')}
