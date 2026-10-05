@@ -1166,6 +1166,7 @@ export interface Api {
     ibkrWatches(): Promise<import('./ibkr').IbkrWatch[]>
     ibkrLabStatus(): Promise<import('./ibkrLab').IbkrLabStatus>
     polyPaperStatus(): Promise<import('./polyPaper').PolyPaperStatus>
+    btcHourStatus(): Promise<import('../main/strategies/polyusBtcHour').BtcHourStatus | null>
     polyPaperEnabled(enabled:boolean): Promise<import('./polyPaper').PolyPaperStatus>
     ibkrLabConfigure(patch: Partial<import('./ibkrLab').IbkrLabConfig>): Promise<import('./ibkrLab').IbkrLabStatus>
     ibkrLabScan(): Promise<import('./ibkrLab').IbkrLabStatus>
@@ -1222,6 +1223,7 @@ export const IPC = {
   ibkrWatches: 'ibkr:watches',
   ibkrLabStatus: 'ibkr:lab-status',
   polyPaperStatus: 'poly-paper:status',
+  btcHourStatus: 'btc-hour:status',
   polyPaperEnabled: 'poly-paper:enabled',
   ibkrLabConfigure: 'ibkr:lab-configure',
   ibkrLabScan: 'ibkr:lab-scan',

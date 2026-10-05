@@ -10,7 +10,7 @@ import { DepthHistory, REST_DEFAULTS, restVerdict, type DepthSample } from '../.
 import { ibkrHoldsToSettlement } from '../../src/main/strategies/ibkrSignals'
 import { btcHourStats, btcHourVerdict, type BtcHourOpen, fastReadStats, fastReadVerdict, miniArmStats, polyusFadeVerdict, polyusLagStats, polyusLagVerdict, ReadRunner, type LeadLagFill, type RegisteredRead, weekdayReadStats, weekdayReadVerdict } from '../../src/main/ladder/registeredReads'
 import { etDay } from '../../src/main/util/etDay'
-import { btcHourSlug, globalHourSlug, hourGaps } from '../../src/main/strategies/polyusBtcHour'
+import { btcHourSlug, globalHourSlug, hourEnd, hourGaps, PolyUsBtcHourShadow } from '../../src/main/strategies/polyusBtcHour'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
 import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
@@ -1819,6 +1819,26 @@ async function registeredReadTests(): Promise<void> {
     const both = btcHourStats([...bad.map((o) => ({ ...o, slug: 'B' + o.slug })), ...bad.map((o) => ({ ...o, slug: 'B' + o.slug, leader: 'spot' }))], res)
     eq('btc-hour read: both leaders losing fails', btcHourVerdict(both).verdict, 'FAIL')
     eq('btc-hour read: a gap under 6c is not graded', btcHourStats([{ ...good[0], net: 5 }], res).spot, undefined)
+  }
+  {
+    // The paper scoreboard: first 6c gap per hour, side and signal; settled rows scored after the fee, unsettled waiting.
+    const dir = mkdtempSync(joinPath(tmpdir(), 'btc-hour-'))
+    const shadow = joinPath(dir, 'shadow.jsonl'), results = joinPath(dir, 'results.json')
+    const row = (ts: string, slug: string, leader: string, side: string, px: number, net: number) => JSON.stringify({ ts, ev: 'open', slug, leader, side, px, net })
+    writeFileSync(shadow, [
+      row('2026-10-05T13:05:00Z', 'cpc-btc-updown-1h-2026-10-05-1300z', 'spot', 'YES', 0.4, 8),
+      row('2026-10-05T13:06:00Z', 'cpc-btc-updown-1h-2026-10-05-1300z', 'spot', 'YES', 0.5, 9),
+      row('2026-10-05T13:07:00Z', 'cpc-btc-updown-1h-2026-10-05-1300z', 'spot', 'NO', 0.3, 4),
+      row('2026-10-05T14:05:00Z', 'cpc-btc-updown-1h-2026-10-05-1400z', 'international', 'NO', 0.6, 7),
+      row('2026-10-05T15:05:00Z', 'cpc-btc-updown-1h-2026-10-05-1500z', 'spot', 'NO', 0.45, 6)].join('\n') + '\n')
+    writeFileSync(results, JSON.stringify({ 'cpc-btc-updown-1h-2026-10-05-1300z': 'yes', 'cpc-btc-updown-1h-2026-10-05-1400z': 'yes' }))
+    const rec = new PolyUsBtcHourShadow({ path: shadow, resultsPath: results, headers: () => ({}), enabled: () => true, log: () => undefined })
+    ;(rec as unknown as { loadLedger: () => void }).loadLedger()
+    const st = rec.status()
+    eq('btc-hour paper: first 6c gap only, unsettled hours wait, fee taken',
+      st.leaders.map((l) => [l.leader, l.entries, l.settled, l.wins, l.open, l.net]),
+      [['international', 1, 1, 0, 0, -0.62], ['spot', 2, 1, 1, 1, 0.58]])
+    eq('btc-hour: an hour ends an hour after the start its slug names', hourEnd('cpc-btc-updown-1h-2026-10-05-1300z'), Date.parse('2026-10-05T14:00:00Z'))
   }
   // Lead-lag weekdays against weekends (PREREGISTERED-leadlag-weekday.md): New York days, contract-weighted.
   eq('etDay: Saturday noon New York is a weekend day', etDay(Date.parse('2026-10-03T16:00:00Z')), { date: '2026-10-03', weekend: true })

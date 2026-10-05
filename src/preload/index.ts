@@ -62,6 +62,7 @@ const api: Api = {
     ibkrWatches: () => ipcRenderer.invoke(IPC.ibkrWatches),
     ibkrLabStatus: () => ipcRenderer.invoke(IPC.ibkrLabStatus),
     polyPaperStatus: () => ipcRenderer.invoke(IPC.polyPaperStatus),
+    btcHourStatus: () => ipcRenderer.invoke(IPC.btcHourStatus),
     polyPaperEnabled: (enabled) => ipcRenderer.invoke(IPC.polyPaperEnabled,enabled),
     ibkrLabConfigure: (patch) => ipcRenderer.invoke(IPC.ibkrLabConfigure, patch),
     ibkrLabScan: () => ipcRenderer.invoke(IPC.ibkrLabScan),

@@ -7811,3 +7811,17 @@ still one arm, and on that arm the critic is anti-skilled. `intelligenceMode` st
   hour's opening price was asked for at the first instant of the hour, before Coinbase publishes that minute's
   candle, so the 08:00Z hour had no spot fair value either. Both now retry (15 s and 60 s) until found. Rows from the
   07:00Z hour are spot-only and stand; both leaders record from 08:08Z.
+
+## §181 - 2026-10-05: the Bitcoin-hour recorder gets a paper scoreboard and a watchdog
+
+- **Paper scoreboard in the Polymarket paper panel** (operator: "make the Paper side live and working so I can see
+  whether things are improving"). `PolyUsBtcHourShadow.status()` scores the registered rule as hours settle - one
+  paper contract on the first gap of 6c or more per hour, side and signal, held to settlement, after the fee - from
+  the catalog's `outcomePrices` (cached in `polyus-btc-hour-results.json`, which the registered read now shares;
+  `getMarket().resolution` was never checked for these markets). IPC `btc-hour:status`; `BtcHourCard` in
+  `PolyPaperPanel.tsx`. First 11 settled hours: spot 13 first gaps +1.3c/contract, international 9 at +7.2c.
+- **Watchdog.** The recorder heard nothing from 2026-10-04 18:00Z to 10-05 12:00Z although every hour's market existed
+  and resolved: an open socket that went silent. A minute without a frame now drops and reconnects, at most every
+  five minutes, because Polymarket US also skips hours (none listed 13:00-17:00Z on 10-05) and silence is then correct.
+- The daily maintenance session has failed since 2026-10-04 on "OAuth session expired" (logs/maintenance-*.log): the
+  operator's Claude login. Reads it owns (fade-v3 on 10-06, 191 and 110 on 10-08) wait for it.

@@ -35,12 +35,37 @@ export function PolyPaperAccountCard(){
   </>
 }
 
+type BtcHourStatus=NonNullable<Awaited<ReturnType<typeof window.api.settings.btcHourStatus>>>
+/** The hourly-Bitcoin lead-lag recorder's paper scoreboard (docs/PREREGISTERED-polyus-btc-hour.md). */
+export function BtcHourCard(){
+  const [data,setData]=useState<BtcHourStatus|null>(),[error,setError]=useState('')
+  useEffect(()=>{let active=true;const update=()=>void window.api.settings.btcHourStatus().then(s=>{if(active){setData(s);setError('')}}).catch(e=>{if(active)setError(String(e))});update();const timer=setInterval(update,10000);return()=>{active=false;clearInterval(timer)}},[])
+  if(data===undefined)return <p className="muted">{error||'Loading the Bitcoin-hour recorder...'}</p>
+  if(data===null)return <p className="muted">The Bitcoin-hour recorder is not running.</p>
+  const signed=(v:number)=>`${v>=0?'+':'-'}$${Math.abs(v).toFixed(2)}`,tone=(v:number)=>v>=0?'bt-pos':'bt-neg'
+  const total=data.leaders.reduce((a,l)=>a+l.net,0),settled=data.leaders.reduce((a,l)=>a+l.settled,0)
+  const name=(l:string)=>l==='spot'?'Coinbase price signal':l==='international'?'International market signal':l
+  return <div aria-label="Bitcoin hourly lead-lag paper results">
+    <h3>Bitcoin hourly lead-lag · paper</h3>
+    <p className="muted">One paper contract on the first gap of 6¢ or more per hour, side and signal, held to settlement, after fees. Automatic verdict from Oct 18. No orders.</p>
+    <p><strong className={tone(total)}>{signed(total)}</strong> over {settled} settled paper trades · {data.hoursSeen} hours · feed {data.connected?`live (last update ${data.lastFrameAgeS}s ago)`:'reconnecting'}</p>
+    <table><thead><tr><th>Signal</th><th>Paper trades</th><th>Settled</th><th>Won</th><th>Net</th><th>Per contract</th></tr></thead><tbody>
+      {data.leaders.map(l=><tr key={l.leader}><td>{name(l.leader)}</td><td>{l.entries}</td><td>{l.settled}{l.open?` (+${l.open} waiting)`:''}</td><td>{l.wins}</td><td className={tone(l.net)}>{signed(l.net)}</td><td>{l.centsPerContract===null?'-':`${l.centsPerContract>=0?'+':''}${l.centsPerContract}¢`}</td></tr>)}
+    </tbody></table>
+    <details><summary>Latest settled paper trades</summary><table><thead><tr><th>Hour</th><th>Signal</th><th>Side @ price</th><th>Result</th></tr></thead><tbody>
+      {data.recent.map(r=><tr key={r.slug+r.leader+r.side}><td>{r.slug.slice(-16)}</td><td>{name(r.leader)}</td><td>{r.side} @ {(r.px*100).toFixed(0)}¢</td><td className={tone(r.net)}>{r.won?'won':'lost'} {signed(r.net)}</td></tr>)}
+    </tbody></table></details>
+    {data.lastError&&<p className="muted">Last recorder note: {data.lastError}</p>}
+  </div>
+}
+
 export default function PolyPaperPanel(){
   const [data,setData]=useState<PolyPaperStatus>(),[error,setError]=useState(''),[working,setWorking]=useState(false)
   useEffect(()=>{let active=true;const update=()=>void window.api.settings.polyPaperStatus().then(s=>{if(active)setData(s)}).catch(e=>{if(active)setError(String(e))});update();const timer=setInterval(update,5000);return()=>{active=false;clearInterval(timer)}},[])
   const toggle=async()=>{if(!data)return;setWorking(true);try{setData(await window.api.settings.polyPaperEnabled(!data.enabled));setError('')}catch(e){setError(String(e))}finally{setWorking(false)}}
   return <section className="panel" style={{gridColumn:'1 / -1',minWidth:0}} aria-label="Polymarket US paper laboratory">
     <h2>Polymarket US · Paper strategy tests</h2>
+    <BtcHourCard />
     {error&&<p role="alert">{error}</p>}
     {!data?<p>Loading paper tests…</p>:<>
       <p>Eight independent {money(data.startingCash)} simulated accounts · One contract per entry · Live market data · No broker orders</p>

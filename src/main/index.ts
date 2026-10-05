@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
@@ -42,6 +42,7 @@ let autoTrader: AutoTrader
 let reconcilerIbkr: FillReconciler
 let ibkrLab: IbkrLab
 let polyPaper: PolyPaperLab
+let btcHour: PolyUsBtcHourShadow | undefined
 const miniAutos = new Map<VenueId, MiniAuto>()
 
 // Two instances would share the same state files and could place duplicate
@@ -297,6 +298,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.ibkrWatches, () => ibkrWatch.list())
   ipcMain.handle(IPC.ibkrLabStatus, () => ibkrLab.status())
   ipcMain.handle(IPC.polyPaperStatus, () => polyPaper.status())
+  ipcMain.handle(IPC.btcHourStatus, () => btcHour?.status() ?? null)
   ipcMain.handle(IPC.polyPaperEnabled, (_e, enabled) => polyPaper.setEnabled(enabled))
   ipcMain.handle(IPC.ibkrLabConfigure, (_e, patch) => ibkrLab.configure(patch))
   ipcMain.handle(IPC.ibkrLabScan, () => { void ibkrLab.scan(); return ibkrLab.status() })
@@ -483,14 +485,16 @@ app.whenReady().then(async () => {
   // Polymarket US BTC-hour lead-lag SHADOW (section 180): records gaps on the authenticated book, trades nothing.
   if (polyUs instanceof PolymarketUsAdapter) {
     const usAdapter = polyUs
-    const btcHour = new PolyUsBtcHourShadow({
+    const recorder = new PolyUsBtcHourShadow({
       path: join(app.getPath('userData'), 'polyus-btc-hour-shadow.jsonl'),
+      resultsPath: join(app.getPath('userData'), 'polyus-btc-hour-results.json'),
       headers: (p) => usAdapter.streamHeaders(p),
       enabled: () => miniAutos.get('polymarket-us')?.getConfig().btcHourShadowEnabled !== false,
       log: (s) => console.log(s)
     })
-    btcHour.start()
-    app.once('before-quit', () => btcHour.stop())
+    btcHour = recorder
+    recorder.start()
+    app.once('before-quit', () => recorder.stop())
   }
 
   // Venue-fill reconciler: publishes every Kalshi fill the shared ledger has
@@ -544,20 +548,8 @@ app.whenReady().then(async () => {
       }),
       polyusBtcHourRead({
         shadowPath: join(app.getPath('userData'), 'polyus-btc-hour-shadow.jsonl'),
-        settled: async (slugs) => {
-          // Settled results are cached beside the shadow so a daily read re-asks only the new hours.
-          const cachePath = join(app.getPath('userData'), 'polyus-btc-hour-results.json')
-          let cache: Record<string, 'yes' | 'no'> = {}
-          try { cache = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, 'yes' | 'no'> } catch { /* first read */ }
-          const venue = engine.getAdapter('polymarket-us')
-          for (const s of slugs) {
-            if (cache[s] || !venue) continue
-            const m = await venue.getMarket(s).catch(() => undefined)
-            if (m?.resolution === 'yes' || m?.resolution === 'no') cache[s] = m.resolution
-          }
-          try { writeFileSync(cachePath, JSON.stringify(cache)) } catch { /* cache only */ }
-          return new Map(Object.entries(cache))
-        },
+        // The recorder's own cache of the catalog's outcomePrices (the same file its paper ledger scores from).
+        settled: async (slugs) => new Map(Object.entries(btcHour ? await btcHour.results_(slugs) : {})),
         stop: () => void miniAutos.get('polymarket-us')?.setConfig({ btcHourShadowEnabled: false })
       }),
       leadLagWeekdayRead({

@@ -11,7 +11,7 @@
  * side and leader at settlement.
  */
 import WebSocket from 'ws'
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { PolyClobWs } from '../services/polyClobWs'
 import { liveSpotFeed } from '../services/liveSpot'
 import { cryptoFair } from './ibkrSignals'
@@ -38,6 +38,12 @@ export function globalHourSlug(hourStartMs: number): string {
   return `bitcoin-up-or-down-${p.month.toLowerCase()}-${p.day}-${p.year}-${p.hour}${p.dayPeriod.toLowerCase()}-et`
 }
 
+/** End of the hour a slug names (its start plus an hour). */
+export function hourEnd(slug: string): number {
+  const m = /(\d{4}-\d\d-\d\d)-(\d\d)00z$/.exec(slug)
+  return m ? Date.parse(`${m[1]}T${m[2]}:00:00Z`) + HOUR : Infinity
+}
+
 /** Net cents a one-contract taker clears buying YES at the ask, or NO at 1 - bid, against a leader's P(up). */
 export function hourGaps(bid: number, ask: number, leader: number): { YES: number; NO: number } {
   return {
@@ -47,6 +53,22 @@ export function hourGaps(bid: number, ask: number, leader: number): { YES: numbe
 }
 
 interface Top { bid: number; ask: number; at: number }
+interface PaperEntry { slug: string; leader: string; side: 'YES' | 'NO'; px: number; ts: string }
+
+/** The paper ledger shown in the Polymarket paper panel: the registered rule (first gap of 6c or more per market, side
+ *  and leader, one contract at the logged price, held to settlement), scored as the hours settle. */
+export interface BtcHourStatus {
+  connected: boolean
+  lastFrameAgeS: number | null
+  frames: number
+  gapsLogged: number
+  since: string | null
+  hoursSeen: number
+  leaders: { leader: string; entries: number; settled: number; wins: number; net: number; centsPerContract: number | null; open: number }[]
+  recent: { at: string; slug: string; leader: string; side: string; px: number; won: boolean; net: number }[]
+  lastError: string
+}
+export const BTC_HOUR_PAPER_NET = 6
 interface Hour { start: number; slug: string; s0?: number; upToken?: string; openTry?: number; globalTry?: number }
 
 export class PolyUsBtcHourShadow {
@@ -61,10 +83,19 @@ export class PolyUsBtcHourShadow {
   private stopped = false
   private subscribed = new Set<string>()
   private lastLog = 0
+  private lastFrameAt = 0
+  private connectedAt = 0
+  private paper = new Map<string, PaperEntry>()
+  private results: Record<string, 'yes' | 'no'> = {}
+  private resultsAt = 0
+  private resultsBusy = false
+  private since: string | null = null
   readonly stats = { frames: 0, opens: 0, connects: 0, lastError: '' }
 
   constructor(private readonly opts: {
     path: string
+    /** Settled results, shared with the registered read. */
+    resultsPath: string
     /** Signed X-PM-* headers for a GET of `path`; throws while no credentials are configured. */
     headers: (path: string) => Record<string, string>
     enabled: () => boolean
@@ -72,6 +103,7 @@ export class PolyUsBtcHourShadow {
   }) {}
 
   start(): void {
+    this.loadLedger()
     liveSpotFeed.start()
     this.connect()
     this.timer = setInterval(() => { try { this.tick(Date.now()) } catch (e) { this.stats.lastError = String(e) } }, 250)
@@ -98,9 +130,10 @@ export class PolyUsBtcHourShadow {
     const ws = new WebSocket('wss://api.polymarket.us/v1/ws/markets', { headers })
     this.sock = ws
     const ping = setInterval(() => { try { ws.ping() } catch { /* closing */ } }, 15_000)
-    ws.on('open', () => this.subscribe(Date.now()))
+    ws.on('open', () => { this.connectedAt = this.lastFrameAt = Date.now(); this.subscribe(Date.now()) })
     ws.on('message', (data) => {
       this.stats.frames++
+      this.lastFrameAt = Date.now()
       try {
         const m = JSON.parse(String(data)) as { marketDataLite?: { marketSlug?: string; bestBid?: { value?: string }; bestAsk?: { value?: string } }; error?: string }
         if (m.error) this.stats.lastError = String(m.error).slice(0, 200)
@@ -174,6 +207,16 @@ export class PolyUsBtcHourShadow {
 
   private tick(now: number): void {
     if (!this.opts.enabled()) return
+    // A socket can stay open and go silent (2026-10-04 18:00Z to 10-05 12:00Z, and again from 16:40Z): the book updates
+    // several times a second, so a minute without a frame is a dead feed. Drop it; the close handler reconnects.
+    // Polymarket US skips some hours entirely (none listed 13:00-17:00Z on 2026-10-05), and then silence is correct, so
+    // reconnects are spaced five minutes apart rather than every minute.
+    if (this.sock && this.connectedAt && now - this.lastFrameAt > 60_000 && now - this.connectedAt > 5 * 60_000) {
+      this.stats.lastError = `no data for ${Math.round((now - this.lastFrameAt) / 1000)} s (no market this hour, or a stalled feed); reconnecting`
+      this.connectedAt = 0
+      try { this.sock.terminate() } catch { /* already gone */ }
+    }
+    if (now - this.resultsAt > 10 * 60_000) void this.refreshResults(now)
     if (now - this.lastLog > 10 * 60_000) {
       this.lastLog = now
       this.opts.log(`[btc-hour] shadow: ${this.sock ? 'connected' : 'down'}, ${this.stats.frames} frames, ${this.stats.opens} gaps logged${this.stats.lastError ? `, last error ${this.stats.lastError.slice(0, 120)}` : ''}`)
@@ -206,13 +249,88 @@ export class PolyUsBtcHourShadow {
           if (!was) {
             this.open.set(key, { at: now, peak: net })
             this.stats.opens++
-            this.write({ ts: new Date(now).toISOString(), ev: 'open', slug: h.slug, leader, side, px: side === 'YES' ? top.ask : +(1 - top.bid).toFixed(4), net, leaderP: +p.toFixed(4), bid: top.bid, ask: top.ask, leftMs: left })
+            const px = side === 'YES' ? top.ask : +(1 - top.bid).toFixed(4), ts = new Date(now).toISOString()
+            this.write({ ts, ev: 'open', slug: h.slug, leader, side, px, net, leaderP: +p.toFixed(4), bid: top.bid, ask: top.ask, leftMs: left })
+            if (net >= BTC_HOUR_PAPER_NET && !this.paper.has(key)) this.paper.set(key, { slug: h.slug, leader, side, px, ts })
           } else if (net > was.peak) was.peak = net
         } else if (was) {
           this.open.delete(key)
           this.write({ ts: new Date(now).toISOString(), ev: 'close', slug: h.slug, leader, side, durMs: now - was.at, peak: was.peak })
         }
       }
+    }
+  }
+
+  /** Rebuild the paper ledger and the settled results from disk after a restart. */
+  private loadLedger(): void {
+    try { if (existsSync(this.opts.resultsPath)) this.results = JSON.parse(readFileSync(this.opts.resultsPath, 'utf8')) as Record<string, 'yes' | 'no'> } catch { this.results = {} }
+    try {
+      if (!existsSync(this.opts.path)) return
+      for (const line of readFileSync(this.opts.path, 'utf8').split('\n')) {
+        if (!line.includes('"open"')) continue
+        try {
+          const r = JSON.parse(line) as PaperEntry & { ev?: string; net?: number }
+          this.since ??= r.ts
+          const key = `${r.slug}|${r.leader}|${r.side}`
+          if (r.ev === 'open' && (r.net ?? 0) >= BTC_HOUR_PAPER_NET && !this.paper.has(key)) this.paper.set(key, { slug: r.slug, leader: r.leader, side: r.side, px: r.px, ts: r.ts })
+        } catch { /* torn line */ }
+      }
+    } catch (e) { this.stats.lastError = 'ledger: ' + String(e) }
+  }
+
+  /** Settled results for every ended hour the ledger holds, from the public catalog (outcomePrices once RESOLVED). */
+  async results_(slugs: string[]): Promise<Record<string, 'yes' | 'no'>> {
+    for (const s of slugs) {
+      if (this.results[s]) continue
+      try {
+        const r = await fetch(`https://gateway.polymarket.us/v1/markets?slug=${encodeURIComponent(s)}`, { signal: AbortSignal.timeout(10_000) })
+        const m = ((await r.json()) as { markets?: { status?: string; outcomePrices?: string }[] }).markets?.[0]
+        if (m?.status === 'MARKET_STATUS_RESOLVED' && m.outcomePrices) this.results[s] = (JSON.parse(m.outcomePrices) as string[])[0] === '1' ? 'yes' : 'no'
+      } catch { /* next pass */ }
+      await new Promise((resolve) => setTimeout(resolve, 1100))
+    }
+    try { writeFileSync(this.opts.resultsPath, JSON.stringify(this.results)) } catch { /* cache only */ }
+    return this.results
+  }
+
+  private async refreshResults(now: number): Promise<void> {
+    if (this.resultsBusy) return
+    this.resultsBusy = true
+    this.resultsAt = now
+    try {
+      const ended = [...new Set([...this.paper.values()].map((e) => e.slug))].filter((s) => !this.results[s] && hourEnd(s) + 5 * 60_000 < now)
+      await this.results_(ended)
+    } finally { this.resultsBusy = false }
+  }
+
+  status(): BtcHourStatus {
+    const now = Date.now()
+    const by = new Map<string, BtcHourStatus['leaders'][number]>()
+    const recent: BtcHourStatus['recent'] = []
+    for (const e of this.paper.values()) {
+      const row = by.get(e.leader) ?? { leader: e.leader, entries: 0, settled: 0, wins: 0, net: 0, centsPerContract: null, open: 0 }
+      row.entries++
+      const res = this.results[e.slug]
+      if (!res) row.open++
+      else {
+        const won = (res === 'yes') === (e.side === 'YES')
+        const net = (won ? 1 : 0) - e.px - polyUsTakerFee(e.px)
+        row.settled++; if (won) row.wins++; row.net += net
+        recent.push({ at: e.ts, slug: e.slug, leader: e.leader, side: e.side, px: e.px, won, net: +net.toFixed(4) })
+      }
+      by.set(e.leader, row)
+    }
+    for (const r of by.values()) { r.centsPerContract = r.settled ? +(100 * r.net / r.settled).toFixed(2) : null; r.net = +r.net.toFixed(2) }
+    return {
+      connected: !!this.sock && !!this.connectedAt,
+      lastFrameAgeS: this.lastFrameAt ? Math.round((now - this.lastFrameAt) / 1000) : null,
+      frames: this.stats.frames,
+      gapsLogged: this.stats.opens,
+      since: this.since,
+      hoursSeen: new Set([...this.paper.values()].map((e) => e.slug)).size,
+      leaders: [...by.values()].sort((a, b) => a.leader.localeCompare(b.leader)),
+      recent: recent.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12),
+      lastError: this.stats.lastError
     }
   }
 
