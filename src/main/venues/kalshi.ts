@@ -1,5 +1,6 @@
-import { sign, constants } from 'node:crypto'
+import { sign, constants, createPrivateKey } from 'node:crypto'
 import { HttpClient, HttpError } from '../util/http'
+import { normalizePem } from '../util/pem'
 import { KALSHI_MAKER_FEE_COEF, KALSHI_TAKER_FEE_COEF } from '../util/kalshiFee'
 import { recordCulled, type CulledRow } from './cullRecorder'
 import type { VenueAdapter, VenueCapabilities } from '../../shared/venue'
@@ -324,7 +325,7 @@ export class KalshiAdapter implements VenueAdapter {
 
   async init(credentials?: VenueCredentials): Promise<void> {
     this.apiKeyId = typeof credentials?.apiKeyId === 'string' ? credentials.apiKeyId : undefined
-    this.privateKey = typeof credentials?.privateKey === 'string' ? credentials.privateKey.replace(/\\n/g, '\n') : undefined
+    this.privateKey = typeof credentials?.privateKey === 'string' ? normalizePem(credentials.privateKey) : undefined
     const demo = credentials?.demo === true
     this.demo = demo
     const baseUrl = demo ? DEMO_BASE : BASE
@@ -1269,11 +1270,14 @@ export class KalshiAdapter implements VenueAdapter {
   private signPath(method: 'GET' | 'POST' | 'DELETE', absPath: string): Record<string, string> {
     this.requireAuth()
     const timestamp = String(Date.now())
-    const signature = sign('sha256', Buffer.from(`${timestamp}${method}${absPath}`), {
-      key: this.privateKey!,
-      padding: constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: constants.RSA_PSS_SALTLEN_DIGEST
-    }).toString('base64')
+    const message = Buffer.from(`${timestamp}${method}${absPath}`)
+    // Kalshi issues RSA keys (RSA-PSS over SHA-256) and Ed25519 keys (pure Ed25519, no digest).
+    const key = createPrivateKey(this.privateKey!)
+    const signature = (
+      key.asymmetricKeyType === 'ed25519'
+        ? sign(null, message, key)
+        : sign('sha256', message, { key, padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: constants.RSA_PSS_SALTLEN_DIGEST })
+    ).toString('base64')
     return {
       'KALSHI-ACCESS-KEY': this.apiKeyId!,
       'KALSHI-ACCESS-TIMESTAMP': timestamp,
