@@ -309,10 +309,13 @@ function registerIpc(): void {
   app.once('before-quit',()=>clearInterval(ibkrWatchTimer))
   ipcMain.handle(IPC.settingsSaveKalshi, async (_e, apiKeyId: string, privateKey: string) => {
     const id = typeof apiKeyId === 'string' ? apiKeyId.trim() : ''
-    const pk = typeof privateKey === 'string' ? privateKey : ''
+    const demo = config.get().kalshiDemo
+    // The panel blanks the key box after every save, so a blank key with an id keeps the stored key;
+    // clearing the id is what clears the credentials.
+    const pk = typeof privateKey === 'string' && privateKey.trim() ? privateKey : id ? (demo ? config.get().kalshiDemoPrivateKey : config.get().kalshiPrivateKey) : ''
     // Writes to the DEMO slot while demo mode is on, so switching back never
     // loses the production key.
-    config.update(config.get().kalshiDemo ? { kalshiDemoApiKeyId: id, kalshiDemoPrivateKey: pk } : { kalshiApiKeyId: id, kalshiPrivateKey: pk })
+    config.update(demo ? { kalshiDemoApiKeyId: id, kalshiDemoPrivateKey: pk } : { kalshiApiKeyId: id, kalshiPrivateKey: pk })
     await engine.setCredentials('kalshi', kalshiCreds())
     if (!id || !pk) return { connected: false } as KalshiConnection
     try {
@@ -358,7 +361,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.settingsSavePolymarketUs, async (_e, apiKeyId: string, secretKey: string) => {
     const id = typeof apiKeyId === 'string' ? apiKeyId.trim() : ''
-    const sk = typeof secretKey === 'string' ? secretKey.trim() : ''
+    const sk = (typeof secretKey === 'string' ? secretKey.trim() : '') || (id ? config.get().polymarketUsPrivateKey : '')
     config.update({ polymarketUsApiKeyId: id, polymarketUsPrivateKey: sk })
     await engine.setCredentials('polymarket-us', { apiKeyId: id || undefined, privateKey: sk || undefined })
     if (!id || !sk) return { connected: false } as KalshiConnection
