@@ -52,13 +52,12 @@ export default function App() {
   }, [])
 
   const refresh = useCallback(async (v: VenueId) => {
-    const [s, p, h] = await Promise.all([
-      window.api.engine.getState(),
-      window.api.portfolio.get(v),
-      window.api.history.stats(v)
-    ])
-    if (venueRef.current !== v) return
+    // The engine state (venue tabs, execution mode) is fetched on its own: one failed portfolio read,
+    // e.g. right after a reboot while a venue is still connecting, must not leave the top bar without tabs.
+    const s = await window.api.engine.getState()
     setState(s)
+    const [p, h] = await Promise.all([window.api.portfolio.get(v), window.api.history.stats(v)])
+    if (venueRef.current !== v) return
     setPortfolio(p)
     setHistStats(h)
     // Venue-authoritative and fetched in the same portfolio snapshot, avoiding
