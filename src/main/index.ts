@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { createWriteStream, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename, join, relative } from 'node:path'
 import type { VenueAdapter } from '../shared/venue'
 import { VenueRegistry } from './venues/registry'
 import { KalshiAdapter } from './venues/kalshi'
@@ -106,6 +106,33 @@ function installSafeLogging(): void {
   // Belt and braces: swallow pipe errors on the underlying streams.
   process.stdout.on('error', () => undefined)
   process.stderr.on('error', () => undefined)
+}
+
+/**
+ * A launch from inside an MSIX-packaged app (a terminal spawned by the Claude desktop app, say) has AppData
+ * virtualized: writes land in %LOCALAPPDATA%\Packages\<pkg>\LocalCache\Roaming\<app> while the logon task reads the
+ * real %APPDATA%. The two state copies drift apart, and neither sees the other's single-instance lock (outage
+ * 2026-10-16: the logon-task instance came up with no venue keys). Returns the overlay directory when it happens.
+ */
+function virtualizedUserData(): string | null {
+  if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) return null
+  const userData = app.getPath('userData')
+  const marker = join(userData, `.virtualization-probe-${process.pid}`)
+  try {
+    mkdirSync(userData, { recursive: true })
+    writeFileSync(marker, '')
+    const packages = join(process.env.LOCALAPPDATA, 'Packages')
+    const rel = relative(app.getPath('appData'), userData)
+    for (const pkg of readdirSync(packages)) {
+      const overlay = join(packages, pkg, 'LocalCache', 'Roaming', rel)
+      if (existsSync(join(overlay, basename(marker)))) return overlay
+    }
+    return null
+  } catch {
+    return null
+  } finally {
+    try { unlinkSync(marker) } catch { /* already gone */ }
+  }
 }
 
 function createWindow(): void {
@@ -405,6 +432,19 @@ app.whenReady().then(async () => {
     console.log(`[app] start: pid ${process.pid}, main bundle built ${statSync(__filename).mtime.toISOString()}`)
   } catch {
     console.log(`[app] start: pid ${process.pid}`)
+  }
+  console.log(`[app] userData ${app.getPath('userData')}`)
+  const overlay = virtualizedUserData()
+  if (overlay && process.env.ORACLE_ALLOW_VIRTUALIZED_APPDATA !== '1') {
+    console.error(`[app] refusing to start: userData is virtualized into ${overlay}`)
+    dialog.showErrorBox(
+      'Oracle Trader not started',
+      `This launch came from inside a packaged app, so its state would go to\n${overlay}\n` +
+        'instead of the real AppData the logon task uses. Start Oracle Trader from the "Oracle - Trader app" ' +
+        'scheduled task or a normal terminal.'
+    )
+    app.quit()
+    return
   }
   config = new ConfigStore()
   // The venue adapter records what the anti-flood cap discards, but must not import electron itself — it is
