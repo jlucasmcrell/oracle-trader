@@ -15,12 +15,18 @@ app.whenReady().then(async () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'));
     if (cfg.kalshiDemo) throw new Error('app configured for demo; refusing');
     const keyId = dec(cfg.kalshiApiKeyId);
-    const pk = dec(cfg.kalshiPrivateKey).replace(/\\n/g, '\n');
+    // Same armor rebuild and key-type switch as src/main/util/pem.ts and KalshiAdapter.signPath (Ed25519 since 6e6ef03).
+    const raw = dec(cfg.kalshiPrivateKey).replace(/\\n/g, '\n');
+    const m = raw.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+    const pk = crypto.createPrivateKey(m ? `-----BEGIN ${m[1]}-----\n${(m[2].replace(/\s+/g, '').match(/.{1,64}/g) ?? []).join('\n')}\n-----END ${m[1]}-----\n` : raw);
     async function get(p) {
       const abs = '/trade-api/v2' + p.split('?')[0];
       for (let attempt = 0; attempt < 5; attempt++) {
         const ts = String(Date.now());
-        const sig = crypto.sign('sha256', Buffer.from(ts + 'GET' + abs), { key: pk, padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST }).toString('base64');
+        const msg = Buffer.from(ts + 'GET' + abs);
+        const sig = (pk.asymmetricKeyType === 'ed25519'
+          ? crypto.sign(null, msg, pk)
+          : crypto.sign('sha256', msg, { key: pk, padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST })).toString('base64');
         const r = await fetch(BASE + p, { signal: AbortSignal.timeout(30000), headers: { 'KALSHI-ACCESS-KEY': keyId, 'KALSHI-ACCESS-TIMESTAMP': ts, 'KALSHI-ACCESS-SIGNATURE': sig } });
         if (r.status === 429) { await sleep(1500 * (attempt + 1)); continue; }
         const text = await r.text();
