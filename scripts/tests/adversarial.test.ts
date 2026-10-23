@@ -534,7 +534,12 @@ eq('G: lead-lag live at one contract (notch 1 baseline sizing)', { live: cfg.lea
     eq('G: lead-lag does not scale on zero-fill sweeps', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'tiny-live', n: 1 })
     writeFileSync(join(dir4, 'leadlag-dislocations.jsonl'), Array.from({ length: 20 }, (_, i) => JSON.stringify({ ts: new Date(now - (i % 4) * 86_400_000).toISOString(), kalshiTicker: `KXT-${i}`, executed: true, filledContracts: 1 })).join(String.fromCharCode(10)))
     await ladder.run()
+    // docs/PREREGISTERED-leadlag-entry-filters.md: held at x1 until its read, however good the checkpoint.
+    eq('G: lead-lag is held at x1 by its registration', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'tiny-live', n: 1 })
+    cfg.ladderMaxNotch = { 'kalshi-leadlag': 4 }
+    await ladder.run()
     eq('G: lead-lag scales by contracts', { stage: st('kalshi-leadlag').stage, n: cfg.leadLagMaxContractsPerOrder }, { stage: 'live', n: 2 })
+    delete cfg.ladderMaxNotch
     // A config on defaults after its file was set aside is not the operator switching arms off (backlog 224).
     ;(autoTrader as unknown as { configDefaulted: () => boolean }).configDefaulted = () => true
     cfg.leadLagLiveEnabled = false

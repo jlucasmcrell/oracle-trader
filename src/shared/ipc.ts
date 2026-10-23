@@ -282,6 +282,12 @@ export interface AutoTraderConfig {
   leadLagFastLive?: boolean
   /** false: lead-lag trades live on New York weekends only (set by the registered weekday read). */
   leadLagWeekdays?: boolean
+  /** Gaps this wide or wider are recorded, not traded (docs/PREREGISTERED-leadlag-entry-filters.md). Default 12; null = no cap. */
+  leadLagMaxDislocationCents?: number | null
+  /** One filled lead-lag entry per market per window (same registration). Default true. */
+  leadLagOneEntryPerMarket?: boolean
+  /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x1 by the same registration until its read). */
+  ladderMaxNotch?: Record<string, number>
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
   /** Allow settlement-convergence to execute with REAL money (it is a paper experiment until proven). */

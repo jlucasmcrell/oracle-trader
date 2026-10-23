@@ -351,6 +351,8 @@ export function clusterT95(df: number): number {
 }
 export const SCALE_Z = 1.645
 export const MAX_NOTCH = 4
+/** Lead-lag's ceiling until docs/PREREGISTERED-leadlag-entry-filters.md is read (operator, 2026-10-23). */
+export const LEADLAG_HELD_NOTCH = 1
 /** Markout observations needed before entry quality can veto a scale-up. */
 export const ADVERSE_MIN_N = 15
 /**
@@ -1112,7 +1114,14 @@ export class Ladder {
       s.lastVerdict = `${reason}; scale-up held: ${why}`
       return false
     }
-    const notch = Math.min(MAX_NOTCH, (s.notch ?? 1) * 2)
+    // A size ceiling below MAX_NOTCH (docs/PREREGISTERED-leadlag-entry-filters.md holds lead-lag at x1 until its read):
+    // the checkpoint is still judged and a stop still stops; only the doubling waits.
+    const cap = this.autoTrader.getConfig().ladderMaxNotch?.[s.id] ?? (s.id === 'kalshi-leadlag' ? LEADLAG_HELD_NOTCH : MAX_NOTCH)
+    if ((s.notch ?? 1) >= cap) {
+      s.lastVerdict = `${reason}; scale-up held: size ceiling x${cap} for this arm`
+      return false
+    }
+    const notch = Math.min(MAX_NOTCH, cap, (s.notch ?? 1) * 2)
     if (s.id === 'quoter' || s.id === 'settlement') {
       // Weather collateral lives on shard 0: it must carry the bigger size first.
       const f = await this.fundShard0(SHARD0_MIN_DOLLARS * notch)

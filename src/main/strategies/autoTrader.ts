@@ -4779,7 +4779,10 @@ export class AutoTrader {
       leadLagMaxCoinsPerDirectionPerWindow: Math.max(1, Math.min(7, this.config.leadLagMaxCoinsPerDirectionPerWindow ?? 2)),
       pollIntervalMs: Math.max(5_000, this.config.leadLagPollIntervalMs ?? 10_000),
       leadLagFastLive: this.config.leadLagFastLive ?? false,
-      leadLagWeekdays: this.config.leadLagWeekdays
+      leadLagWeekdays: this.config.leadLagWeekdays,
+      // Entry filters (docs/PREREGISTERED-leadlag-entry-filters.md): on unless the config says otherwise.
+      leadLagMaxDislocationCents: this.config.leadLagMaxDislocationCents === null ? undefined : (this.config.leadLagMaxDislocationCents ?? 12),
+      leadLagOneEntryPerMarket: this.config.leadLagOneEntryPerMarket ?? true
     }
   }
 

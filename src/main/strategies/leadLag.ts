@@ -82,6 +82,29 @@ export interface LeadLagConfig {
    * weekday read (docs/PREREGISTERED-leadlag-weekday.md) if weekdays lose after fees; unset trades every day.
    */
   leadLagWeekdays?: boolean
+  /**
+   * Gaps at or above this many cents are recorded but not traded (docs/PREREGISTERED-leadlag-entry-filters.md). On
+   * BEAST 2026-10-14..23 the 12c+ gaps settled at -7.1c/contract against +5.9c for 8-12c: a gap that wide is Kalshi
+   * already knowing, not lagging. Unset = no cap.
+   */
+  leadLagMaxDislocationCents?: number
+  /** One filled entry per Kalshi ticker per window (same registration): repeat buys settled at -4.0c/contract. */
+  leadLagOneEntryPerMarket?: boolean
+}
+
+/** The registered entry filters: may this dislocation be swept, given what the window already holds? */
+export function entryFilter(
+  d: Pick<LeadLagDislocation, 'kalshiTicker' | 'dislocationCents'>,
+  windowFills: ReadonlyMap<string, { contracts: number }>,
+  cfg: Pick<LeadLagConfig, 'leadLagMaxDislocationCents' | 'leadLagOneEntryPerMarket'>
+): { ok: boolean; why?: string } {
+  if (cfg.leadLagMaxDislocationCents !== undefined && d.dislocationCents >= cfg.leadLagMaxDislocationCents) {
+    return { ok: false, why: `gap ${d.dislocationCents}c is at or above the ${cfg.leadLagMaxDislocationCents}c cap` }
+  }
+  if (cfg.leadLagOneEntryPerMarket && (windowFills.get(d.kalshiTicker)?.contracts ?? 0) > 0) {
+    return { ok: false, why: 'already entered this market this window' }
+  }
+  return { ok: true }
 }
 
 /** The weekday switch: may lead-lag trade live at `now`? */
@@ -1071,6 +1094,16 @@ export class LeadLagEngine {
   private async sweep(adapter: VenueAdapter, d: LeadLagDislocation, side: 'YES' | 'NO', yesRef: number, cfg: LeadLagConfig, exchangeIndex?: number): Promise<void> {
     try {
       if (this.windowBlocked) return
+      // Checked before anything is reserved, so a filtered gap costs nothing; the dislocation row is already written.
+      const gate = entryFilter(d, this.windowFills, cfg)
+      if (!gate.ok) {
+        const k = `${d.kalshiTicker}|filter`
+        if (!this.windowCapLogged.has(k)) {
+          this.windowCapLogged.add(k)
+          this.log(`[leadlag] sweep filtered on ${d.kalshiTicker}: ${gate.why}`)
+        }
+        return
+      }
       // Micro size for a coin the ladder has not judged (round 93): round 91 gave five untested coins the
       // size BTC/ETH earned, which is the opposite of the ladder's own rule.
       const count = sweepSizeFor(d.underlying, cfg)

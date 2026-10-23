@@ -12,7 +12,7 @@ import { btcHourStats, btcHourVerdict, type BtcHourOpen, fastReadStats, fastRead
 import { etDay } from '../../src/main/util/etDay'
 import { btcHourSlug, globalHourSlug, hourEnd, hourGaps, PolyUsBtcHourShadow } from '../../src/main/strategies/polyusBtcHour'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
-import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom } from '../../src/main/strategies/leadLag'
+import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom, entryFilter } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, MAKER_STRATEGIES_DEFAULT, mergeMakerStrategies, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
@@ -934,6 +934,12 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('window: the per-ticker contract cap binds', windowRoom(fills, 30, 'KXBTC15M-1', 9, 0.5, wcfg).ok, false)
   eq('window: another ticker has its own contract room', windowRoom(fills, 30, 'KXETH15M-1', 24, 0.5, wcfg).ok, true)
   eq('window: the shared spend cap binds across tickers', windowRoom(fills, 55, 'KXETH15M-1', 8, 0.9, wcfg), { ok: false, why: '$55.00 of $60.00 already spent this window' })
+  // 2026-10-23 entry filters (docs/PREREGISTERED-leadlag-entry-filters.md).
+  const fcfg = { leadLagMaxDislocationCents: 12, leadLagOneEntryPerMarket: true }
+  eq('filter: an 8-12c gap on a fresh market passes', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 11.9 }, fills, fcfg).ok, true)
+  eq('filter: a 12c gap is recorded, not traded', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 12 }, fills, fcfg).ok, false)
+  eq('filter: a second entry on a held market is refused', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 7 }, fills, fcfg), { ok: false, why: 'already entered this market this window' })
+  eq('filter: unset filters let everything through', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 30 }, fills, {}).ok, true)
   // Round 93: proven coins at the ladder's size, the rest at micro size; the pool counts proven rows only.
   const scfg = { leadLagMaxContractsPerOrder: 8, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2 }
   eq('size: BTC and ETH sweep at the ladder size, the rest at two', [sweepSizeFor('BTC', scfg), sweepSizeFor('ETH', scfg), sweepSizeFor('SOL', scfg), sweepSizeFor('HYPE', scfg)], [8, 8, 2, 2])
