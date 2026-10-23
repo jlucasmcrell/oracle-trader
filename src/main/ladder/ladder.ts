@@ -351,8 +351,8 @@ export function clusterT95(df: number): number {
 }
 export const SCALE_Z = 1.645
 export const MAX_NOTCH = 4
-/** Lead-lag's ceiling until docs/PREREGISTERED-leadlag-entry-filters.md is read (operator, 2026-10-23). */
-export const LEADLAG_HELD_NOTCH = 1
+/** Lead-lag's ceiling until docs/PREREGISTERED-leadlag-entry-filters.md is read: x2, where ASTRAL held it on 10-03 (operator, 2026-10-23). */
+export const LEADLAG_HELD_NOTCH = 2
 /** Markout observations needed before entry quality can veto a scale-up. */
 export const ADVERSE_MIN_N = 15
 /**

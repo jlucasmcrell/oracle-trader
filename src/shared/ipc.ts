@@ -286,7 +286,7 @@ export interface AutoTraderConfig {
   leadLagMaxDislocationCents?: number | null
   /** One filled lead-lag entry per market per window (same registration). Default true. */
   leadLagOneEntryPerMarket?: boolean
-  /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x1 by the same registration until its read). */
+  /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x2 by the same registration until its read). */
   ladderMaxNotch?: Record<string, number>
   // ---- settlement-source convergence (experimental) ----
   settleEnabled: boolean
