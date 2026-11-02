@@ -43,8 +43,9 @@ STATE = os.path.join(DATA, 'state.json')
 KCACHE = os.path.join(DATA, 'kalshi-catalog.json')
 UCACHE = os.path.join(DATA, 'polyus-catalog.json')
 LOG = os.path.join(DATA, 'run.log')
-LB = 'https://lb-api.polymarket.com/profit?window={w}&limit=50'
-TRADES_API = 'https://data-api.polymarket.com/trades?user={w}&limit=100'
+# Polymarket retired Data API v1 and lb-api (HTTP 410, noticed 2026-11-02). v2 wraps rows in {"data": [...]} and
+# names fields in snake_case; v2_rows() maps them back to the v1 names the rest of this file reads.
+TRADES_API = 'https://data-api.polymarket.com/v2/trades?user={w}&limit=100'
 # Gamma's /markets defaults to open markets only: ?slug=<closed market> returns []. The grader wants
 # exactly the closed ones, so it must ask for them (2026-09-12: this is why 0 of 3,381 signals graded).
 GAMMA = 'https://gamma-api.polymarket.com/markets?slug={slug}&closed=true'
@@ -178,15 +179,24 @@ def read_jsonl(path):
 
 
 # ------------------------------------------------------------------ wallets and trades
-LB2 = 'https://data-api.polymarket.com/v1/leaderboard?category={c}&timePeriod={p}&orderBy=PNL&limit=50'
+LB2 = 'https://data-api.polymarket.com/v2/leaderboard?category={c}&timePeriod={p}&orderBy=PNL&limit=50'
+V2_NAMES = {'proxy_wallet': 'proxyWallet', 'user_id': 'proxyWallet', 'user_name': 'userName', 'x_username': 'xUsername',
+            'condition_id': 'conditionId', 'outcome_index': 'outcomeIndex', 'event_slug': 'eventSlug',
+            'transaction_hash': 'transactionHash', 'token_id': 'asset'}
+
+
+def v2_rows(body):
+    """A v2 response as a list of rows carrying the v1 field names."""
+    rows = body if isinstance(body, list) else (body or {}).get('data', [])
+    return [{**r, **{v1: r[v2] for v2, v1 in V2_NAMES.items() if v2 in r}} for r in rows]
 LB_CATEGORIES = ('OVERALL', 'SPORTS', 'POLITICS', 'CRYPTO', 'WEATHER', 'ECONOMICS', 'FINANCE')
 LB_PERIODS = ('MONTH', 'ALL')
 
 
 def refresh_wallets(state):
-    """Top-50 wallets by profit per category and period (data-api /v1/leaderboard, found via pmxt's
+    """Top-50 wallets by profit per category and period (data-api /v2/leaderboard since 2026-11-02; v1 found via pmxt's
     examples 2026-09-08): a politics whale who never touches sports is invisible on the overall board.
-    Keeps the trader's X handle when the venue exposes one. Falls back to lb-api if the data API fails."""
+    Keeps the trader's X handle when the venue exposes one."""
     w = load_json(WALLETS, {})
     if w.get('at') and NOW_TS - w['at'] < 20 * 3600 and w.get('wallets'):
         return w['wallets']
@@ -194,8 +204,7 @@ def refresh_wallets(state):
     for cat in LB_CATEGORIES:
         for period in LB_PERIODS:
             try:
-                rows = get_json(LB2.format(c=cat, p=period))
-                rows = rows if isinstance(rows, list) else rows.get('data', [])
+                rows = v2_rows(get_json(LB2.format(c=cat, p=period)))
                 for r in rows:
                     addr = r.get('proxyWallet')
                     if not addr:
@@ -205,14 +214,6 @@ def refresh_wallets(state):
                 time.sleep(0.2)
             except Exception as e:  # noqa: BLE001
                 log(f'leaderboard {cat}/{period} failed: {str(e)[:80]}')
-    if len(wallets) < 20:
-        for window in ('all', '30d'):
-            try:
-                for rank, r in enumerate(get_json(LB.format(w=window)), 1):
-                    rec = wallets.setdefault(r['proxyWallet'], {'name': r.get('name') or r.get('pseudonym') or r['proxyWallet'][:10], 'x': None, 'windows': {}})
-                    rec['windows'][window] = {'rank': rank, 'profit': round(r.get('amount', 0))}
-            except Exception as e:  # noqa: BLE001
-                log(f'leaderboard {window} failed: {e}')
     if wallets:
         json.dump({'at': NOW_TS, 'wallets': wallets}, open(WALLETS, 'w', encoding='utf-8'), indent=1)
         log(f'wallet set refreshed: {len(wallets)} wallets')
@@ -227,7 +228,7 @@ def poll_trades(wallets, state):
     new = 0
     for addr, rec in wallets.items():
         try:
-            rows = get_json(TRADES_API.format(w=addr))
+            rows = v2_rows(get_json(TRADES_API.format(w=addr)))
         except Exception as e:  # noqa: BLE001
             log(f'trades {rec["name"]} failed: {str(e)[:80]}')
             continue
