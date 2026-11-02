@@ -90,4 +90,8 @@ console.log(`live:     ${fills} fills, ${L.n} contracts over ${L.days} NY days: 
 console.log(`shadow:   first gap per market and side under ${CAP}c: ${S.n} over ${S.days} days: ${S.mean}c, 80% [${S.lo}, ${S.hi}]`)
 console.log(`filtered: ${CAP}c+ gaps the live rule skipped: ${F.n}: ${F.mean}c, 80% [${F.lo}, ${F.hi}]`)
 console.log(`verdict:  ${verdict} (read from 2026-10-30 at ${MIN_FILLS} fills on ${MIN_DAYS} days; INCONCLUSIVE after 2026-11-13)`)
+// The cap's own rule (amendment 2026-11-02): read on the skipped 12c+ gaps from 2026-11-13, at 7 NY days.
+let cap = 'WAIT'
+if (Date.now() >= LAST && F.days >= MIN_DAYS) cap = F.lo > 0 ? `RAISE to 16c` : F.hi < 0 ? `KEEP ${CAP}c (skipped gaps lose)` : `KEEP ${CAP}c (unclear; keep scoring)`
+console.log(`cap:      ${cap} (decided 2026-11-13 on the skipped ${CAP}c+ gaps, ${MIN_DAYS}+ days)`)
 if (process.argv.includes('--verdict')) process.exitCode = verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 2 : 1

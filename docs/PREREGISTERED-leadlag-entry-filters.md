@@ -65,3 +65,14 @@ Operator: "Put it up to 4x." Taken before the read decided (the cohort stood at 
 The filters and the read stay as registered; the hard stop at x4 is -$40. Fills from here are reported as their own
 x4 slice beside the x2 cohort, so a size effect on fill prices is visible. A 2026-10-30 unclean shutdown wiped the
 arm's state; it was restored from the 2026-10-30 16:25 local backup on 11-02, and no fills were made in between.
+
+## Amendment 2026-11-02 19:58Z — a rule for the 12c cap
+
+Operator: "Yes" to deciding the cap as well as the size. On **2026-11-13**, read the skipped 12c+ gaps from the same
+grader (shadow, one contract at the logged Kalshi price, from 2026-10-23T14:30Z), at 7 New York days or more:
+
+- band wholly above zero: raise `leadLagMaxDislocationCents` to **16**;
+- band wholly below zero: keep **12**;
+- otherwise keep 12 and keep scoring.
+
+At this amendment the skipped gaps stood at 80, +1.19c, 80% [-5.91, 8.28]. The size read above is unchanged.
