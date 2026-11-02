@@ -57,3 +57,11 @@ Reported beside the verdict, deciding nothing: the shadow (the first gap per mar
 Operator: "How can we speed the lead lag test up? ... I do not mind if more money is risked for faster completed
 tests." The size moved from x1 to x2, the read from 2026-11-06 (150 fills, 10 days) to 2026-10-30 (150 fills, 7 days),
 and the shadow grade was added. The cohort starts after this amendment, so no fill under the original terms counts.
+
+## Amendment 2026-11-02 19:40Z — x4 by operator decision
+
+Operator: "Put it up to 4x." Taken before the read decided (the cohort stood at 392 fills, +1.57c/contract, 80%
+[-0.12, 3.26], CONTINUE). `ladderMaxNotch['kalshi-leadlag']` is 4 in config and the arm was set to live x4 by hand.
+The filters and the read stay as registered; the hard stop at x4 is -$40. Fills from here are reported as their own
+x4 slice beside the x2 cohort, so a size effect on fill prices is visible. A 2026-10-30 unclean shutdown wiped the
+arm's state; it was restored from the 2026-10-30 16:25 local backup on 11-02, and no fills were made in between.
