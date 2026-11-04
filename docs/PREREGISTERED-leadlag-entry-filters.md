@@ -76,3 +76,10 @@ grader (shadow, one contract at the logged Kalshi price, from 2026-10-23T14:30Z)
 - otherwise keep 12 and keep scoring.
 
 At this amendment the skipped gaps stood at 80, +1.19c, 80% [-5.91, 8.28]. The size read above is unchanged.
+
+## Amendment 2026-11-04 16:35Z — back to x2
+
+Operator: "We can go back to x2." At x4 (11-02 19:41Z to 11-04 15:28Z, when the daily loss limit tripped): 142 fills,
+-3.37c/contract, -$11.71; the shadow of every first gap lost too (-9.1c over the last day), and fill slippage, latency,
+Polymarket book age, gap size and the socket-versus-book agreement matched the x2 week, so no execution change was
+found. `ladderMaxNotch['kalshi-leadlag']` is 2 again and the arm is live x2. The reads are unchanged.
