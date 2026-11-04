@@ -4782,7 +4782,8 @@ export class AutoTrader {
       leadLagWeekdays: this.config.leadLagWeekdays,
       // Entry filters (docs/PREREGISTERED-leadlag-entry-filters.md): on unless the config says otherwise.
       leadLagMaxDislocationCents: this.config.leadLagMaxDislocationCents === null ? undefined : (this.config.leadLagMaxDislocationCents ?? 12),
-      leadLagOneEntryPerMarket: this.config.leadLagOneEntryPerMarket ?? true
+      leadLagOneEntryPerMarket: this.config.leadLagOneEntryPerMarket ?? true,
+      leadLagNoTradeCoins: this.config.leadLagNoTradeCoins ?? []
     }
   }
 

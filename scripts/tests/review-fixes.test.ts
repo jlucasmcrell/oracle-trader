@@ -939,6 +939,8 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('filter: an 8-12c gap on a fresh market passes', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 11.9 }, fills, fcfg).ok, true)
   eq('filter: a 12c gap is recorded, not traded', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 12 }, fills, fcfg).ok, false)
   eq('filter: a second entry on a held market is refused', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 7 }, fills, fcfg), { ok: false, why: 'already entered this market this window' })
+  eq('filter: a no-trade coin is recorded, not traded', entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, { ...fcfg, leadLagNoTradeCoins: ['BNB'] }), { ok: false, why: 'BNB is recorded, not traded' })
+  eq('filter: other coins still trade beside a no-trade coin', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, { ...fcfg, leadLagNoTradeCoins: ['BNB'] }).ok, true)
   eq('filter: unset filters let everything through', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 30 }, fills, {}).ok, true)
   // Round 93: proven coins at the ladder's size, the rest at micro size; the pool counts proven rows only.
   const scfg = { leadLagMaxContractsPerOrder: 8, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2 }

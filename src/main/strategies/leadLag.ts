@@ -90,14 +90,17 @@ export interface LeadLagConfig {
   leadLagMaxDislocationCents?: number
   /** One filled entry per Kalshi ticker per window (same registration): repeat buys settled at -4.0c/contract. */
   leadLagOneEntryPerMarket?: boolean
+  /** Coins scanned and recorded but not traded (operator, 2026-11-04: BNB while Binance recovers from the 10-29 hack). */
+  leadLagNoTradeCoins?: readonly string[]
 }
 
 /** The registered entry filters: may this dislocation be swept, given what the window already holds? */
 export function entryFilter(
-  d: Pick<LeadLagDislocation, 'kalshiTicker' | 'dislocationCents'>,
+  d: Pick<LeadLagDislocation, 'kalshiTicker' | 'dislocationCents'> & { underlying?: string },
   windowFills: ReadonlyMap<string, { contracts: number }>,
-  cfg: Pick<LeadLagConfig, 'leadLagMaxDislocationCents' | 'leadLagOneEntryPerMarket'>
+  cfg: Pick<LeadLagConfig, 'leadLagMaxDislocationCents' | 'leadLagOneEntryPerMarket' | 'leadLagNoTradeCoins'>
 ): { ok: boolean; why?: string } {
+  if (d.underlying && cfg.leadLagNoTradeCoins?.includes(d.underlying)) return { ok: false, why: `${d.underlying} is recorded, not traded` }
   if (cfg.leadLagMaxDislocationCents !== undefined && d.dislocationCents >= cfg.leadLagMaxDislocationCents) {
     return { ok: false, why: `gap ${d.dislocationCents}c is at or above the ${cfg.leadLagMaxDislocationCents}c cap` }
   }

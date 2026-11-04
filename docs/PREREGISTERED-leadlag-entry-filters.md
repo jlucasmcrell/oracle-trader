@@ -83,3 +83,11 @@ Operator: "We can go back to x2." At x4 (11-02 19:41Z to 11-04 15:28Z, when the 
 -3.37c/contract, -$11.71; the shadow of every first gap lost too (-9.1c over the last day), and fill slippage, latency,
 Polymarket book age, gap size and the socket-versus-book agreement matched the x2 week, so no execution change was
 found. `ladderMaxNotch['kalshi-leadlag']` is 2 again and the arm is live x2. The reads are unchanged.
+
+## Amendment 2026-11-04 16:45Z — BNB recorded, not traded
+
+Operator: "Yes" to pausing BNB. Binance (BNB's main market) was hacked on 2026-10-29 and halted trading; since then
+lead-lag's BNB fills settled at -7.2c/contract (92 fills, -$13.19) against -1.8c for the other coins, and before the
+hack (10-23..28) the arm made +2.4c. `leadLagNoTradeCoins: ['BNB']` keeps BNB scanned and its gaps logged, untraded.
+BNB fills drop out of the cohort from here; the read is otherwise unchanged. Re-arm BNB when its logged gaps grade
+positive again, on the operator's word.

@@ -286,6 +286,8 @@ export interface AutoTraderConfig {
   leadLagMaxDislocationCents?: number | null
   /** One filled lead-lag entry per market per window (same registration). Default true. */
   leadLagOneEntryPerMarket?: boolean
+  /** Lead-lag coins scanned and recorded but never traded (operator, 2026-11-04: BNB after the Binance hack). */
+  leadLagNoTradeCoins?: string[]
   /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x2 by the same registration until its read). */
   ladderMaxNotch?: Record<string, number>
   // ---- settlement-source convergence (experimental) ----
