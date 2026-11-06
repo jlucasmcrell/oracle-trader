@@ -91,3 +91,12 @@ lead-lag's BNB fills settled at -7.2c/contract (92 fills, -$13.19) against -1.8c
 hack (10-23..28) the arm made +2.4c. `leadLagNoTradeCoins: ['BNB']` keeps BNB scanned and its gaps logged, untraded.
 BNB fills drop out of the cohort from here; the read is otherwise unchanged. Re-arm BNB when its logged gaps grade
 positive again, on the operator's word.
+
+## Amendment 2026-11-06 16:05Z — four coins traded, four recorded
+
+Operator: "Yes." Since the BNB pause (11-04 16:40Z) the traded coins lost -11.4c/contract over 54 fills while BNB's
+untraded first gaps graded +15.1c over 51: coin-by-coin swings on a few days are noise. Across the two machines, as
+independent samples: BTC +10.2c (ASTRAL 09-25..10-07) and +5.0c (BEAST since 10-14), SOL +6.1/+5.3, HYPE +6.1/+3.6,
+ZEC +6.7/+4.7; ETH -1.1/-9.3 and BNB -0.5/-1.3 lost on both; XRP and DOGE changed sign. ASTRAL's +$59 on the 15-minute
+series was +$48.57 BTC. `leadLagNoTradeCoins` is now BNB, ETH, XRP and DOGE (scanned and logged, not traded); size
+stays x2. Fills from here are a four-coin cohort, read with the rest on 2026-11-13.
