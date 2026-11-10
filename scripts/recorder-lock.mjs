@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-/** PIDs of the other node.exe processes running `script`; undefined where the scan does not exist (non-Windows). */
+/** PIDs of the other node processes running `script`; undefined where no scan exists (neither Windows nor /proc). */
 export function recorderPids(script) {
-  if (process.platform !== 'win32') return undefined
+  if (process.platform !== 'win32') return procPids(script)
   const raw = execFileSync('powershell.exe', ['-NoProfile', '-Command',
     "@(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Select-Object ProcessId,CommandLine) | ConvertTo-Json -Compress"],
   { encoding: 'utf8', windowsHide: true, timeout: 15000 })
@@ -14,6 +14,22 @@ export function recorderPids(script) {
   return processes.filter(p => p.ProcessId !== process.pid &&
     (p.CommandLine?.match(/"[^"]*"|\S+/g) ?? []).some(arg => arg.replaceAll('"', '').replaceAll('\\', '/').toLowerCase() === wanted))
     .map(p => p.ProcessId)
+}
+
+/** The same scan on Linux, from /proc/<pid>/cmdline (NUL-separated arguments; paths are case-sensitive there). */
+function procPids(script) {
+  if (!fs.existsSync('/proc/self/cmdline')) return undefined
+  const wanted = path.resolve(script)
+  const out = []
+  for (const name of fs.readdirSync('/proc')) {
+    const pid = Number(name)
+    if (!Number.isSafeInteger(pid) || pid === process.pid) continue
+    let args
+    try { args = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split(String.fromCharCode(0)) } catch { continue }  // exited, or not ours to read
+    if (!/(^|\/)node(js)?$/.test(args[0] ?? '')) continue
+    if (args.slice(1).some(a => a && path.resolve(a) === wanted)) out.push(pid)
+  }
+  return out
 }
 
 /**

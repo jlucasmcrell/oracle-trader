@@ -28,12 +28,24 @@ Never run two live copies against the same Kalshi or Polymarket account: every t
 | App autostart and restart | Task Scheduler (`Oracle - Trader app`) | systemd user unit with `Restart=always` |
 | Recorders, sentinel, backup, hourly jobs | Task Scheduler (`OracleTrader-*`) | systemd user timers / services |
 | `crypto15-shadow.cmd`, `ladder15-shadow.cmd`, `mmsim.cmd` | `start /min` launchers | call `node scripts/<name>.mjs` directly |
-| Recorder single-instance lock (`scripts/recorder-lock.mjs`) | Windows process scan | `/proc` scan (`test:recorder-lock` fails on Linux until then) |
+| Recorder single-instance lock (`scripts/recorder-lock.mjs`) | Windows process scan | Done 2026-11-10: `/proc` scan |
 | Sentinel (`scripts/sentinel.mjs`) | `schtasks`, `tasklist`, PowerShell | `systemctl --user`, `pgrep` |
 | Maintenance and repair (`*.ps1`) | PowerShell + Claude CLI | bash; currently off on BEAST too |
 | State backup (`scripts/state-backup.py`, `win_share`) | `python`, Windows share-mode reads | `python3`, plain reads |
 | IB Gateway | IBC Windows task | IBC on Linux (supported) |
 
-Linux test results at the time of writing: 18 of 22 test suites pass. The four failures are `backup-share` (`python`
-vs `python3`), `recorder-lock` (Windows process scan), `review` (one test expects the Windows `EPERM` code for a held
-file where Linux reports `EACCES`) and `task-watch` (needs a weather-recorder data folder that a fresh machine lacks).
+Linux test results on 2026-11-10 (commit after the full review): 20 of 22 suites pass on Ubuntu 24.04. The two that do
+not are `backup-share` (it tests Windows file-sharing modes and calls `python`) and `task-watch` (needs a
+weather-recorder data folder that a fresh machine lacks until that recorder has run once).
+
+## Keeping the Linux copy in step
+
+The Linux copy is the same commit as the Windows one. After every change on BEAST:
+
+1. `git archive HEAD | ssh <linux> 'cd ~/oracle/oracle-trader && tar -xf -'`
+2. On the Linux machine: typecheck, build, restart the app (`~/oracle/start-app.sh`) and the status page
+   (`~/oracle/start-status.sh`).
+3. Compare the two trees ignoring line endings; they must be identical apart from Python cache files.
+
+The state-safety work from the 2026-11-10 review (fsynced saves, `.lastgood` copies, `STATE-LOST.jsonl`) is
+platform-neutral and runs on both.

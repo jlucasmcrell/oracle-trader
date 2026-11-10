@@ -1935,7 +1935,7 @@ async function appendTests(): Promise<void> {
   let blocked = ''
   try { j.begin({ venue: 'kalshi', marketId: 'M2', outcome: 'YES', side: 'buy', ref: 't' } as any) } catch (e) { blocked = (e as { code?: string }).code ?? String(e) }
   chmodSync(path, 0o666)
-  eq('journal: a held file fails that submission with the sharing code and leaves nothing pending', [blocked, j.pending('kalshi').length], ['EPERM', 0])
+  eq('journal: a held file fails that submission with the sharing code and leaves nothing pending', [blocked, j.pending('kalshi').length], [process.platform === 'win32' ? 'EPERM' : 'EACCES', 0])
   let next = ''
   try { next = j.begin({ venue: 'kalshi', marketId: 'M2', outcome: 'YES', side: 'buy', ref: 't' } as any).state } catch (e) { next = String(e) }
   eq('journal: ...and does not latch - the next submission is journaled', next, 'pending')
