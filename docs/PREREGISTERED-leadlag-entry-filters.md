@@ -111,3 +111,6 @@ on only weekends and turn on weekdays at a reduced amount for testing further."
 - Weekdays: `leadLagWeekdays` true again, `leadLagWeekdayContracts` 1, coins BTC, SOL, HYPE, ZEC.
 - Weekends: x2, every coin but BNB (`leadLagWeekendNoTradeCoins: ['BNB']`; weekend BNB since 10-14: -4.0c over 132).
 - Fills are reported as weekday and weekend slices from here, beside the cohort; the 11-13 reads are unchanged.
+- Corrected 08:25Z, operator: "increase the number of trades on the coins we know are winning, not start trading again
+  on coins that were losing." Weekends are back to BTC, SOL, HYPE and ZEC (`leadLagWeekendNoTradeCoins` = the weekday
+  list). No weekend passed in between, so no fill was made on the other coins.
