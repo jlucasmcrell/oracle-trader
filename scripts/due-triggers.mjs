@@ -8,8 +8,8 @@
 //   node scripts/due-triggers.mjs --notify   print, write data/due-triggers.md, push if anything is due (once per day)
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const REPO = 'G:/PROJECTS/oracle-trader'
 const NOTIFY = process.argv.includes('--notify')
 const today = new Date().toISOString().slice(0, 10)
 const plus = (d) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10)

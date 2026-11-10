@@ -16,8 +16,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { uniqueObservations, inDuplicateWriterWindow } from './unique-observations.mjs'
+import { REPO } from './lib/repo-root.mjs'
 
-const DIR = process.env.CRYPTO15_DIR ?? 'G:/PROJECTS/oracle-trader/data/crypto15-shadow'
+const DIR = process.env.CRYPTO15_DIR ?? `${REPO}/data/crypto15-shadow`
 
 // ---- PRE-REGISTERED, fixed 2026-09-12 before a single row existed ----
 const MIN_DAY_CLUSTERS = 20

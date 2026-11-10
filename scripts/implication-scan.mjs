@@ -16,9 +16,10 @@
 //   node scripts/implication-scan.mjs --record   also append rows to data/implication-scan/YYYY-MM-DD.jsonl
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
-const OUT = 'G:/PROJECTS/oracle-trader/data/implication-scan'
+const OUT = `${REPO}/data/implication-scan`
 const RECORD = process.argv.includes('--record')
 const PERIOD = /1H|2H|1Q|2Q|3Q|4Q|\dP\b|OT|SET|MAP|INN|HALF|QTR/
 const H = { 'User-Agent': 'oracle-trader-research/1.0' }

@@ -10,8 +10,9 @@
 //   node scripts/btc-gate.mjs --since ISO  only events closing after ISO
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const DIR = process.env.BTC_COLLECTOR_DIR || 'G:/PROJECTS/oracle-trader/data/btc-collector'
+const DIR = process.env.BTC_COLLECTOR_DIR || `${REPO}/data/btc-collector`
 const REGISTERED_AT = Date.parse('2026-09-02T12:45:00Z')   // rule fixed here; only later closes count
 const argSince = process.argv.indexOf('--since')
 const SINCE = argSince > -1 ? Date.parse(process.argv[argSince + 1]) : REGISTERED_AT

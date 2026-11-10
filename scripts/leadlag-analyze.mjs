@@ -10,8 +10,9 @@
 //   node scripts/leadlag-analyze.mjs            (defaults: THRESH=0.04, LOOKAHEAD=60s)
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const DIR = process.env.LEADLAG_DIR || 'G:/PROJECTS/oracle-trader/data/leadlag'
+const DIR = process.env.LEADLAG_DIR || `${REPO}/data/leadlag`
 const THRESH = +(process.env.THRESH || 0.04)
 const BURST_MS = +(process.env.BURST_MS || 5000)          // the move must occur within this span on the leader
 const LOOKAHEAD_S = +(process.env.LOOKAHEAD || 60)         // grade at the follower's mid this far after the trigger

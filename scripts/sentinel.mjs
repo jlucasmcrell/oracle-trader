@@ -32,8 +32,8 @@ import { TASK_WATCH, isStale } from './lib/task-watch.mjs'
 import { WATCHED_KEYS, WEBHOOK_CACHE, configLoss, fingerprint, isDefaultedConfig, newQuarantines, resolveWebhook } from './lib/config-watch.mjs'
 import { killState } from './lib/kill-state.mjs'
 import { recorderPids } from './recorder-lock.mjs'
+import { REPO } from './lib/repo-root.mjs'
 
-const REPO = 'G:/PROJECTS/oracle-trader'
 const UD = path.join(process.env.APPDATA ?? '', 'oracle-trader')
 const DIR = path.join(REPO, 'data/sentinel')
 const INC = path.join(DIR, 'incidents')
@@ -171,7 +171,19 @@ function startTask(name) {
   if (DRY) return 'dry'
   return ps(`Start-ScheduledTask -TaskName '${name}'; 'started'`).trim()
 }
-function taskLastResults(names = ['OracleTrader-App', 'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
+// The app's task was OracleTrader-App on ASTRAL; on BEAST it is registered as "Oracle - Trader app".
+// Reviving through a name that does not exist stops electron and then starts nothing, so the revive
+// uses whichever of the two is registered on this machine.
+function taskExists(name) {
+  try {
+    execFileSync('schtasks', ['/Query', '/TN', name], { timeout: 30_000, stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+const APP_TASK = ['OracleTrader-App', 'Oracle - Trader app'].find(taskExists) ?? 'OracleTrader-App'
+function taskLastResults(names = [APP_TASK,'OracleTrader-HrrrShadow', 'OracleTrader-MetaculusShadow', 'OracleTrader-MentionShadow', 'OracleTrader-Maintenance', 'OracleTrader-Sentinel']) {
   const out = {}
   for (const name of names) {
     try {
@@ -586,7 +598,7 @@ for (const [name, t] of Object.entries(tasks)) {
   const code = Number(t.lastResult)
   // The app task reports -1 whenever a maintenance or repair session stops electron to load a
   // build and starts it again; the process check above is the app's real liveness signal.
-  if (name === 'OracleTrader-App' && electronCount > 0) continue
+  if (name === APP_TASK && electronCount > 0) continue
   if (Number.isFinite(code) && ![0, 267009, 267011, 267014].includes(code)) add(`task:${name}`, 'notify', `${name} last result ${t.lastResult}`, JSON.stringify(t))
 }
 let credits
@@ -640,9 +652,12 @@ if (gateway === 'down') {
 }
 let diskFreeGb
 try {
-  const s = fs.statfsSync('G:/')
+  // The repo's own drive: recorder data and logs live there. (G: was the repo drive on ASTRAL; on BEAST
+  // it is a Google Drive mount and the repo is on C:.)
+  const drive = REPO.slice(0, 2)
+  const s = fs.statfsSync(drive + '/')
   diskFreeGb = Math.round((s.bavail * s.bsize) / 1e9)
-  if (diskFreeGb < 5) add('disk-low', 'notify', `G: has ${diskFreeGb} GB free`, 'Backups and logs live here.')
+  if (diskFreeGb < 5) add('disk-low', 'notify', `${drive} has ${diskFreeGb} GB free`, 'Recorder data and logs live here.')
 } catch {
   // statfs unavailable
 }
@@ -660,7 +675,9 @@ if (!DRY) {
         continue
       }
       state.revived['app'] = now
-      const r = ps("Get-Process electron -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 3; Start-ScheduledTask -TaskName 'OracleTrader-App'; 'restarted'").trim()
+      // Only this checkout's electron: BEAST runs other Electron apps.
+      const exe = path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe')
+      const r = ps(`Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe}' } | Stop-Process -Force; Start-Sleep -Seconds 3; Start-ScheduledTask -TaskName '${APP_TASK}'; 'restarted'`).trim()
       f.evidence += ` | ${r}`
     }
   }

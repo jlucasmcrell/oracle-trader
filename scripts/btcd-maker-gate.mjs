@@ -10,8 +10,9 @@
 //   GATE_SERIES=KXETHD node scripts/btcd-maker-gate.mjs   (secondary coins)
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const DIR = process.env.BTC_COLLECTOR_DIR || 'G:/PROJECTS/oracle-trader/data/btc-collector'
+const DIR = process.env.BTC_COLLECTOR_DIR || `${REPO}/data/btc-collector`
 const SERIES = process.env.GATE_SERIES || 'KXBTCD'
 const REGISTERED_AT = Date.parse('2026-09-02T14:35:00Z')
 const WINDOW = 5, LO = 0.80, HI = 0.95, Z = 1.96

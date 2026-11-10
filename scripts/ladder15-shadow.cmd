@@ -7,4 +7,4 @@ rem `cmd /c start` mis-parses a node path containing spaces. This wrapper lives 
 rem `cmd /c start "" /min <this>` is unambiguous, and does its own quoting internally.
 rem
 rem The recorder RECORDS ONLY - it never places, amends or cancels an order.
-start "" /min "C:\Program Files\nodejs\node.exe" "G:\PROJECTS\oracle-trader\scripts\ladder15-shadow.mjs"
+start "" /min "C:\Program Files\nodejs\node.exe" "%~dp0ladder15-shadow.mjs"

@@ -23,7 +23,7 @@ from win_share import copy_shared, open_shared  # reading a live log must not bl
 
 DEST = os.environ.get('ORACLE_STATE_BACKUP_DEST', r'D:\oracle-trader-backup')
 APPDATA = os.path.join(os.environ['APPDATA'], 'oracle-trader')
-REPO = r'G:\PROJECTS\oracle-trader'
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # not a drive letter: G: is Google Drive on BEAST
 DATA = os.path.join(REPO, 'data')
 LOG = os.path.join(REPO, 'logs', 'state-backup.log')
 # Chromium's profile is rebuildable and churns constantly; it is not state.

@@ -17,8 +17,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { REPO } from './lib/repo-root.mjs'
 
-export const DIR = process.env.SPOT_SHADOW_DIR ?? 'G:/PROJECTS/oracle-trader/data/spot-shadow'
+export const DIR = process.env.SPOT_SHADOW_DIR ?? `${REPO}/data/spot-shadow`
 export const READ_AT = '2026-09-21T00:00:00Z'
 export const MIN_N = 300
 export const MIN_DAYS = 5

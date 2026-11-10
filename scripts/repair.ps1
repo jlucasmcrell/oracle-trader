@@ -4,7 +4,7 @@
 # maintenance runner so two Claude sessions never edit the tree at once.
 param([Parameter(Mandatory = $true)][string]$Incident)
 $ErrorActionPreference = 'Continue'
-$repo = 'G:\PROJECTS\oracle-trader'
+$repo = Split-Path -Parent $PSScriptRoot
 $lock = Join-Path $repo 'data/sentinel/agent.lock'
 # Open the log FIRST. The busy path used to exit 0 having written nothing anywhere, which is
 # indistinguishable from the session never starting at all -- the state the detached-spawn bug left us in
@@ -23,13 +23,16 @@ New-Item -ItemType Directory -Force (Split-Path $lock) | Out-Null
 try {
   Set-Location $repo
   $incidentPath = $Incident -replace '\\', '/'
-  $prompt = "You are running HEADLESS from Windows Task Scheduler as an on-call repair session: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. Read G:/PROJECTS/oracle-trader/docs/REPAIR-PROMPT.md first, then the incident file $incidentPath, and follow the prompt to the end. Finish by printing DONE and the incident's outcome line."
+  $prompt = "You are running HEADLESS from Windows Task Scheduler as an on-call repair session: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. Read $repo\docs\REPAIR-PROMPT.md first, then the incident file $incidentPath, and follow the prompt to the end. Finish by printing DONE and the incident's outcome line."
   "[$(Get-Date -Format o)] start $Incident" | Tee-Object -FilePath $log -Append
   # The scheduler passes the user environment, where ANTHROPIC_API_KEY (an un-scoped key) overrides the
   # claude.ai login and every request fails with 400 (2026-09-08 07:00 run). Use the login.
   Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
   Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
-  $null | & "$env:APPDATA\npm\claude.cmd" -p $prompt --dangerously-skip-permissions --output-format text --max-turns 250 2>&1 | Tee-Object -FilePath $log -Append
+  # ASTRAL had the npm install; BEAST may have the native one. First that exists wins.
+  $claude = @("$env:APPDATA\npm\claude.cmd", "$env:USERPROFILE\.local\bin\claude.exe", (Get-Command claude -ErrorAction SilentlyContinue).Source) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+  if (-not $claude) { "[$(Get-Date -Format o)] claude CLI not found" | Tee-Object -FilePath $log -Append }
+  $null | & $claude -p $prompt --dangerously-skip-permissions --output-format text --max-turns 250 2>&1 | Tee-Object -FilePath $log -Append
   "[$(Get-Date -Format o)] exit $LASTEXITCODE" | Tee-Object -FilePath $log -Append
 } finally {
   Remove-Item $lock -ErrorAction SilentlyContinue

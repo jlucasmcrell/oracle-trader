@@ -21,10 +21,11 @@
 //   node scripts/sports-books.mjs --once   discovery + one cycle to stdout, exit 0 when any game matched
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
 const PM = 'https://gateway.polymarket.us'
-const OUT = process.env.SPORTS_BOOKS_DIR || 'G:/PROJECTS/oracle-trader/data/sports-books'
+const OUT = process.env.SPORTS_BOOKS_DIR || `${REPO}/data/sports-books`
 const MONEYLINES = process.env.SPORTS_BOOKS_MONEYLINES || join(process.env.APPDATA || '', 'oracle-trader', 'polyus-moneylines.json')
 const CYCLE_MS = 60_000
 const DISCOVER_MS = 30 * 60_000

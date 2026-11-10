@@ -24,8 +24,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { acquireRecorderLock } from './recorder-lock.mjs'
+import { REPO } from './lib/repo-root.mjs'
 
-const REPO = 'G:/PROJECTS/oracle-trader'
 const DIR = path.join(REPO, 'data/ladder15-shadow')
 const OBS = path.join(DIR, 'observations.jsonl')
 const HEARTBEAT = path.join(DIR, 'heartbeat.json')

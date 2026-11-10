@@ -5,9 +5,9 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { killState } from './lib/kill-state.mjs'
+import { REPO } from './lib/repo-root.mjs'
 
 const DATA = join(process.env.APPDATA || '', 'oracle-trader')
-const REPO = 'G:/PROJECTS/oracle-trader'
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
 const rj = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')) } catch { return null } }
 const f2 = (x) => (x === undefined || x === null || Number.isNaN(x) ? '-' : (x >= 0 ? '+' : '') + Number(x).toFixed(2))

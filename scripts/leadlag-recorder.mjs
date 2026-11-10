@@ -11,12 +11,13 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import WebSocket from 'ws'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
 const GAMMA = 'https://gamma-api.polymarket.com'
 const CLOB_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
 const CLOB_REST = 'https://clob.polymarket.com'
-const OUT = process.env.LEADLAG_DIR || 'G:/PROJECTS/oracle-trader/data/leadlag'
+const OUT = process.env.LEADLAG_DIR || `${REPO}/data/leadlag`
 const COINS = [{ coin: 'BTC', pmSlug: 'btc', kSeries: 'KXBTC15M' }, { coin: 'ETH', pmSlug: 'eth', kSeries: 'KXETH15M' }]
 const KALSHI_POLL_MS = 2000
 mkdirSync(OUT, { recursive: true })

@@ -10,9 +10,10 @@
 //   node scripts/dutchbook-scanner.mjs --once   one scan
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
-const OUT = process.env.DUTCH_DIR || 'G:/PROJECTS/oracle-trader/data/dutchbook'
+const OUT = process.env.DUTCH_DIR || `${REPO}/data/dutchbook`
 const ONCE = process.argv.includes('--once')
 const NEAR = 0.05          // log events within this of a violation
 const MIN_LEGS = 3

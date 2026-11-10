@@ -6,12 +6,13 @@ from win_share import open_shared  # reading a live log must not block the app's
 
 label_arg = sys.argv[1] if len(sys.argv) > 1 else "backup"
 ts = time.strftime("%Y%m%d-%H%M%S")
-out_dir = r"G:\PROJECTS\oracle-trader-backups"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # not a drive letter: G: is Google Drive on BEAST
+out_dir = os.environ.get("ORACLE_BACKUP_DIR", REPO + "-backups")
 os.makedirs(out_dir, exist_ok=True)
 out = os.path.join(out_dir, f"oracle-trader-{label_arg}-{ts}.zip")
 
 ROOTS = [
-    ("repo", r"G:\PROJECTS\oracle-trader", {"node_modules", "out"}),
+    ("repo", REPO, {"node_modules", "out"}),
     ("userData", os.path.join(os.environ["APPDATA"], "oracle-trader"),
      {"Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache", "blob_storage",
       "Shared Dictionary", "Session Storage", "Local Storage", "Network", "Crashpad"}),

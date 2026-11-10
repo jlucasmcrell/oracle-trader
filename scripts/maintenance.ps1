@@ -3,7 +3,7 @@
 # desktop app closed and needs no permission clicks. The desktop scheduled task
 # "oracle-trader-maintenance" only delivers the report this run writes.
 $ErrorActionPreference = 'Continue'
-$repo = 'G:\PROJECTS\oracle-trader'
+$repo = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $repo 'logs'
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $stamp = Get-Date -Format 'yyyy-MM-dd'
@@ -33,17 +33,20 @@ while ((Test-Path $lock) -and (((Get-Date) - (Get-Item $lock).LastWriteTime).Tot
   Start-Sleep -Seconds 60; $waited++
 }
 "maintenance $PID $(Get-Date -Format o)" | Set-Content $lock
-$skill = 'G:/PROJECTS/oracle-trader/docs/MAINTENANCE-PROMPT.md'
+$skill = Join-Path $repo 'docs\MAINTENANCE-PROMPT.md'
 # Which backlog reads are due today (dated triggers in docs/BACKLOG.md). Pushes the list to the operator's alert
 # webhook once a day and writes data/due-triggers.md for the session: nobody has to remember a read date.
 & node scripts/due-triggers.mjs --notify 2>&1 | Tee-Object -FilePath $log -Append
-$prompt = "You are running HEADLESS from Windows Task Scheduler: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. FIRST read G:\PROJECTS\oracle-trader\data\due-triggers.md: every item under DUE is a pre-registered read you must perform today, exactly as its backlog entry and pre-registration say, recording the result in docs\BACKLOG.md and REVIEW-CHANGES; a PASS that the registration says the maintainer acts on, you act on. Then read the file $skill and follow every step in order. For step 6 write the report to docs\reports\$stamp.md and skip the sending: a separate desktop task delivers that file at 08:30. Finish everything; end by printing DONE and a five-line summary of what changed and what needs the operator (usually nothing)."
+$prompt = "You are running HEADLESS from Windows Task Scheduler: no desktop tools (no SendUserFile, no PushNotification, no scheduled-task tools), nobody will answer a question, and permission prompts are off, so every rule in the instructions binds you absolutely. FIRST read $repo\data\due-triggers.md: every item under DUE is a pre-registered read you must perform today, exactly as its backlog entry and pre-registration say, recording the result in docs\BACKLOG.md and REVIEW-CHANGES; a PASS that the registration says the maintainer acts on, you act on. Then read the file $skill and follow every step in order. For step 6 write the report to docs\reports\$stamp.md and skip the sending: a separate desktop task delivers that file at 08:30. Finish everything; end by printing DONE and a five-line summary of what changed and what needs the operator (usually nothing)."
 "[$(Get-Date -Format o)] start" | Tee-Object -FilePath $log -Append
 # The scheduler passes the user environment, where ANTHROPIC_API_KEY (an un-scoped key) overrides the
 # claude.ai login and every request fails with 400 (2026-09-08 07:00 run). Use the login.
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
-$null | & "$env:APPDATA\npm\claude.cmd" -p $prompt --dangerously-skip-permissions --output-format text --max-turns 400 2>&1 | Tee-Object -FilePath $log -Append
+# ASTRAL had the npm install; BEAST may have the native one. First that exists wins.
+$claude = @("$env:APPDATA\npm\claude.cmd", "$env:USERPROFILE\.local\bin\claude.exe", (Get-Command claude -ErrorAction SilentlyContinue).Source) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if (-not $claude) { "[$(Get-Date -Format o)] claude CLI not found" | Tee-Object -FilePath $log -Append }
+$null | & $claude -p $prompt --dangerously-skip-permissions --output-format text --max-turns 400 2>&1 | Tee-Object -FilePath $log -Append
 $code = $LASTEXITCODE
 "[$(Get-Date -Format o)] exit $code" | Tee-Object -FilePath $log -Append
 Remove-Item $lock -ErrorAction SilentlyContinue

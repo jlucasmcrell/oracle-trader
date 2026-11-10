@@ -17,9 +17,10 @@
 //   node scripts/btc-collector.mjs --once     one tick, then exit
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const B = 'https://api.elections.kalshi.com/trade-api/v2'
-const OUT_DIR = process.env.BTC_COLLECTOR_DIR || 'G:/PROJECTS/oracle-trader/data/btc-collector'
+const OUT_DIR = process.env.BTC_COLLECTOR_DIR || `${REPO}/data/btc-collector`
 const ONCE = process.argv.includes('--once')
 const BOOK_BAND = 0.012
 const BOOK_CAP = 24

@@ -12,9 +12,10 @@
 //   node scripts/weather-books.mjs --once   one cycle to stdout, exit 0 on success
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
-const OUT = process.env.WEATHER_BOOKS_DIR || 'G:/PROJECTS/oracle-trader/data/weather-books'
+const OUT = process.env.WEATHER_BOOKS_DIR || `${REPO}/data/weather-books`
 const CYCLE_MS = 30 * 60_000
 const ONCE = process.argv.includes('--once')
 const SERIES = /^KX(HIGHT|LOWT)[A-Z]+-/

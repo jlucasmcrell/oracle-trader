@@ -12,8 +12,8 @@
 import { spawn, execSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const REPO = 'G:/PROJECTS/oracle-trader'
 const APPDATA = process.env.APPDATA || ''
 const DATA = join(APPDATA, 'oracle-trader')
 const OUT = join(REPO, 'data', 'health')

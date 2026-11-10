@@ -45,8 +45,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { acquireRecorderLock } from './recorder-lock.mjs'
+import { REPO } from './lib/repo-root.mjs'
 
-const REPO = 'G:/PROJECTS/oracle-trader'
 const DIR = path.join(REPO, 'data/crypto15-shadow')
 const HEARTBEAT = path.join(DIR, 'heartbeat.json')
 const SKIPPED = path.join(DIR, 'skipped.jsonl')

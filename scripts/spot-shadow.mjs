@@ -13,13 +13,14 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import WebSocket from 'ws'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
 const GAMMA = 'https://gamma-api.polymarket.com'
 const CLOB_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market'
 const CB_WS = 'wss://advanced-trade-ws.coinbase.com'
 const CB_REST = 'https://api.exchange.coinbase.com'
-const OUT = process.env.SPOT_SHADOW_DIR || 'G:/PROJECTS/oracle-trader/data/spot-shadow'
+const OUT = process.env.SPOT_SHADOW_DIR || `${REPO}/data/spot-shadow`
 // Coins with a Coinbase USD product AND a Kalshi 15-minute series. BNB/HYPE have no Coinbase feed.
 export const COINS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE']
 const KALSHI_POLL_MS = 2000

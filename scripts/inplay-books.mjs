@@ -16,10 +16,11 @@
 //   node scripts/inplay-books.mjs --once   discovery + one cycle to stdout; exit 0 when the schedule was read
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
 const K = 'https://api.elections.kalshi.com/trade-api/v2'
 const MLB = 'https://statsapi.mlb.com/api'
-const OUT = process.env.INPLAY_BOOKS_DIR || 'G:/PROJECTS/oracle-trader/data/inplay-books'
+const OUT = process.env.INPLAY_BOOKS_DIR || `${REPO}/data/inplay-books`
 const CYCLE_MS = 15_000
 const DISCOVER_MS = 5 * 60_000
 const ONCE = process.argv.includes('--once')

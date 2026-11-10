@@ -12,8 +12,9 @@
 //   GATE_SERIES=KXETHD node scripts/btcd-fv-gate.mjs
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { REPO } from './lib/repo-root.mjs'
 
-const DIR = process.env.BTC_COLLECTOR_DIR || 'G:/PROJECTS/oracle-trader/data/btc-collector'
+const DIR = process.env.BTC_COLLECTOR_DIR || `${REPO}/data/btc-collector`
 const SERIES = process.env.GATE_SERIES || 'KXBTCD'
 const COIN = { KXBTCD: 'BTC', KXETHD: 'ETH', KXSOLD: 'SOL', KXXRPD: 'XRP' }[SERIES] || 'BTC'
 const REGISTERED_AT = Date.parse('2026-09-02T15:20:00Z')
