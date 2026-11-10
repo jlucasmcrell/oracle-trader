@@ -114,3 +114,10 @@ on only weekends and turn on weekdays at a reduced amount for testing further."
 - Corrected 08:25Z, operator: "increase the number of trades on the coins we know are winning, not start trading again
   on coins that were losing." Weekends are back to BTC, SOL, HYPE and ZEC (`leadLagWeekendNoTradeCoins` = the weekday
   list). No weekend passed in between, so no fill was made on the other coins.
+
+## Amendment 2026-11-10 08:30Z — weekends x4, ETH back on weekends
+
+Operator: "Yes, and turn ETH back on." Weekends trade BTC, SOL, HYPE, ZEC and ETH at x4 (`ladderMaxNotch` 4, notch 4,
+`leadLagProvenCoins` those five so each sweeps the full size); weekdays stay BTC, SOL, HYPE, ZEC at one contract
+(`leadLagWeekdayContracts` 1). ETH's untraded weekend gaps since 11-06 graded +11.3c (18), its weekday gaps -8.9c (8),
+so it is back on weekends only. Hard stop at x4 is -$40.
