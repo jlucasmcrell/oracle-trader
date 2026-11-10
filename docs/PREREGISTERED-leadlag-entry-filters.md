@@ -140,3 +140,16 @@ Found by review, fixed in the build started 2026-11-10 after 10:16Z. They make t
 Looked at, not changed (slices of 1,418 fills; leads only): fills with a Polymarket socket top 5 s or older
 (77 fills, -13.6c); gaps where Kalshi moved and Polymarket did not (222 fills, -$21.50); event-speed gaps (negative
 after fees at every size, 26 days) and resting orders (-15c per simulated fill) are not worth building.
+
+## Amendment 2026-11-10 10:55Z — three scored-only checks (operator: "Yes add ideas")
+
+`scripts/leadlag-filters-gate.mjs` now prints, under "scored only", the live cohort split three ways. They decide
+nothing at the 11-13 read. Each was found by slicing the 10-14..11-10 fills, so it is a lead:
+
+- **Weekday hours**: New York weekdays from 12:00 to 18:00 against the other weekday hours.
+- **Polymarket feed age**: the socket top under 5 s old at the scan against 5 s or more (`polyWs.ageMs`).
+- **Who moved**: Kalshi's mid moved toward the gap by 2c or more since the previous scan while Polymarket's moved
+  under half as far (`dKalshiCents`, `dPolyCents`), against every other gap.
+
+It also prints the cohort by coin and weekends alone. A slice whose band sits wholly on one side at a later read
+is a reason to register it as a rule with its own cohort, not to switch it on.

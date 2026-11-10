@@ -64,7 +64,15 @@ const liveUnits = []
 for (const r of live) {
   const t = res[r.kalshiTicker]; if (!t) continue
   const yes = r.suggestedAction === 'BUY_KALSHI_YES'
-  liveUnits.push({ day: nyDay(r.ts), w: r.filledContracts, c: 100 * ((t === 'yes') === yes ? 1 : 0) - 100 * r.fillPrice - (r.feeCents ?? 0) })
+  const ny = new Date(new Date(r.ts).toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  const dK = r.dKalshiCents, dP = r.dPolyCents
+  liveUnits.push({
+    day: nyDay(r.ts), w: r.filledContracts, c: 100 * ((t === 'yes') === yes ? 1 : 0) - 100 * r.fillPrice - (r.feeCents ?? 0),
+    coin: r.underlying, weekend: ny.getDay() === 0 || ny.getDay() === 6, afternoon: ny.getHours() >= 12 && ny.getHours() < 18,
+    wsAgeMs: r.polyWs?.ageMs ?? null,
+    // Kalshi moved toward the gap by 2c or more since the last scan while Polymarket moved under half as far.
+    kalshiMoved: typeof dK === 'number' && typeof dP === 'number' ? (yes ? dK <= -2 : dK >= 2) && Math.abs(dP) < Math.abs(dK) / 2 : null
+  })
 }
 const kept = [], filtered = [], seen = new Set()
 for (const r of shadow) {
@@ -94,4 +102,16 @@ console.log(`verdict:  ${verdict} (read from 2026-10-30 at ${MIN_FILLS} fills on
 let cap = 'WAIT'
 if (Date.now() >= LAST && F.days >= MIN_DAYS) cap = F.lo > 0 ? `RAISE to 16c` : F.hi < 0 ? `KEEP ${CAP}c (skipped gaps lose)` : `KEEP ${CAP}c (unclear; keep scoring)`
 console.log(`cap:      ${cap} (decided 2026-11-13 on the skipped ${CAP}c+ gaps, ${MIN_DAYS}+ days)`)
+// Scored only (amendment 2026-11-10): three leads found by slicing the 10-14..11-10 fills. They decide nothing here;
+// a slice whose band is wholly on one side at a later read is a reason to register it as a rule of its own.
+const slice = (name, keep) => { const b = band(liveUnits.filter(keep)); console.log(`  ${name.padEnd(44)} ${String(liveUnits.filter(keep).length).padStart(4)} fills over ${b.days} days: ${b.mean}c/contract, 80% [${b.lo}, ${b.hi}]`) }
+console.log('scored only:')
+slice('weekends', (u) => u.weekend)
+slice('weekdays, noon to 6 PM New York', (u) => !u.weekend && u.afternoon)
+slice('weekdays, other hours', (u) => !u.weekend && !u.afternoon)
+slice('Polymarket live feed under 5 s old', (u) => u.wsAgeMs !== null && u.wsAgeMs < 5000)
+slice('Polymarket live feed 5 s old or more', (u) => u.wsAgeMs !== null && u.wsAgeMs >= 5000)
+slice('Kalshi moved, Polymarket did not', (u) => u.kalshiMoved === true)
+slice('all other gaps', (u) => u.kalshiMoved === false)
+for (const coin of [...new Set(liveUnits.map((u) => u.coin))].sort()) slice(`coin ${coin}`, (u) => u.coin === coin)
 if (process.argv.includes('--verdict')) process.exitCode = verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 2 : 1

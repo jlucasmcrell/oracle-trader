@@ -85,6 +85,17 @@ const suppressed = (text) => suppressions.find((s) => {
   }
 })
 
+// ---- Operator decisions, 2026-11-10 (full review) ----
+// Repair sessions are OFF: the Claude CLI is not logged in on BEAST, and all 20 sessions dispatched from 10-30 to
+// 11-09 died at the login prompt while the sentinel recorded each one as dispatched. A defect is now a pushed note.
+const REPAIR_SESSIONS = false
+// Recorders switched off as finished experiments. They are not relaunched and their staleness is not a finding.
+const RETIRED = new Set(['ladder15', 'crypto15', 'mmsim'])
+// In the digest, never pushed to the phone.
+const PUSH_QUIET = new Set(['ollama-down'])
+// Hours before the same finding is noted again, where six is too often.
+const REPEAT_H = { 'ibkr-gateway-down': 24 }
+
 /** findings: { key, kind: 'repair' | 'notify' | 'revive', title, evidence } */
 const findings = []
 // Suppressions apply to EVERY finding, not just log signatures: the file has always described itself as
@@ -289,7 +300,7 @@ const liveRecorder = (script) => {
 // and keeps writing). It is not a Scheduled Task - registering one needs elevation this account does not
 // have - so it is relaunched directly, through `cmd /c start` for the reason in round 61. Records only:
 // nothing it does can place, amend or cancel an order.
-{
+if (!RETIRED.has('ladder15')) {
   const hb = mtime(path.join(REPO, 'data/ladder15-shadow/heartbeat.json'))
   if (hb !== undefined && now - hb > 20 * MIN) {
     const last = state.revived['ladder15-stale'] ?? 0
@@ -315,7 +326,7 @@ const liveRecorder = (script) => {
 // KX*15M family that `minMinutesToClose: 15` hides from every arm. Same shape as ladder15 above: a detached
 // process with no Scheduled Task, a heartbeat every cycle, records only. Its pre-registered gate needs ~20
 // UTC day-clusters, so an unnoticed death adds a day to the end of the experiment.
-{
+if (!RETIRED.has('crypto15')) {
   const hb = mtime(path.join(REPO, 'data/crypto15-shadow/heartbeat.json'))
   if (hb !== undefined && now - hb > 20 * MIN) {
     const last = state.revived['crypto15-stale'] ?? 0
@@ -338,7 +349,7 @@ const liveRecorder = (script) => {
 // The market-making simulator (mmsim). A 35-day pre-registered falsification run: a day lost unnoticed is a
 // day added to the end, and the run cannot be extended to compensate without breaking its own stopping rule.
 // It writes rows continuously, so the newest .jsonl under mmsim/ is its liveness signal.
-{
+if (!RETIRED.has('mmsim')) {
   try {
     const d = path.join(process.env.APPDATA ?? '', 'oracle-trader', 'mmsim')
     if (fs.existsSync(d)) {
@@ -392,7 +403,11 @@ for (const [name, rel] of [
 const local = new Date(now)
 const localDay = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`
 const maintLog = path.join(REPO, 'logs', `maintenance-${localDay}.log`)
-if (!fs.existsSync(maintLog)) {
+// Only where the maintenance task is registered: on BEAST it is not, and "starting" a task that does not exist was a
+// daily finding about nothing.
+if (!taskExists('OracleTrader-Maintenance')) {
+  // nothing to watch on this machine
+} else if (!fs.existsSync(maintLog)) {
   if (local.getHours() >= 8) {
     if (!state.revived['maintenance-' + localDay]) {
       state.revived['maintenance-' + localDay] = now
@@ -683,13 +698,20 @@ if (!DRY) {
   }
 }
 
+// A state file the app could not read and could not restore (src/main/store/json.ts writes this marker): it is
+// running on defaults for that file until someone looks. The 2026-10-30 outage in one line.
+{
+  const lost = path.join(UD, 'STATE-LOST.jsonl')
+  if (fs.existsSync(lost)) add('state-lost', 'repair', 'A state file was unreadable with nothing to restore: the app is on DEFAULTS for it', (() => { try { return fs.readFileSync(lost, 'utf8').trim().split('\n').slice(-5).join(' | ') } catch { return 'STATE-LOST.jsonl present' } })())
+}
+
 // Distinct incident files, not rows: one session bundles every fresh finding and writes a row for each,
 // so counting rows let a two-finding session eat two of the three daily slots on its own.
 const todayDispatches = [...new Set(state.dispatches.filter((d) => d.at.slice(0, 10) === today).map((d) => d.file))]
 const lastDispatch = state.dispatches.length ? Date.parse(state.dispatches[state.dispatches.length - 1].at) : 0
 let dispatched
 const repairs = byKind('repair')
-if (repairs.length) {
+if (repairs.length && REPAIR_SESSIONS) {
   const fresh = repairs.filter((f) => !state.dispatches.some((d) => d.key === f.key && now - Date.parse(d.at) < 12 * H))
   const gate = DRY ? 'dry run' : lockBusy() ? 'agent.lock busy (a maintenance or repair session is running)' : todayDispatches.length >= 3 ? '3 repair sessions already today' : now - lastDispatch < 90 * MIN ? 'last repair less than 90 min ago' : fresh.length === 0 ? 'every finding already dispatched within 12 h' : ''
   if (!gate) {
@@ -736,7 +758,7 @@ if (repairs.length) {
 const notes = findings.filter((f) => f.kind !== 'repair' || !dispatched)
 const fresh6h = notes.filter((f) => {
   const last = state.notes[f.key] ?? 0
-  return now - last > 6 * H
+  return now - last > (REPEAT_H[f.key] ?? 6) * H
 })
 for (const f of fresh6h) state.notes[f.key] = now
 for (const k of Object.keys(state.notes)) if (now - state.notes[k] > 3 * 86400_000) delete state.notes[k]
@@ -784,14 +806,18 @@ const freshLines = lines.filter((l) => {
 })
 const entry = []
 if (dispatched || fresh6h.length || freshLines.length) {
-  entry.push(`## ${iso(now)} — ${dispatched ? 'REPAIR DISPATCHED' : fresh6h.some((f) => f.kind === 'repair') ? 'defect noted (repair gated)' : fresh6h.some((f) => f.kind.startsWith('revive')) ? 'revived' : 'notes'}`)
+  entry.push(`## ${iso(now)} — ${dispatched ? 'REPAIR DISPATCHED' : fresh6h.some((f) => f.kind === 'repair') ? 'defect noted' : fresh6h.some((f) => f.kind.startsWith('revive')) ? 'revived' : 'notes'}`)
   if (dispatched) entry.push(`- repair session started for: ${dispatched.keys.join(', ')} (incident ${path.basename(dispatched.file)})`)
   for (const f of fresh6h) entry.push(`- [${f.kind}] ${f.title}: ${f.evidence.split('\n')[0].slice(0, 200)}`)
   for (const l of freshLines) entry.push(`- ${l}`)
   entry.push('')
 }
 // Phone push for anything that changed, and for repair outcomes the moment they close.
-if (entry.length) await pushAlert(`Oracle sentinel: ${entry[0].replace(/^## \S+ — /, '')}`, entry.slice(1).join('\n'))
+const pushed = fresh6h.filter((f) => !PUSH_QUIET.has(f.key))
+if (dispatched || pushed.length || freshLines.length) {
+  const what = dispatched ? 'REPAIR DISPATCHED' : pushed.some((f) => f.kind === 'repair') ? 'problem found' : pushed.some((f) => f.kind.startsWith('revive')) ? 'restarted something' : 'note'
+  await pushAlert(`Oracle sentinel: ${what}`, [...pushed.map((f) => `- ${f.title}: ${f.evidence.split('\n')[0].slice(0, 300)}`), ...freshLines.map((l) => `- ${l}`)].join('\n'))
+}
 const closedSeen = state.closedSeen ?? (state.closedSeen = [])
 for (const f of fs.readdirSync(INC).filter((n) => n.endsWith('.md') && !closedSeen.includes(n))) {
   const head = fs.readFileSync(path.join(INC, f), 'utf8')
