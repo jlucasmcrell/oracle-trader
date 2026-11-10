@@ -941,6 +941,10 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('filter: a second entry on a held market is refused', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 7 }, fills, fcfg), { ok: false, why: 'already entered this market this window' })
   eq('filter: a no-trade coin is recorded, not traded', entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, { ...fcfg, leadLagNoTradeCoins: ['BNB'] }), { ok: false, why: 'BNB is recorded, not traded' })
   eq('filter: other coins still trade beside a no-trade coin', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, { ...fcfg, leadLagNoTradeCoins: ['BNB'] }).ok, true)
+  const wcoins = { ...fcfg, leadLagNoTradeCoins: ['BNB', 'ETH'], leadLagWeekendNoTradeCoins: ['BNB'] }
+  eq('filter: ETH is weekday-only no-trade, so it trades on a weekend', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, wcoins, true).ok, true)
+  eq('filter: ETH is held on a weekday', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, wcoins, false).ok, false)
+  eq('filter: BNB is held on both', [entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, true).ok, entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, false).ok], [false, false])
   eq('filter: unset filters let everything through', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 30 }, fills, {}).ok, true)
   // Round 93: proven coins at the ladder's size, the rest at micro size; the pool counts proven rows only.
   const scfg = { leadLagMaxContractsPerOrder: 8, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2 }

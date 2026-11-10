@@ -288,6 +288,10 @@ export interface AutoTraderConfig {
   leadLagOneEntryPerMarket?: boolean
   /** Lead-lag coins scanned and recorded but never traded (operator, 2026-11-04: BNB after the Binance hack). */
   leadLagNoTradeCoins?: string[]
+  /** Weekend no-trade list for lead-lag, used instead of leadLagNoTradeCoins on New York weekends. */
+  leadLagWeekendNoTradeCoins?: string[]
+  /** Lead-lag contracts per sweep on New York weekdays (reduced-size weekday testing). */
+  leadLagWeekdayContracts?: number
   /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x2 by the same registration until its read). */
   ladderMaxNotch?: Record<string, number>
   // ---- settlement-source convergence (experimental) ----

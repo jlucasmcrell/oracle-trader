@@ -100,3 +100,14 @@ independent samples: BTC +10.2c (ASTRAL 09-25..10-07) and +5.0c (BEAST since 10-
 ZEC +6.7/+4.7; ETH -1.1/-9.3 and BNB -0.5/-1.3 lost on both; XRP and DOGE changed sign. ASTRAL's +$59 on the 15-minute
 series was +$48.57 BTC. `leadLagNoTradeCoins` is now BNB, ETH, XRP and DOGE (scanned and logged, not traded); size
 stays x2. Fills from here are a four-coin cohort, read with the rest on 2026-11-13.
+
+## Amendment 2026-11-10 08:18Z — weekdays back at one contract, more coins on weekends
+
+The registered weekday read (PREREGISTERED-leadlag-weekday.md) FAILED on 2026-11-09 (weekdays -1.70c/contract, 80%
+[-3.34, -0.06], all eight coins; weekends +4.88c) and set `leadLagWeekdays` false. Operator, on seeing the four traded
+coins at +1.2c on weekdays (327 trades) and +11.7c on weekends: "positive is positive... increase the number of trades
+on only weekends and turn on weekdays at a reduced amount for testing further."
+
+- Weekdays: `leadLagWeekdays` true again, `leadLagWeekdayContracts` 1, coins BTC, SOL, HYPE, ZEC.
+- Weekends: x2, every coin but BNB (`leadLagWeekendNoTradeCoins: ['BNB']`; weekend BNB since 10-14: -4.0c over 132).
+- Fills are reported as weekday and weekend slices from here, beside the cohort; the 11-13 reads are unchanged.

@@ -92,15 +92,21 @@ export interface LeadLagConfig {
   leadLagOneEntryPerMarket?: boolean
   /** Coins scanned and recorded but not traded (operator, 2026-11-04: BNB while Binance recovers from the 10-29 hack). */
   leadLagNoTradeCoins?: readonly string[]
+  /** On New York weekends, the no-trade list used instead of `leadLagNoTradeCoins` (operator, 2026-11-10). Unset = same. */
+  leadLagWeekendNoTradeCoins?: readonly string[]
+  /** Contracts per sweep on New York weekdays, below the ladder's size (operator, 2026-11-10: weekdays at reduced size). */
+  leadLagWeekdayContracts?: number
 }
 
 /** The registered entry filters: may this dislocation be swept, given what the window already holds? */
 export function entryFilter(
   d: Pick<LeadLagDislocation, 'kalshiTicker' | 'dislocationCents'> & { underlying?: string },
   windowFills: ReadonlyMap<string, { contracts: number }>,
-  cfg: Pick<LeadLagConfig, 'leadLagMaxDislocationCents' | 'leadLagOneEntryPerMarket' | 'leadLagNoTradeCoins'>
+  cfg: Pick<LeadLagConfig, 'leadLagMaxDislocationCents' | 'leadLagOneEntryPerMarket' | 'leadLagNoTradeCoins' | 'leadLagWeekendNoTradeCoins'>,
+  weekend = false
 ): { ok: boolean; why?: string } {
-  if (d.underlying && cfg.leadLagNoTradeCoins?.includes(d.underlying)) return { ok: false, why: `${d.underlying} is recorded, not traded` }
+  const noTrade = weekend && cfg.leadLagWeekendNoTradeCoins ? cfg.leadLagWeekendNoTradeCoins : cfg.leadLagNoTradeCoins
+  if (d.underlying && noTrade?.includes(d.underlying)) return { ok: false, why: `${d.underlying} is recorded, not traded${weekend ? ' on weekends' : ''}` }
   if (cfg.leadLagMaxDislocationCents !== undefined && d.dislocationCents >= cfg.leadLagMaxDislocationCents) {
     return { ok: false, why: `gap ${d.dislocationCents}c is at or above the ${cfg.leadLagMaxDislocationCents}c cap` }
   }
@@ -1098,7 +1104,8 @@ export class LeadLagEngine {
     try {
       if (this.windowBlocked) return
       // Checked before anything is reserved, so a filtered gap costs nothing; the dislocation row is already written.
-      const gate = entryFilter(d, this.windowFills, cfg)
+      const weekend = etDay(Date.now()).weekend
+      const gate = entryFilter(d, this.windowFills, cfg, weekend)
       if (!gate.ok) {
         const k = `${d.kalshiTicker}|filter`
         if (!this.windowCapLogged.has(k)) {
@@ -1109,7 +1116,8 @@ export class LeadLagEngine {
       }
       // Micro size for a coin the ladder has not judged (round 93): round 91 gave five untested coins the
       // size BTC/ETH earned, which is the opposite of the ladder's own rule.
-      const count = sweepSizeFor(d.underlying, cfg)
+      // Weekdays trade at a reduced size when the operator sets one (2026-11-10).
+      const count = !weekend && cfg.leadLagWeekdayContracts ? Math.min(sweepSizeFor(d.underlying, cfg), cfg.leadLagWeekdayContracts) : sweepSizeFor(d.underlying, cfg)
       // Kalshi quotes everything on the YES leg: buying NO crosses the YES bid.
       const limit = side === 'YES' ? Math.min(0.99, +(yesRef + 0.01).toFixed(2)) : Math.max(0.01, +(yesRef - 0.01).toFixed(2))
       const legCost = side === 'YES' ? limit : 1 - limit
