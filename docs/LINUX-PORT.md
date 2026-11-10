@@ -14,6 +14,7 @@ in the Windows-only helper scripts listed below.
    Do not start it with `--no-sandbox` instead.
 5. Start it on a display: `DISPLAY=:0 node_modules/electron/dist/electron .` from a logged-in desktop session
    (or under Xvfb on a server: `sudo apt install xvfb`, then `xvfb-run -a node_modules/electron/dist/electron .`).
+   Set `ORACLE_START_MINIMIZED=1` (or pass `--minimized`) so the window starts minimized instead of on screen.
 6. App data lives in `~/.config/oracle-trader`. A fresh install starts in **paper** mode with the auto-trader off.
    Keys are stored with Electron safeStorage, which on Linux uses the desktop keyring, so they are re-entered in the
    app's panel on each new machine; Windows-encrypted values in a copied `config.json` cannot be read.

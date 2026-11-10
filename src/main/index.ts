@@ -158,7 +158,13 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  // ORACLE_START_MINIMIZED=1 (or --minimized): an unattended machine starts the window in the dock, not on screen.
+  // The trading engines live in this process, so nothing depends on the window being visible.
+  const startMinimized = process.env.ORACLE_START_MINIMIZED === '1' || process.argv.includes('--minimized')
+  mainWindow.on('ready-to-show', () => {
+    if (startMinimized) mainWindow?.minimize()
+    else mainWindow?.show()
+  })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
