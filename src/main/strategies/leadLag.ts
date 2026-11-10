@@ -15,12 +15,12 @@
  * It is a recorder. leadLagLiveEnabled stays false; a pre-registered forward
  * test grades the log before any order path is considered.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import type { VenueAdapter } from '../../shared/venue'
 import type { OrderBook, OrderResult } from '../../shared/types'
 import { HttpError } from '../util/http'
 import { PreSubmitRefusal } from '../engine/engine'
+import { writeFileAtomic } from '../store/json'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { PolyClobWs } from '../services/polyClobWs'
 import { LEADLAG_WEDGE_MS, scanSlotVerdict } from './scanSlot'
@@ -97,6 +97,16 @@ export interface LeadLagConfig {
   /** Contracts per sweep on New York weekdays, below the ladder's size (operator, 2026-11-10: weekdays at reduced size). */
   leadLagWeekdayContracts?: number
 }
+
+/** A price gap in cents, to a tenth: the unit the gap floor and cap are registered and compared in. */
+export function gapCentsOf(high: number, low: number): number {
+  return +((high - low) * 100).toFixed(1)
+}
+
+/** A sweep is refused when its Polymarket quote is older than this at the moment of sending. */
+export const LEADLAG_MAX_QUOTE_AGE_MS = 5_000
+/** A sweep still waiting to be sent this long after its gap was seen is dropped instead of sent late. */
+export const LEADLAG_SEND_DEADLINE_MS = 2_000
 
 /** The registered entry filters: may this dislocation be swept, given what the window already holds? */
 export function entryFilter(
@@ -544,10 +554,7 @@ export class LeadLagEngine {
         epoch: this.windowEpoch, fills: [...this.windowFills], spend: this.windowSpend,
         directions: { YES: [...this.windowDir.YES], NO: [...this.windowDir.NO] }, blocked: this.windowBlocked
       }
-      mkdirSync(dirname(this.path), { recursive: true })
-      const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
-      renameSync(tmp, this.path)
+      writeFileAtomic(this.path, JSON.stringify(this.state, null, 2))
       return true
     } catch (e) {
       this.log('[leadlag] persist failed: ' + (e instanceof Error ? e.message : String(e)))
@@ -875,7 +882,12 @@ export class LeadLagEngine {
         const s = this.polyWs.stats
         this.log(`[leadlag] poly ws: ${s.connected ? 'connected' : 'down'}, ${s.subscribed} tokens, ${s.books} books, ${s.priceChanges} changes, ${s.reconnects} reconnects${s.lastError ? `, last error ${s.lastError.slice(0, 60)}` : ''}`)
       }
-      if (this.windowEpoch !== windowStartEpoch) {
+      // Roll FORWARD only. A clock stepped back across a boundary and forward again used to wipe the ledger twice,
+      // and the second wipe let a second entry onto a market already held (review 2026-11-10).
+      if (windowStartEpoch < this.windowEpoch) {
+        if (!this.windowBlocked) this.log('[leadlag] clock moved back across a window boundary; entries held until the next window')
+        this.windowBlocked = true
+      } else if (this.windowEpoch !== windowStartEpoch) {
         this.windowEpoch = windowStartEpoch
         this.windowFills = new Map()
         this.windowSpend = 0
@@ -975,14 +987,17 @@ export class LeadLagEngine {
           lb: Number.isFinite(listBid) ? listBid : null, la: Number.isFinite(listAsk) ? listAsk : null
         })
 
-        const threshold = cfg.leadLagMinDislocationCents / 100
+        // Compared in tenths of a cent: `0.61 - 0.55 >= 0.06` is false in binary floats, so about a quarter of
+        // exactly-6.0c gaps were silently skipped (review 2026-11-10).
+        const yesGapCents = gapCentsOf(poly.mid, kYesAsk)
+        const noGapCents = gapCentsOf(kYesBid, poly.mid)
         const canTrade = mode === 'live' && armed && !killed && cfg.leadLagLiveEnabled && leadLagDayOpen(cfg, now)
 
-        if (poly.mid - kYesAsk >= threshold) {
+        if (yesGapCents >= cfg.leadLagMinDislocationCents) {
           // Polymarket above Kalshi's ask: the Kalshi YES ask looks cheap.
           foundDislocations++
           const feeCents = kalshiTakerFeeCentsFor(kYesAsk, sweepSizeFor(pair.coin, cfg))
-          const gapCents = +((poly.mid - kYesAsk) * 100).toFixed(1)
+          const gapCents = yesGapCents
           const netCents = +(gapCents - feeCents).toFixed(1)
           const d: LeadLagDislocation = {
             ts: new Date().toISOString(),
@@ -1013,12 +1028,12 @@ export class LeadLagEngine {
           }
           // `this.runGen === gen`: a superseded pass must not put an order on a price that is now hours old.
           if (canTrade && d.clearsFees && !heldElsewhere(ticker) && this.runGen === gen) await this.sweep(adapter, d, 'YES', kYesAsk, cfg, shardOf(kalshiMarket))
-        } else if (kYesBid - poly.mid >= threshold) {
+        } else if (noGapCents >= cfg.leadLagMinDislocationCents) {
           // Polymarket below Kalshi's bid: the Kalshi YES bid looks rich; buying NO at 1 − bid.
           foundDislocations++
           const noCost = +(1 - kYesBid).toFixed(4)
           const feeCents = kalshiTakerFeeCentsFor(noCost, sweepSizeFor(pair.coin, cfg))
-          const gapCents = +((kYesBid - poly.mid) * 100).toFixed(1)
+          const gapCents = noGapCents
           const netCents = +(gapCents - feeCents).toFixed(1)
           const d: LeadLagDislocation = {
             ts: new Date().toISOString(),
@@ -1104,6 +1119,13 @@ export class LeadLagEngine {
     try {
       if (this.windowBlocked) return
       // Checked before anything is reserved, so a filtered gap costs nothing; the dislocation row is already written.
+      // A quote this old is not the gap that was seen: a wedged scan once sent an order on a 14.6 s old Polymarket
+      // quote (review 2026-11-10). The event-speed path has always required a top under 5 s old.
+      if (d.polyAt !== undefined && Date.now() - d.polyAt > LEADLAG_MAX_QUOTE_AGE_MS) {
+        this.log(`[leadlag] sweep skipped on ${d.kalshiTicker}: Polymarket quote is ${Date.now() - d.polyAt} ms old`)
+        return
+      }
+      const epoch = this.windowEpoch
       const weekend = etDay(Date.now()).weekend
       const gate = entryFilter(d, this.windowFills, cfg, weekend)
       if (!gate.ok) {
@@ -1170,7 +1192,9 @@ export class LeadLagEngine {
         contracts: count,
         limitPrice: limit,
         timeInForce: 'immediate_or_cancel',
-        ref: 'leadlag'
+        ref: 'leadlag',
+        // The engine refuses, before the POST, an order still queued this long after the gap was seen.
+        notAfter: (Date.parse(d.ts) || submitAt) + LEADLAG_SEND_DEADLINE_MS
       })
       } catch (e) {
         // A timeout/5xx may conceal a fill. Keep its budget and direction seat
@@ -1179,7 +1203,8 @@ export class LeadLagEngine {
         // A PreSubmitRefusal (stake cap, position cap, cap-read failure, journal) is thrown before any POST:
         // nothing can have filled, so the window's budget and direction seat go straight back (audit B-58).
         if (e instanceof PreSubmitRefusal || (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status))) {
-          this.adjustWindow(d.kalshiTicker, -count, -(count * legCost))
+          // Only into the window that made the reservation: a pass that outlived its window must not credit the next one.
+          if (this.windowEpoch === epoch) this.adjustWindow(d.kalshiTicker, -count, -(count * legCost))
           if (newSeat) dir.delete(d.underlying)
         } else {
           this.log(`[leadlag] uncertain order on ${d.kalshiTicker}; window reservation retained`)
@@ -1194,7 +1219,7 @@ export class LeadLagEngine {
       d.submitMs = ackAt - submitAt
       const filled = res.shares > 0 ? res.shares : 0
       const paid = filled * (res.avgPrice > 0 ? res.avgPrice : legCost)
-      this.adjustWindow(d.kalshiTicker, filled - count, paid - count * legCost)
+      if (this.windowEpoch === epoch) this.adjustWindow(d.kalshiTicker, filled - count, paid - count * legCost)
       // An IOC the venue accepts but that crosses nothing fills ZERO
       // contracts. Calling that "executed" wrote 331 phantom trades into the
       // research ledger in eight hours (2026-09-08: 358 SWEEP EXECUTED lines,

@@ -1047,6 +1047,9 @@ export class KalshiAdapter implements VenueAdapter {
       }
     }
     const shard = this.shardOf.get(order.marketId) ?? 0
+    // Name the shard when it is known: an order without exchange_index is auto-routed by ticker, and Kalshi's
+    // sharding guide says "Automatic routing will incur an additional latency cost" (review 2026-11-10).
+    if (this.shardOf.has(order.marketId)) body.exchange_index = shard
     const group = await this.ensureOrderGroup(shard)
     if (group) body.order_group_id = group
 

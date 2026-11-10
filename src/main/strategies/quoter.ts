@@ -30,9 +30,8 @@
  *    records the mid at ≈15 minutes after the fill with its actual timing.
  *    It is a diagnostic; scripts/quoter-shadow-gate.mjs grades it.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { loadJsonOrQuarantine } from '../store/json'
-import { dirname } from 'node:path'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { loadJsonOrQuarantine, writeFileAtomic } from '../store/json'
 import type { VenueAdapter } from '../../shared/venue'
 import type { MarketTrade, OrderBook, VenueFill } from '../../shared/types'
 import { bankObservations, eventDayStatus, parseEventDate, stationCode, stationTimeZone } from './weatherDay'
@@ -539,10 +538,7 @@ export class ThinQuoter {
 
   private persist(): void {
     try {
-      mkdirSync(dirname(this.path), { recursive: true })
-      const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
-      renameSync(tmp, this.path)
+      writeFileAtomic(this.path, JSON.stringify(this.state, null, 2))
     } catch (e) {
       this.log('[quoter] persist failed: ' + (e instanceof Error ? e.message : String(e)))
     }

@@ -355,14 +355,44 @@ NO_TWIN_OUTCOMES = {'over', 'under', 'up', 'down'}
 
 def poly_date(sig_slug):
     m = re.search(r'(20\d\d)-(\d\d)-(\d\d)', sig_slug or '')
-    return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+    try:
+        return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+    except ValueError:
+        return None
 
 
 def kalshi_date(ticker):
     m = re.search(r'-(\d\d)([A-Z]{3})(\d\d)', ticker or '')
     if not m or m.group(2) not in MONTHS:
         return None
-    return dt.date(2000 + int(m.group(1)), MONTHS[m.group(2)], int(m.group(3)))
+    # Not every -NNAAANN is a date: KXCCAVSICE-26NOV49 raised "day 49" here and aborted the whole signal pass, on
+    # 21 of 24 runs on 2026-11-09 and every run after (no signals written from 02:58Z that day until this fix).
+    try:
+        return dt.date(2000 + int(m.group(1)), MONTHS[m.group(2)], int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def hours_to_close(sig_ts, market):
+    """Hours from the signal to the market's own close (Gamma closedTime, else endDate); None when neither parses.
+    hours_to_resolution above is signal -> grading time, which is later by however long the grader took."""
+    for k in ('closedTime', 'endDate'):
+        v = market.get(k)
+        if not v:
+            continue
+        try:
+            iso = str(v).strip().replace(' ', 'T')
+            if iso.endswith('Z'):
+                iso = iso[:-1] + '+00:00'
+            elif re.search(r'[+-]\d\d$', iso):
+                iso += ':00'
+            t = dt.datetime.fromisoformat(iso)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=dt.timezone.utc)
+            return round((t.timestamp() - dt.datetime.fromisoformat(sig_ts).timestamp()) / 3600, 2)
+        except ValueError:
+            continue
+    return None
 
 
 def dates_agree(a, b):
@@ -570,7 +600,7 @@ def grade(state):
         entry = {
             'ts': s['ts'], 'graded_at': NOW.isoformat(timespec='seconds'), 'conditionId': s['conditionId'], 'title': s['title'], 'outcome': s['outcome'], 'winner': winner, 'y': y,
             'n_wallets': s['n_wallets'], 'poly_price': p, 'brier_poly': round((p - y) ** 2, 4), 'pnl_poly': round((1 - p) if y else -p, 4),
-            'hours_to_resolution': round((NOW_TS - dt.datetime.fromisoformat(s['ts']).timestamp()) / 3600, 1), 'category': (s.get('eventSlug') or '').split('-')[0]
+            'hours_to_resolution': round((NOW_TS - dt.datetime.fromisoformat(s['ts']).timestamp()) / 3600, 1), 'hours_to_close': hours_to_close(s['ts'], m), 'category': (s.get('eventSlug') or '').split('-')[0]
         }
         k = s.get('kalshi')
         if k and k.get('market') and (k.get('yes_ask') is not None):

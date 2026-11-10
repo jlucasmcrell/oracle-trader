@@ -36,9 +36,9 @@
  * evidence and applies the decision through the strategies' own setConfig.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { loadJsonOrQuarantine } from '../store/json'
-import { dirname, join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { loadJsonOrQuarantine, writeFileAtomic } from '../store/json'
+import { join } from 'node:path'
 import type { TradingEngine } from '../engine/engine'
 import type { AutoTrader } from '../strategies/autoTrader'
 import type { AutoTraderConfig, MiniAutoConfig } from '../../shared/ipc'
@@ -812,9 +812,7 @@ export class Ladder {
   private persist(): void {
     try {
       const p = this.statePath()
-      mkdirSync(dirname(p), { recursive: true })
-      writeFileSync(p + '.tmp', JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
-      renameSync(p + '.tmp', p)
+      writeFileAtomic(p, JSON.stringify(this.state, null, 2))
     } catch (e) {
       this.log('[ladder] persist failed: ' + (e instanceof Error ? e.message : String(e)))
     }
@@ -1453,6 +1451,8 @@ export class Ladder {
   /** Lead-lag: the markets it swept since promotion, settled through the venue ledger. */
   private async leadLagEvidence(since: number, notch: number): Promise<StageEvidence | null> {
     const swept = new Set<string>()
+    // Every market the arm has ever filled on, whatever the stage or coin: the lifetime floor's cohort.
+    const sweptEver = new Set<string>()
     try {
       const p = join(this.userData, 'leadlag-dislocations.jsonl')
       if (existsSync(p)) {
@@ -1461,6 +1461,7 @@ export class Ladder {
           try {
             const r = JSON.parse(line) as LeadLagRow
             if (leadLagRowCounts(r, since, this.autoTrader.getConfig().leadLagProvenCoins ?? LEADLAG_PROVEN_DEFAULT)) swept.add(r.kalshiTicker!)
+            if (r.executed && r.kalshiTicker && (r.filledContracts ?? 0) > 0) sweptEver.add(r.kalshiTicker)
           } catch {
             // skip bad line
           }
@@ -1470,12 +1471,16 @@ export class Ladder {
       return null
     }
     const stake = 0.5 * notch
-    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS }
+    if (sweptEver.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS }
     const pnl = await this.engine.getLivePnl('kalshi').catch(() => null)
     if (!pnl?.details) return null
+    // The stage ledger restarts at every re-base (each size change by hand resets `since`); this does not. Without
+    // it the arm could lose its full stage stop again after every re-base, with no floor at all (review 2026-11-10).
+    const lifetimeDollars = pnl.details.filter((d) => sweptEver.has(d.marketId)).reduce((a, r) => a + r.realizedPnl, 0)
+    if (swept.size === 0) return { n: 0, netDollars: 0, mean: 0, se: 0, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS, lifetimeDollars }
     const rows = pnl.details.filter((d) => d.timestamp >= since && swept.has(d.marketId))
     const ci = clusteredMean(rows.map((r) => ({ v: r.realizedPnl, g: new Date(r.timestamp).toISOString().slice(0, 10) })))
-    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS }
+    return { n: rows.length, netDollars: rows.reduce((a, r) => a + r.realizedPnl, 0), mean: ci.mean, se: ci.se, sd: ci.sd, clusters: ci.groups, unit: '$', stake, signStopExempt: true, stopDollars: LEADLAG_STOP_DOLLARS, lifetimeDollars }
   }
 
   /** Closed trades of one mini strategy since `since`: value = P&L dollars, group = market. */

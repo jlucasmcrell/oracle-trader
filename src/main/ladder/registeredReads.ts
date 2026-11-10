@@ -5,7 +5,8 @@
  * alert webhook; CONTINUE waits for the next day, and at the registration's final date becomes a final verdict.
  * Decisions are persisted and never re-applied.
  */
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { writeFileAtomic } from '../store/json'
 import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { etDay } from '../util/etDay'
 import { polyUsTakerFee } from '../strategies/polyusLag'
@@ -47,17 +48,30 @@ export class ReadRunner {
   ) {
     try {
       if (existsSync(path)) this.state = JSON.parse(readFileSync(path, 'utf8')) as Record<string, ReadState>
-    } catch {
-      this.state = {}
+    } catch (e) {
+      // An unreadable file must not read as "nothing decided yet": every finished read would run again and apply
+      // its action a second time (lead-lag weekdays off again, the fast path possibly on). Try the last-good copy;
+      // failing that, hold every read until the file is repaired by hand (review 2026-11-10).
+      try {
+        this.state = JSON.parse(readFileSync(path + '.lastgood', 'utf8')) as Record<string, ReadState>
+        this.log(`[reads] ${path} unreadable; restored from its last-good copy`)
+      } catch {
+        this.state = {}
+        this.broken = true
+        console.error(`[reads] ${path} is unreadable (${e instanceof Error ? e.message : String(e)}) and has no last-good copy; registered reads are HELD until it is repaired or removed`)
+      }
     }
   }
+
+  /** The state file exists but cannot be read: nothing is evaluated or applied. */
+  private broken = false
 
   status(): Record<string, ReadState> {
     return JSON.parse(JSON.stringify(this.state)) as Record<string, ReadState>
   }
 
   async tick(now: number): Promise<void> {
-    if (this.running) return
+    if (this.running || this.broken) return
     this.running = true
     try {
       const day = new Date(now).toISOString().slice(0, 10)
@@ -72,7 +86,10 @@ export class ReadRunner {
           this.log(`[reads] ${r.id}: evaluation failed, retrying next hour: ${e instanceof Error ? e.message : String(e)}`)
           continue
         }
-        if (res.verdict === 'CONTINUE' && r.finalAt !== undefined && now >= r.finalAt) res = { verdict: 'INCONCLUSIVE', summary: res.summary }
+        // WAIT as well as CONTINUE: a read still short of its sample at the registered final date is INCONCLUSIVE then,
+        // not open-ended. leadlag-weekday (final 2026-11-02) waited for its sixth weekend and FAILED on 11-09, a week
+        // after its own registration said it ended with no change (review 2026-11-10).
+        if ((res.verdict === 'CONTINUE' || res.verdict === 'WAIT') && r.finalAt !== undefined && now >= r.finalAt) res = { verdict: 'INCONCLUSIVE', summary: res.summary }
         s.lastEvalDay = day
         s.verdict = res.verdict
         s.summary = res.summary
@@ -98,8 +115,7 @@ export class ReadRunner {
 
   private persist(): void {
     try {
-      writeFileSync(this.path + '.tmp', JSON.stringify(this.state, null, 2))
-      renameSync(this.path + '.tmp', this.path)
+      writeFileAtomic(this.path, JSON.stringify(this.state, null, 2))
     } catch (e) {
       this.log(`[reads] could not save state: ${e instanceof Error ? e.message : String(e)}`)
     }

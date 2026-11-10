@@ -150,9 +150,14 @@ export interface LagConfig {
 }
 export const LAG_DEFAULTS: LagConfig = { minMoveCents: 8, maxPolyMoveCents: 1, minGapCents: 1, minCycleMs: 30_000, maxCycleMs: 100_000 }
 
-/** Polymarket US taker fee for ONE contract at price p, dollars: 0.0695 P(1-P), rounded to the nearest cent. */
+/**
+ * Polymarket US taker coefficient. Tiered by trailing-30-day taker volume since 2026-11-06 (docs.polymarket.us/fees):
+ * 0.095 below $10,000, which is this account; it was a flat 0.0695 before, and still is from $250,000 up.
+ */
+export const POLYUS_TAKER_COEF = 0.095
+/** Polymarket US taker fee for ONE contract at price p, dollars: POLYUS_TAKER_COEF x P(1-P), rounded to the nearest cent. */
 export function polyUsTakerFee(p: number): number {
-  return Math.round(0.0695 * p * (1 - p) * 100) / 100
+  return Math.round(POLYUS_TAKER_COEF * p * (1 - p) * 100) / 100
 }
 
 export interface LagDecision {

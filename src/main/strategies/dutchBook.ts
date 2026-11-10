@@ -10,9 +10,8 @@
  * Enforces exhaustive slate rules (requires 'Other'/'None' leg or verified closed roster)
  * to avoid truncation risk on open-ended rosters.
  */
-import { appendFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
-import { loadJsonOrQuarantine } from '../store/json'
-import { dirname } from 'node:path'
+import { appendFileSync } from 'node:fs'
+import { loadJsonOrQuarantine, writeFileAtomic } from '../store/json'
 import type { VenueAdapter } from '../../shared/venue'
 import { kalshiTakerOrderFeeDollars } from '../util/kalshiFee'
 
@@ -131,10 +130,7 @@ export class DutchBookEngine {
 
   private persist(): void {
     try {
-      mkdirSync(dirname(this.path), { recursive: true })
-      const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
-      renameSync(tmp, this.path)
+      writeFileAtomic(this.path, JSON.stringify(this.state, null, 2))
     } catch (e) {
       this.log('[dutch] persist failed: ' + (e instanceof Error ? e.message : String(e)))
     }

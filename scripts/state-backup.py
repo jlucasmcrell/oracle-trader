@@ -33,6 +33,9 @@ SKIP_DIRS = {'Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPU
 CRITICAL = ['ladder.json', 'kalshi-auto.json', 'config.json', 'history.json', 'order-journal.jsonl']
 VERSION_MAX_BYTES = 25 * 1024 * 1024
 KEEP_VERSIONS = 72
+# Beyond the hourly window, the first zip of each day is kept this many days. With hourly zips alone the last good
+# state before the 2026-10-30 wipe was 72 hours from deletion when a human finally noticed (it had 35 minutes left).
+KEEP_DAILY = 30
 SAMPLE = 6
 
 
@@ -88,9 +91,35 @@ def sha(p, limit=None):
     return h.hexdigest()
 
 
+def virtualized():
+    """The overlay folder when this process sees a packaged app's private copy of %APPDATA% instead of the real one
+    (the same probe as src/main/index.ts). Run from such a shell on 2026-11-10 this script mirrored a stale 10-16
+    copy of the app's state over the good backup."""
+    marker = f'.virtualization-probe-{os.getpid()}'
+    probe = os.path.join(APPDATA, marker)
+    try:
+        open(probe, 'w').close()
+        packages = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Packages')
+        for pkg in (os.listdir(packages) if os.path.isdir(packages) else []):
+            overlay = os.path.join(packages, pkg, 'LocalCache', 'Roaming', 'oracle-trader')
+            if os.path.exists(os.path.join(overlay, marker)):
+                return overlay
+    except OSError:
+        pass
+    finally:
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+    return None
+
+
 def main():
     started = time.time()
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    overlay = virtualized()
+    if overlay:
+        raise SystemExit(f'refusing to run: %APPDATA% is virtualized into {overlay}; run this from the scheduled task or a plain terminal')
     if not os.path.isdir(os.path.splitdrive(DEST)[0] + os.sep):
         raise SystemExit(f'backup volume {DEST} is not available')
     stats = {}
@@ -129,28 +158,51 @@ def main():
         dst = os.path.join(DEST, 'mirror', 'userData', rel)
         if not os.path.exists(dst):
             bad.append(f'{rel}: absent from mirror')
+        elif time.time() - os.path.getmtime(src) < 300:
+            continue  # the app rewrote it since the copy: a difference is not damage (ten false FAILED runs by 11-10)
         elif os.path.getsize(src) == os.path.getsize(dst) and sha(src, 1 << 22) != sha(dst, 1 << 22):
             bad.append(f'{rel}: content differs')
 
-    versions = sorted(f for f in os.listdir(vdir) if f.endswith('.zip'))
-    for old in versions[:-KEEP_VERSIONS]:
-        os.remove(os.path.join(vdir, old))
+    # A critical JSON file that does not parse is the 2026-10-30 failure: NUL bytes at the right size. Say so, and
+    # delete NOTHING on this run - the older zips are then the only good copies.
+    unparseable = []
+    for c in CRITICAL:
+        src = os.path.join(APPDATA, c)
+        if c.endswith('.json') and os.path.exists(src):
+            try:
+                with open_shared(src) as f:
+                    json.loads(f.read().decode('utf-8-sig'))
+            except (ValueError, OSError) as e:
+                unparseable.append(f'{c}: {str(e)[:60]}')
+    corrupt = sorted(f for f in os.listdir(APPDATA) if '.corrupt-' in f and time.time() - os.path.getmtime(os.path.join(APPDATA, f)) < 7 * 86400)
 
-    ok = not missing and not bad
+    versions = sorted(f for f in os.listdir(vdir) if f.endswith('.zip'))
+    first_of_day = {}
+    for v in versions:
+        first_of_day.setdefault(v[6:14], v)
+    keep = set(versions[-KEEP_VERSIONS:]) | set(sorted(first_of_day.values())[-KEEP_DAILY:])
+    if not unparseable:
+        for old in versions:
+            if old not in keep:
+                os.remove(os.path.join(vdir, old))
+
+    ok = not missing and not bad and not unparseable
     line = (f'[{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}] '
             f'{"ok" if ok else "FAILED"} '
             f'userData {stats["userData"][0]}/{stats["userData"][2]} copied, '
             f'data {stats["data"][0]}/{stats["data"][2]} copied, '
             f'{(stats["userData"][1] + stats["data"][1]) / 1e6:.1f} MB written, '
-            f'{len(zipped)} files versioned, {len(versions[-KEEP_VERSIONS:])} versions kept, '
+            f'{len(zipped)} files versioned, {len(keep)} versions kept, '
             f'{time.time() - started:.0f}s'
             + (f' | MISSING {missing}' if missing else '')
+            + (f' | UNPARSEABLE {unparseable} - rotation skipped' if unparseable else '')
+            + (f' | quarantined in the last 7 days: {corrupt}' if corrupt else '')
             + (f' | MISMATCH {bad}' if bad else ''))
     print(line)
     with open(LOG, 'a', encoding='utf-8') as f:
         f.write(line + '\n')
     with open(os.path.join(DEST, 'status.json'), 'w', encoding='utf-8') as f:
-        json.dump({'at': time.time(), 'ok': ok, 'missing': missing, 'mismatch': bad,
+        json.dump({'at': time.time(), 'ok': ok, 'missing': missing, 'mismatch': bad, 'unparseable': unparseable, 'quarantined': corrupt,
                    'latestVersion': os.path.basename(zpath), 'userData': stats['userData'], 'data': stats['data']}, f)
     sys.exit(0 if ok else 1)
 

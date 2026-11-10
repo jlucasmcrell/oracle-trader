@@ -8,3 +8,5 @@ rem `cmd /c start "" /min <this>` is unambiguous, and does its own quoting inter
 rem
 rem The recorder RECORDS ONLY - it never places, amends or cancels an order.
 start "" /min "C:\Program Files\nodejs\node.exe" "%~dp0ladder15-shadow.mjs"
+rem The sentinel relaunches this through `start`, which runs it under cmd /K: without an exit every relaunch left a window open.
+exit

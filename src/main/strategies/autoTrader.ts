@@ -325,7 +325,7 @@ const DEFAULT_CONFIG: AutoTraderConfig = {
   nightlyReviewEnabled: true,
   nightlyReviewHourUtc: 6,
   reviewAutoApplyParams: true,
-  reviewAutoApplyLive: true,
+  reviewAutoApplyLive: false,
   // Operator directive 2026-09-06: this is a real-money trader, not a research
   // rig. Strategies go to tiny-live tests as soon as the arm and collateral
   // allow (stop −$5, significance demotion); after two demotions a strategy
@@ -3957,7 +3957,9 @@ export class AutoTrader {
     const out = new Set<string>()
     for (const r of this.engine.getHistory(5000, VENUE)) {
       if (r.timestamp < sinceMs || r.side !== 'buy') continue
-      const owner = r.ref ?? r.strategyRef ?? ''
+      // A reconciled resting fill carries ref 'venue-fill' and its arm in strategyRef; read as the ref it made every
+      // maker arm's own fills look like another arm's (review 2026-11-10).
+      const owner = (r.ref === 'venue-fill' ? r.strategyRef : r.ref ?? r.strategyRef) ?? ''
       if (owner && owner !== ref && owner !== 'settled') out.add(r.marketId)
     }
     return out
@@ -4013,7 +4015,9 @@ export class AutoTrader {
         totalShares += res.shares
         // A partial leg is not a basket: the payout no longer covers every outcome (audit B-24). Record the
         // slice so the unwind below sells exactly it, then abandon the basket.
-        const wanted = perLeg / Math.max(0.01, clamp01(liveBids[i] - 0.01))
+        // The adapter sizes a NO leg by its NO cost, 1 - the YES-leg limit. Dividing by the YES price itself called
+        // every full fill on a leg bid under ~50c "partial" and unwound the basket at a loss (review 2026-11-10).
+        const wanted = perLeg / Math.max(0.01, 1 - clamp01(liveBids[i] - 0.01))
         if (res.shares < wanted * 0.99 - 0.005) throw new Error(`Dutch leg ${legs[i]}: partial fill ${res.shares.toFixed(2)} of ${wanted.toFixed(2)}`)
       }
       this.state.openTrades.push({

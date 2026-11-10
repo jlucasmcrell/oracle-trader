@@ -1,7 +1,6 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { writeFileAtomic } from './json'
+import { loadJsonOrQuarantine, writeFileAtomic } from './json'
 import type { ExecutionMode, VenueId } from '../../shared/types'
 import type { RiskLimits } from '../../shared/ipc'
 
@@ -51,9 +50,10 @@ export class ConfigStore {
 
   load(): void {
     try {
-      if (existsSync(this.path)) {
-        const raw = readFileSync(this.path, 'utf-8')
-        const parsed = JSON.parse(raw) as Partial<AppConfig>
+      // An unparseable file is moved aside and replaced from its last-good copy; it used to be read as "no file",
+      // and the next settings save then overwrote the only copy of the keys (review 2026-11-10).
+      const parsed = loadJsonOrQuarantine<Partial<AppConfig>>(this.path, (m) => console.error(m))
+      if (parsed) {
         this.data = {
           ...DEFAULTS,
           ...parsed,

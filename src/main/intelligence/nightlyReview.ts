@@ -114,6 +114,8 @@ export function planParameterChanges(
   const apply: { target: 'kalshi' | 'polymarket-us'; key: string; from: unknown; to: number }[] = []
   const skipped: { target: string; key: string; reason: string }[] = []
   for (const p of proposals) {
+    // A null or non-object element used to throw here, fail the whole review and burn its three retries.
+    if (!p || typeof p !== 'object') continue
     if (!autoApply) {
       skipped.push({ target: p.target, key: p.key, reason: 'auto-apply disabled' })
       continue
@@ -134,7 +136,8 @@ export function planParameterChanges(
       skipped.push({ target: p.target, key: p.key, reason: `fixed by ${REGISTRATION_FIXED[p.key]}; recorded for the maintainer` })
       continue
     }
-    const v = typeof p.value === 'number' ? p.value : Number(p.value)
+    // Number(true) is 1 and Number([3]) is 3: only a number, or a string that is one, is a value.
+    const v = typeof p.value === 'number' ? p.value : typeof p.value === 'string' && p.value.trim() !== '' ? Number(p.value) : NaN
     if (!Number.isFinite(v)) {
       skipped.push({ target: p.target, key: p.key, reason: 'not numeric' })
       continue
@@ -371,10 +374,11 @@ export class NightlyReview {
       // The prompt used to promise that live strategies are never auto-applied. That is an operator switch, and
       // it is on: the same review's fade proposal, which the model itself marked "for operator review", was
       // applied (§141, BACKLOG 185).
-      // Must match the APPLIER's own default below (`reviewAutoApplyLive ?? true`). It read `?? false` here, so
+      // Must match the APPLIER's own default below (both `?? false` since 2026-11-10: a config reset must not hand
+      // live arms to the nightly model). It once read `?? false` here against the applier's `?? true`, so
       // the packet told the model live arms were protected while the applier was in fact applying to them - the
       // §141 fix replaced one false promise in the prompt with a false value in the packet (audit B-46).
-      autoApplyLive: cfg.reviewAutoApplyLive ?? true,
+      autoApplyLive: cfg.reviewAutoApplyLive ?? false,
       // `flat`, `byFamilyNet` and `unsettledMarketFees` exist so this block reconciles without guesswork:
       // wins + losses + flat === settlements, and byFamilyNet - unsettledMarketFees === realizedPnl. The
       // 2026-09-10 review spent a finding on both gaps because the packet withheld the closing terms.
@@ -504,7 +508,7 @@ export class NightlyReview {
 
       const kalshiCfg = this.autoTrader.getConfig()
       const polyCfg = this.minis.get('polymarket-us')?.getConfig()
-      const plan = planParameterChanges(rec.parameterProposals, kalshiCfg, { 'polymarket-us': polyCfg }, kalshiCfg.reviewAutoApplyParams ?? true, kalshiCfg.reviewAutoApplyLive ?? true)
+      const plan = planParameterChanges(rec.parameterProposals, kalshiCfg, { 'polymarket-us': polyCfg }, kalshiCfg.reviewAutoApplyParams ?? true, kalshiCfg.reviewAutoApplyLive ?? false)
       rec.skipped = plan.skipped
       for (const a of plan.apply) {
         if (a.target === 'kalshi') this.autoTrader.setConfig({ [a.key]: a.to } as Partial<AutoTraderConfig>)

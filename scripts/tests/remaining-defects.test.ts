@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { TradingEngine } from '../../src/main/engine/engine'
+import { PreSubmitRefusal, TradingEngine } from '../../src/main/engine/engine'
 import { Ladder } from '../../src/main/ladder/ladder'
 import { OrderJournal } from '../../src/main/store/orderJournal'
 import { HistoryStore } from '../../src/main/store/history'
@@ -11,7 +11,7 @@ import { HttpError, RateLimiter } from '../../src/main/util/http'
 import { PolymarketUsAdapter, usCashPnl } from '../../src/main/venues/polymarketUs'
 import { AutoTrader, capacityKey, restIsStale } from '../../src/main/strategies/autoTrader'
 import { cfObservation } from '../../src/main/venues/cfReferenceShadow'
-import { loadJsonOrQuarantine } from '../../src/main/store/json'
+import { JsonStore, loadJsonOrQuarantine, stateLostPath, writeFileAtomic } from '../../src/main/store/json'
 import { LeadLagEngine } from '../../src/main/strategies/leadLag'
 import { entryFeeDollars } from '../../src/main/strategies/autoTrader'
 import { PaperBroker } from '../../src/main/engine/paper'
@@ -124,6 +124,15 @@ async function main() {
     const e = new TradingEngine({ get: () => adapter } as any, { record: () => {} } as any, { paperStateDir: join(dir, 'reject') }); e.setExecutionMode('live')
     await assert.rejects(e.placeOrder(order)); await assert.rejects(e.placeOrder(order))
     assert.equal((await e.placeOrder(order)).orderId, 'venue-order')
+  })
+  await test('2026-11-10: an order past its deadline is refused before the POST and strands nothing', async () => {
+    let posted = 0
+    const adapter: any = { placeOrder: async (o: any) => { o.onSubmit(); posted++; return result } }
+    const e = new TradingEngine({ get: () => adapter } as any, { record: () => {} } as any, { paperStateDir: join(dir, 'deadline') }); e.setExecutionMode('live')
+    await assert.rejects(e.placeOrder({ ...order, marketId: 'LATE', notAfter: Date.now() - 1 }), PreSubmitRefusal)
+    assert.equal(posted, 0, 'nothing left the process')
+    assert.equal((await e.placeOrder({ ...order, marketId: 'LATE', notAfter: Date.now() + 5000 })).orderId, 'venue-order', 'the same market is not blocked by the refused attempt')
+    assert.equal(posted, 1)
   })
   await test('uncertain sell blocks another sell; corrupt journal fails closed', async () => {
     const home = join(dir, 'sell')
@@ -254,6 +263,39 @@ async function main() {
     writeFileSync(p, '{"trades": [1, 2]}')
     assert.deepEqual(loadJsonOrQuarantine(p), { trades: [1, 2] })
     assert.equal(loadJsonOrQuarantine(join(dir, 'absent.json')), undefined)
+  })
+  await test('2026-10-30: a NUL-filled state file is replaced from its last-good copy, not by defaults', () => {
+    const p = join(dir, 'state-nul.json')
+    // The first save writes the file and its .lastgood copy; later saves inside six hours leave the copy alone.
+    const store = new JsonStore<{ enabled: boolean; n: number }>(p, { enabled: false, n: 0 })
+    store.update({ enabled: true, n: 1 })
+    store.update({ n: 2 })
+    assert.deepEqual(JSON.parse(readFileSync(p + '.lastgood', 'utf8')), { enabled: true, n: 1 }, 'the copy is from the earlier save')
+    // What the unclean shutdown left: the right size, all NUL bytes.
+    writeFileSync(p, Buffer.alloc(readFileSync(p).length))
+    const back = new JsonStore<{ enabled: boolean; n: number }>(p, { enabled: false, n: 0 })
+    assert.deepEqual(back.get(), { enabled: true, n: 1 }, 'settings come back from the copy; trading is not silently switched off')
+    assert.equal(back.quarantinedAt, undefined, 'a restored store is not "running on defaults"')
+    assert.deepEqual(JSON.parse(readFileSync(p, 'utf8')), { enabled: true, n: 1 }, 'the restored file is back in place')
+    assert.ok(readdirSync(dir).some((f) => f.startsWith('state-nul.json.corrupt-')), 'the damaged file was kept aside')
+    // With no copy to fall back on, the loss is recorded where the status page and the sentinel can see it.
+    const q = join(dir, 'state-lost.json')
+    writeFileSync(q, Buffer.alloc(40))
+    const lost = new JsonStore<{ enabled: boolean }>(q, { enabled: false })
+    assert.ok(lost.quarantinedAt, 'defaults, and flagged as such')
+    assert.match(readFileSync(stateLostPath(dir), 'utf8'), /state-lost\.json/)
+    // loadJsonOrQuarantine restores the same way.
+    const r = join(dir, 'state-sub.json')
+    writeFileAtomic(r, '{"a":1}')
+    writeFileSync(r, '')
+    assert.deepEqual(loadJsonOrQuarantine(r, () => undefined), { a: 1 })
+  })
+  await test('2026-11-10: a rename blocked by a reader is retried instead of losing the save', () => {
+    const p = join(dir, 'state-busy.json')
+    writeFileAtomic(p, '{"v":1}')
+    writeFileAtomic(p, '{"v":2}')
+    assert.deepEqual(JSON.parse(readFileSync(p, 'utf8')), { v: 2 })
+    assert.ok(!existsSync(p + '.tmp'), 'no temp file is left behind')
   })
   await test('B-10: a live scan with no balance and no equity holds entries instead of skipping the kill switch', () => {
     const t: any = Object.create(AutoTrader.prototype)

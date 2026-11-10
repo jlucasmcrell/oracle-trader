@@ -7,7 +7,7 @@
 // lead-lag settings below. Set STATUS_PAGE_KEY to require ?key=<value> on every request.
 // Same script on Windows and Linux: userData defaults to %APPDATA%\oracle-trader or ~/.config/oracle-trader.
 import { createServer } from 'node:http'
-import { readFileSync, statSync, existsSync, openSync, readSync, closeSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, hostname } from 'node:os'
 import { REPO } from './lib/repo-root.mjs'
@@ -83,15 +83,33 @@ function build() {
   ].map(([name, p]) => ({ name, ageMin: ageMin(p) }))
 
   const appAgeMin = lastLine ? Math.round((now - ts(lastLine)) / 60000) : null
+  const mode = json(join(DIR, 'config.json'), {})?.executionMode ?? 'paper'
   const flags = []
   if (appAgeMin === null || appAgeMin > 5) flags.push(`App log silent for ${appAgeMin ?? '?'} min`)
+  // The 2026-10-30 failure: damaged state files were replaced by defaults and trading sat switched off for three
+  // days with every other check green. Anything that means "not trading" or "state was replaced" is a flag.
+  if (cfg.enabled === false) flags.push('Auto-trader is switched OFF')
+  if (mode === 'live' && cfg.liveArmed === false) flags.push('Live trading is NOT armed')
+  if (mode === 'live' && cfg.leadLagLiveEnabled !== true) flags.push('Lead-lag live trading is off')
+  if (existsSync(join(DIR, 'STATE-LOST.jsonl'))) flags.push('STATE LOST: a state file was unreadable with no copy to restore; the app is on defaults for it (see STATE-LOST.jsonl)')
+  try {
+    const damaged = readdirSync(DIR).filter((f) => f.includes('.corrupt-') && now - statSync(join(DIR, f)).mtimeMs < 7 * 86400_000)
+    if (damaged.length) flags.push(`State file(s) found damaged in the last 7 days: ${[...new Set(damaged.map((f) => f.split('.corrupt-')[0]))].join(', ')}`)
+  } catch {}
+  const backup = json(join(process.env.ORACLE_STATE_BACKUP_DEST || 'D:\oracle-trader-backup', 'status.json'), null)
+  if (backup) {
+    const ageH = (now / 1000 - backup.at) / 3600
+    if (backup.ok === false) flags.push(`Last backup FAILED${backup.unparseable?.length ? ': ' + backup.unparseable.join('; ') : ''}`)
+    else if (ageH > 3) flags.push(`No backup for ${ageH.toFixed(0)} hours`)
+  }
   if (st.dailyPnl?.tripped) flags.push('Daily loss limit tripped: no new entries today')
   if (ll.stage && ll.stage !== 'live' && ll.stage !== 'tiny-live') flags.push(`Lead-lag is ${ll.stage}`)
   if (sentinel?.gateway === 'down') flags.push('IB Gateway down')
   for (const r of recorders) if (r.ageMin === null || r.ageMin > 120) flags.push(`${r.name}: no update for ${r.ageMin ?? '?'} min`)
 
   return {
-    host: hostname(), at: new Date(now).toISOString(), mode: json(join(DIR, 'config.json'), {})?.executionMode ?? 'paper',
+    host: hostname(), at: new Date(now).toISOString(), mode,
+    armed: { enabled: cfg.enabled ?? null, liveArmed: cfg.liveArmed ?? null },
     app: { lastLogAt: lastLine ? new Date(ts(lastLine)).toISOString() : null, ageMin: appAgeMin, lastStart: starts.at(-1)?.slice(1, 25) ?? null },
     balance: { now: balance, at: balanceAt ? new Date(balanceAt).toISOString() : null, days: Object.entries(days).sort().slice(-30) },
     today: { realized: st.venueDay?.realized ?? null, settlements: st.venueDay?.settlements ?? null, tripped: !!st.dailyPnl?.tripped, killLines: killLines.slice(-3).map((l) => l.slice(0, 200)) },

@@ -30,3 +30,15 @@ On or after **2026-11-16**, per leg, at 150 signals on 10 New York days:
   operator's); the recorded price is not a fill price, so the arm starts at one contract.
 - **FAIL**: band wholly below zero. The leg is closed.
 - Otherwise continue to **2026-11-30**, then INCONCLUSIVE: closed, reported to the operator.
+
+## Amendment 2026-11-10 — recorder outage, fee, and what the recorded price is
+
+- **Outage.** The recorder's signal pass crashed on a Kalshi ticker that is not a date (`KXCCAVSICE-26NOV49`) on most
+  runs from 11-05 and every run from 2026-11-09T02:58Z to 11-10T10:15Z. The cohort has that hole; fixed 11-10.
+- **Fee.** Polymarket US moved small accounts to a 0.095 taker coefficient on 2026-11-06; the grader uses it.
+- **Close time.** Grades from 11-10 carry `hours_to_close` (signal to the market's own close). Older rows only have
+  signal-to-grading time, which is what the 3 h filter used; the grader falls back to it for those rows.
+- **Known weakness, from the 11-10 review.** The recorded price is the wallets' last trade, a median 18 minutes old.
+  On the whole period, signals priced under 30 minutes old grade +0.43c [-1.07, +1.92]; the apparent edge grows with
+  staleness. A PASS here is therefore a reason to build a recorder that prices at a live ask on a venue the operator
+  can trade, not a reason to trade.

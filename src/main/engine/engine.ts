@@ -277,7 +277,7 @@ export class TradingEngine {
       // An explicit venue rejection holds nothing: release the slot. Any other error may conceal a fill: keep the token
       // counted until a later read has seen the aftermath, and drop the snapshot so the next entry re-reads.
       if (token !== undefined) {
-        if (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status)) this.reservations.get(order.venue)?.delete(token)
+        if (e instanceof PreSubmitRefusal || (e instanceof HttpError && [400, 401, 403, 404, 422, 429].includes(e.status))) this.reservations.get(order.venue)?.delete(token)
         else this.settleSlot(order.venue, token)
       }
       this.openPositionCountCache.delete(order.venue)
@@ -354,6 +354,10 @@ export class TradingEngine {
     }
     let submitted = false
     const request = { ...order, clientOrderId: intent?.clientOrderId ?? order.clientOrderId, onSubmit: () => {
+      // Checked at the last moment before the request leaves: the caller's deadline covers the entry queue, the
+      // position-count read and the journal write that sit between its decision and the POST.
+      const notAfter = (order as OrderRequest).notAfter
+      if (notAfter !== undefined && Date.now() > notAfter) throw new PreSubmitRefusal(`order deadline passed ${Date.now() - notAfter} ms ago; not sent`)
       if (intent) this.journal!.update(intent, { submittedAt: Date.now() })
       submitted = true
     } }

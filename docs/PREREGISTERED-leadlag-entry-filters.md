@@ -121,3 +121,22 @@ Operator: "Yes, and turn ETH back on." Weekends trade BTC, SOL, HYPE, ZEC and ET
 `leadLagProvenCoins` those five so each sweeps the full size); weekdays stay BTC, SOL, HYPE, ZEC at one contract
 (`leadLagWeekdayContracts` 1). ETH's untraded weekend gaps since 11-06 graded +11.3c (18), its weekday gaps -8.9c (8),
 so it is back on weekends only. Hard stop at x4 is -$40.
+
+## Amendment 2026-11-10 10:30Z — repairs from the full code review (no change to the rule's terms)
+
+Found by review, fixed in the build started 2026-11-10 after 10:16Z. They make the code do what this document says:
+
+- The gap floor is compared on the rounded gap. `0.61 - 0.55 >= 0.06` is false in binary floats, so about a quarter
+  of exactly-6.0c gaps were skipped; they now trade, as "6c+" always said.
+- A sweep is refused when its Polymarket quote is over 5 s old, and the engine refuses, before the POST, an order
+  still queued 2 s after its gap was seen (one fill on 11-03 went out 27.8 s late, another on a 14.6 s old quote).
+- The window ledger only rolls forward, and a pass that outlives its window no longer adjusts the next window.
+- The ladder now gives lead-lag a lifetime floor (twice the stage stop, across every re-base). An earlier amendment
+  here said that floor was "unchanged"; for this arm it had never existed.
+- Orders name their exchange shard, which Kalshi's sharding guide says avoids a routing delay.
+- The ReadRunner ends a read still WAITing at its final date as INCONCLUSIVE. `leadlag-weekday` (final 2026-11-02)
+  instead FAILED on 11-09 and switched weekdays off; the operator re-enabled them at one contract on 11-10.
+
+Looked at, not changed (slices of 1,418 fills; leads only): fills with a Polymarket socket top 5 s or older
+(77 fills, -13.6c); gaps where Kalshi moved and Polymarket did not (222 fills, -$21.50); event-speed gaps (negative
+after fees at every size, 26 days) and resting orders (-15c per simulated fill) are not worth building.

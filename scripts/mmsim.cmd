@@ -3,3 +3,5 @@ rem RECORDS ONLY - never places, amends or cancels an order. Public Kalshi endpo
 rem Switch before the title, exe path quoted separately: `start` mis-parses a spaced exe path otherwise,
 rem and spawn(detached) returns a pid while running nothing on this box.
 start "" /min "C:\Program Files\nodejs\node.exe" "%~dp0mmsim.mjs"
+rem The sentinel relaunches this through `start`, which runs it under cmd /K: without an exit every relaunch left a window open.
+exit

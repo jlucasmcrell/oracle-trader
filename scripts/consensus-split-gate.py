@@ -6,7 +6,8 @@ Two legs, each the FIRST graded signal per market (conditionId) with a Polymarke
 short crypto Up-or-Down window, resolving 3 h or more after the signal:
   fade:   the top traders bought a longshot (price under 40c) -> one contract of the other side at 1 - price;
   follow: they bought a favourite (price over 70c)            -> one contract of the same side at price.
-Unit: cents per contract at settlement less the Polymarket US taker fee (0.0695 p(1-p), to the cent).
+Unit: cents per contract at settlement less the Polymarket US taker fee (0.095 p(1-p), to the cent: the under-$10k
+tier since 2026-11-06).
 Band: day-clustered (New York calendar day), 90% per leg (two legs, ~80% family).
 """
 import datetime as dt
@@ -33,7 +34,7 @@ SINCE = dt.datetime.fromisoformat(arg('--since', '2026-11-03T00:00:00+00:00').re
 
 
 def fee(p):
-    return round(0.0695 * p * (1 - p) * 100) / 100
+    return round(0.095 * p * (1 - p) * 100) / 100
 
 
 def band(units):
@@ -68,7 +69,11 @@ for line in open(GRADES, encoding='utf-8'):
     # The recorder polls hourly, so its price can postdate the outcome: a 15-minute crypto window has often closed by
     # the time the signal is written, and a game may be over. Short crypto windows are lead-lag's market and are out;
     # everything else must resolve at least 3 h after the signal.
-    if 'Up or Down' in (g.get('title') or '') or (g.get('hours_to_resolution') or 0) < 3:
+    # hours_to_close is signal -> the market's own close (recorded from 2026-11-10). Older rows only carry
+    # hours_to_resolution, which is signal -> the hour it was GRADED, so a late-graded market could pass; kept as the
+    # fallback and noted in the registration.
+    gap_h = g.get('hours_to_close') if g.get('hours_to_close') is not None else g.get('hours_to_resolution')
+    if 'Up or Down' in (g.get('title') or '') or (gap_h or 0) < 3:
         continue
     day = ts.astimezone(NY).date().isoformat()
     if p < 0.40:

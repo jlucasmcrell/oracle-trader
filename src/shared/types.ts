@@ -123,6 +123,8 @@ export interface OrderRequest {
   contracts?: number
   /** Kalshi matching-engine shard already known to the caller; spares the adapter a market lookup. */
   exchangeIndex?: number
+  /** Unix ms after which the engine must not submit this order (a late taker order is a different trade). */
+  notAfter?: number
   /** Order lifetime (Kalshi V2); defaults to good_till_canceled. */
   timeInForce?: 'good_till_canceled' | 'immediate_or_cancel' | 'fill_or_kill'
   /** Rest passively as a maker order — reject instead of crossing (Kalshi post_only). */

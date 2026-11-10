@@ -79,6 +79,13 @@ function installSafeLogging(): void {
       line = `[${new Date().toISOString()}] [${level}] ${args
         .map((a) => {
           if (typeof a === 'string') return a
+          // JSON.stringify(new Error('x')) is "{}": 154 of 178 handler-error lines in the log said nothing at all,
+          // including the one that reported the 2026-10-30 state loss (review 2026-11-10).
+          if (a instanceof Error) {
+            const status = (a as { status?: unknown }).status
+            const cause = (a as { cause?: unknown }).cause
+            return `${a.name}: ${a.message}${status !== undefined ? ` (status ${String(status)})` : ''}${cause ? ` | cause: ${cause instanceof Error ? cause.message : String(cause)}` : ''}`
+          }
           try {
             return JSON.stringify(a)
           } catch {

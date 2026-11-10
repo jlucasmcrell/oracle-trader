@@ -12,7 +12,7 @@ import { btcHourStats, btcHourVerdict, type BtcHourOpen, fastReadStats, fastRead
 import { etDay } from '../../src/main/util/etDay'
 import { btcHourSlug, globalHourSlug, hourEnd, hourGaps, PolyUsBtcHourShadow } from '../../src/main/strategies/polyusBtcHour'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
-import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom, entryFilter } from '../../src/main/strategies/leadLag'
+import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom, entryFilter, gapCentsOf } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, MAKER_STRATEGIES_DEFAULT, mergeMakerStrategies, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
 import { mapKalshiSettlement, KALSHI_MAKER_FEE_COEF, universeWindows } from '../../src/main/venues/kalshi'
@@ -573,7 +573,7 @@ eq('brake: a NaN ledger never halts', dailyBrakeBlock(10, { date: DAY, realized:
   const pairs = matchPolyUsGames(pm, events)
   eq('polyus-lag: both Kalshi team markets match the moneyline, each with the right Polymarket US side',
     pairs.map((p) => [p.ticker.split('-').pop(), p.kalshiTeamIsLong]).sort(), [['FLA', false], ['MISS', true]])
-  eq('polyus-lag: the fee is 0.0695 P(1-P) to the nearest cent', [polyUsTakerFee(0.5), polyUsTakerFee(0.9), polyUsTakerFee(0.2)], [0.02, 0.01, 0.01])
+  eq('polyus-lag: the fee is 0.095 P(1-P) to the nearest cent (the under-$10k tier since 2026-11-06)', [polyUsTakerFee(0.5), polyUsTakerFee(0.9), polyUsTakerFee(0.2)], [0.02, 0.01, 0.02])
 
   const miss = pairs.find((p) => p.ticker.endsWith('-MISS'))!
   const fla = pairs.find((p) => p.ticker.endsWith('-FLA'))!
@@ -945,6 +945,8 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('filter: ETH is weekday-only no-trade, so it trades on a weekend', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, wcoins, true).ok, true)
   eq('filter: ETH is held on a weekday', entryFilter({ kalshiTicker: 'KXETH15M-1', dislocationCents: 9, underlying: 'ETH' }, fills, wcoins, false).ok, false)
   eq('filter: BNB is held on both', [entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, true).ok, entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, false).ok], [false, false])
+  // 2026-11-10: 0.61 - 0.55 is 0.05999999999999994 in binary floats; the 6c floor is compared on the rounded gap.
+  eq('gap: an exactly-6.0c gap clears a 6c floor', [0.61 - 0.55 >= 0.06, gapCentsOf(0.61, 0.55) >= 6, gapCentsOf(0.61, 0.551) >= 6], [false, true, false])
   eq('filter: unset filters let everything through', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 30 }, fills, {}).ok, true)
   // Round 93: proven coins at the ladder's size, the rest at micro size; the pool counts proven rows only.
   const scfg = { leadLagMaxContractsPerOrder: 8, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2 }
@@ -1798,6 +1800,21 @@ async function registeredReadTests(): Promise<void> {
   await fr.tick(Date.parse('2026-10-02T01:00:00Z'))
   await fr.tick(Date.parse('2026-10-03T01:00:00Z'))
   eq('reads: still open at the final date is a final verdict with the registered default', finalApplied, 'INCONCLUSIVE')
+  // 2026-11-10: a read still WAITing for its sample at the final date ends there too (leadlag-weekday ran a week past its own).
+  let waitApplied = ''
+  const waitRead: RegisteredRead = { id: 'wait', doc: 'd', from: 0, finalAt: Date.parse('2026-10-03T00:00:00Z'), evaluate: async () => ({ verdict: 'WAIT', summary: 's' }), apply: async (v) => { waitApplied = v; return 'default' } }
+  const wr = new ReadRunner(joinPath(dir, 'w.json'), [waitRead], () => undefined, () => undefined)
+  await wr.tick(Date.parse('2026-10-02T01:00:00Z'))
+  eq('reads: WAIT before the final date applies nothing', waitApplied, '')
+  await wr.tick(Date.parse('2026-10-03T01:00:00Z'))
+  eq('reads: WAIT at the final date is INCONCLUSIVE, not open-ended', waitApplied, 'INCONCLUSIVE')
+  // An unreadable state file must not make every decided read run and apply again.
+  const brokenPath = joinPath(dir, 'broken-reads.json')
+  writeFileSync(brokenPath, Buffer.alloc(64))
+  let brokenEvals = 0
+  const br = new ReadRunner(brokenPath, [{ id: 'b', doc: 'd', from: 0, evaluate: async () => { brokenEvals++; return { verdict: 'FAIL', summary: 's' } }, apply: async () => 'x' }], () => undefined, () => undefined)
+  await br.tick(Date.parse('2026-10-03T01:00:00Z'))
+  eq('reads: an unreadable state file with no last-good copy holds every read', brokenEvals, 0)
   const games = (k: number, per: number, pnl: (g: number, i: number) => number) => Array.from({ length: k * per }, (_, i) => ({ ts: '2026-09-25T00:00:00Z', marketId: `g${Math.floor(i / per)}`, pnl: pnl(Math.floor(i / per), i), shares: 2 }))
   const early = Date.parse('2026-10-01T00:00:00Z')
   const deadline = Date.parse('2026-10-13T00:00:00Z')

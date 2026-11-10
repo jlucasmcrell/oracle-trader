@@ -17,9 +17,9 @@
  * them out of the win-rate/P&L denominators (they are one leg, not a round
  * trip) while still counting them as fills.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { appendDurably, isSharingViolation } from './append'
-import { loadJsonOrQuarantine } from './json'
+import { loadJsonOrQuarantine, writeFileAtomic } from './json'
 import { dirname } from 'node:path'
 import type { TradingEngine } from '../engine/engine'
 import type { HistoryStore } from './history'
@@ -125,10 +125,7 @@ export class FillReconciler {
 
   private persist(): void {
     try {
-      mkdirSync(dirname(this.path), { recursive: true })
-      const tmp = this.path + '.tmp'
-      writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', flush: true })
-      renameSync(tmp, this.path)
+      writeFileAtomic(this.path, JSON.stringify(this.state, null, 2))
     } catch (e) {
       this.log('[reconciler] persist failed: ' + (e instanceof Error ? e.message : String(e)))
     }
