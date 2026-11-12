@@ -16,6 +16,10 @@ export const DEFAULT_STALE_MS = 130 * MIN
 /** [key, repo-relative file whose mtime is the liveness signal, Windows task name, staleMs?] */
 export const TASK_WATCH = [
   ['hrrr-stale', 'data/hrrr-shadow/forecasts.jsonl', 'OracleTrader-HrrrShadow'],
+  // Paper recorders registered 2026-11-12 (docs/PREREGISTERED-lategame.md, -newmarket-bid.md). Both are continuous:
+  // the late-game one logs its discovery every 5 minutes, the new-market one a note every 30.
+  ['lategame-stale', 'data/lategame/recorder.log', 'OracleTrader-LateGame', 20 * MIN],
+  ['newmarkets-stale', 'data/newmarkets/recorder.log', 'OracleTrader-NewMarkets', 70 * MIN],
   // Retired 2026-10-01 (section 176, BACKLOG 256), task disabled:
   //   OracleTrader-MetaculusShadow - build-queue item 10's trigger (>= 100 graded pairs beating the Kalshi
   //     mid after fees) is unreachable on its matcher, not merely unmet. It pairs on title tokens, which

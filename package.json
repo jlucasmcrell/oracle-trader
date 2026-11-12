@@ -29,6 +29,7 @@
     "test:execution-quality": "node scripts/tests/execution-quality.test.mjs",
     "test:collection": "node scripts/tests/collection-integrity.test.mjs",
     "test:recorder-lock": "node scripts/tests/recorder-lock.test.mjs",
+    "test:paper-recorders": "node scripts/tests/paper-recorders.test.mjs",
     "test:task-watch": "node scripts/tests/task-watch.test.mjs",
     "test:config-watch": "node scripts/tests/config-watch.test.mjs",
     "test:backup-share": "python scripts/tests/backup-share.test.py",
