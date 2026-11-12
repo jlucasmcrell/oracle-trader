@@ -13,6 +13,7 @@ import { IbkrLab } from './strategies/ibkrLab'
 import { PolyPaperLab } from './strategies/polyPaper'
 import { PolymarketUsAdapter } from './venues/polymarketUs'
 import { PolyUsBtcHourShadow } from './strategies/polyusBtcHour'
+import { PolyUsK15Shadow } from './strategies/polyusK15'
 import { IbkrReader } from './venues/ibkr'
 import { IBApi } from '@stoqey/ib'
 import { vetWithLlm } from './strategies/vetting'
@@ -551,6 +552,17 @@ app.whenReady().then(async () => {
     btcHour = recorder
     recorder.start()
     app.once('before-quit', () => recorder.stop())
+    // Kalshi vs Polymarket US on the 15-minute Bitcoin market: both settle on BRTI. Records quotes, trades nothing
+    // (docs/PREREGISTERED-polyus-k15.md).
+    const k15 = new PolyUsK15Shadow({
+      path: join(app.getPath('userData'), 'polyus-k15-quotes.jsonl'),
+      headers: (p) => usAdapter.streamHeaders(p),
+      kalshiTop: () => autoTrader.leadLagKalshiTop('BTC'),
+      enabled: () => miniAutos.get('polymarket-us')?.getConfig().k15ShadowEnabled !== false,
+      log: (s) => console.log(s)
+    })
+    k15.start()
+    app.once('before-quit', () => k15.stop())
   }
 
   // Venue-fill reconciler: publishes every Kalshi fill the shared ledger has

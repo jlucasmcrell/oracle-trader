@@ -726,6 +726,15 @@ export class LeadLagEngine {
     this.log(`[leadlag] event-speed shadow on: both books in memory, checked every 250 ms, gaps from ${minNetCents}c net`)
   }
 
+  /** Kalshi's top of book for a coin's current 15-minute window, from the event-speed client's in-memory book; null until both exist. */
+  kalshiTop(coin: string): { ticker: string; bid: number; ask: number; end: number } | null {
+    const pair = this.fastPairs.get(coin)
+    const book = pair && this.fast ? this.fast.books.getBook(pair.ticker) : null
+    const bid = book?.bids[0]?.price, ask = book?.asks[0]?.price
+    if (!pair || bid === undefined || ask === undefined) return null
+    return { ticker: pair.ticker, bid, ask, end: pair.end }
+  }
+
   /** One pass of the event-speed path: record every gap row, and trade a qualifying 'open' when the switch is on. */
   fastTick(now: number): void {
     const f = this.fast

@@ -12,6 +12,7 @@ import { btcHourStats, btcHourVerdict, type BtcHourOpen, fastReadStats, fastRead
 import { etDay } from '../../src/main/util/etDay'
 import { btcHourSlug, globalHourSlug, hourEnd, hourGaps, PolyUsBtcHourShadow } from '../../src/main/strategies/polyusBtcHour'
 import { kalshiGameEvents, kalshiTop, lagTrigger, matchPolyUsGames, polyUsTakerFee, PolyUsLagFeed } from '../../src/main/strategies/polyusLag'
+import { k15Row, k15Slug } from '../../src/main/strategies/polyusK15'
 import { leadLagDayOpen, fastDislocation, fastGaps, kalshiBookTop, kalshiTakerFeeCents, LEADLAG_COINS, LEADLAG_PROVEN_DEFAULT, LeadLagEngine, leadLagPairs, polyBookTradeable, SlugTokenCache, slugEpoch, sweepSizeFor, windowRoom, entryFilter, gapCentsOf } from '../../src/main/strategies/leadLag'
 import type { VenueAdapter } from '../../src/shared/venue'
 import { AutoTrader, shouldRepriceMaker, CROSS_VENUE_SEARCH_BUDGET, crossVenueBatch, MAKER_STRATEGIES_DEFAULT, mergeMakerStrategies, pendingFillOutcome, phaseDurations, scanSlotVerdict, SCAN_WEDGE_MS, capacityKey, clusterDayOf, longHorizonCapFor, holdsToSettlement, meanReversionVerdict, morningForecastVerdict, ratchetBracketVerdict, ratchetEntryBlock, ratchetVerdict, RATCHET_GUARD_F } from '../../src/main/strategies/autoTrader'
@@ -947,6 +948,15 @@ eq('statsBand: rejects fade\'s short triple', statsBand(117, -102, 17195, 93), u
   eq('filter: BNB is held on both', [entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, true).ok, entryFilter({ kalshiTicker: 'KXBNB15M-1', dislocationCents: 9, underlying: 'BNB' }, fills, wcoins, false).ok], [false, false])
   // 2026-11-10: 0.61 - 0.55 is 0.05999999999999994 in binary floats; the 6c floor is compared on the rounded gap.
   eq('gap: an exactly-6.0c gap clears a 6c floor', [0.61 - 0.55 >= 0.06, gapCentsOf(0.61, 0.55) >= 6, gapCentsOf(0.61, 0.551) >= 6], [false, true, false])
+  // 2026-11-12: the Kalshi vs Polymarket US 15-minute recorder writes a row only for fresh two-sided books on the current window.
+  {
+    const t0 = Date.parse('2026-11-12T09:30:00Z'), now = t0 + 400_000
+    const kTop = { ticker: 'KXBTC15M-26NOV120445-45', bid: 0.5, ask: 0.52, end: t0 + 900_000 }
+    eq('k15: the slug names the window start in UTC', k15Slug(t0), 'cpc-btc-updown-15m-2026-11-12-0930z')
+    eq('k15: fresh two-sided books on the same window make a row', k15Row(now, { bid: 0.55, ask: 0.57, at: now - 1000 }, kTop)?.slug, 'cpc-btc-updown-15m-2026-11-12-0930z')
+    eq('k15: a stale Polymarket US top, a Kalshi book for another window, or a missing side writes nothing',
+      [k15Row(now, { bid: 0.55, ask: 0.57, at: now - 6000 }, kTop), k15Row(now, { bid: 0.55, ask: 0.57, at: now }, { ...kTop, end: t0 }), k15Row(now, undefined, kTop), k15Row(now, { bid: 0.55, ask: 0.57, at: now }, null)], [null, null, null, null])
+  }
   eq('filter: unset filters let everything through', entryFilter({ kalshiTicker: 'KXBTC15M-1', dislocationCents: 30 }, fills, {}).ok, true)
   // Round 93: proven coins at the ladder's size, the rest at micro size; the pool counts proven rows only.
   const scfg = { leadLagMaxContractsPerOrder: 8, leadLagProvenCoins: LEADLAG_PROVEN_DEFAULT, leadLagNewCoinContracts: 2 }

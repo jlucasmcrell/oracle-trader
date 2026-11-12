@@ -4793,6 +4793,11 @@ export class AutoTrader {
     }
   }
 
+  /** Kalshi's in-memory top of book for a coin's current 15-minute crypto window (the lead-lag engine's event-speed book). */
+  leadLagKalshiTop(coin: string): { ticker: string; bid: number; ask: number; end: number } | null {
+    return this.leadLagEngine.kalshiTop(coin)
+  }
+
   getQuantStatus(): import('../../shared/ipc').QuantStatus {
     return {
       dutch: this.dutchEngine.status(this.dutchCfg()),

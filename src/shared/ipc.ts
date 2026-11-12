@@ -851,6 +851,8 @@ export interface MiniAutoConfig {
   lagEnabled?: boolean
   /** The BTC-hour lead-lag SHADOW (docs/PREREGISTERED-polyus-btc-hour.md); records only. Off when false. */
   btcHourShadowEnabled?: boolean
+  /** Kalshi vs Polymarket US 15-minute Bitcoin quote recorder (docs/PREREGISTERED-polyus-k15.md). Never trades. Default on. */
+  k15ShadowEnabled?: boolean
   /** Minimum |market − forecast fair| in cents to rest an order (default 3). */
   weatherFairMarginCents?: number
   /** Operator override: let book-imbalance spend even though its lab has not met the pass bar ("enable everything", 2026-09-02). */
