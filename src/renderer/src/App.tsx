@@ -22,6 +22,8 @@ export default function App() {
   const [accountView, setAccountView] = useState<'paper' | 'live'>('paper')
   const [otherPortfolio, setOtherPortfolio] = useState<PortfolioSnapshot | null>(null)
   const [otherError, setOtherError] = useState('')
+  /** Why the execution mode's own ledger could not be read. Without it a rejected read sat on "Loading..." forever. */
+  const [portfolioError, setPortfolioError] = useState('')
   const [showSettlementDetails, setShowSettlementDetails] = useState(false)
   /** Resting (unfilled) maker orders for the selected venue - the pre-fill state of a position. */
   const [restingOrders, setRestingOrders] = useState<OpenOrder[]>([])
@@ -56,13 +58,19 @@ export default function App() {
     // e.g. right after a reboot while a venue is still connecting, must not leave the top bar without tabs.
     const s = await window.api.engine.getState()
     setState(s)
-    const [p, h] = await Promise.all([window.api.portfolio.get(v), window.api.history.stats(v)])
-    if (venueRef.current !== v) return
-    setPortfolio(p)
-    setHistStats(h)
-    // Venue-authoritative and fetched in the same portfolio snapshot, avoiding
-    // a duplicate authenticated open-orders request every 15 seconds.
-    setRestingOrders(p.openOrders ?? [])
+    try {
+      const [p, h] = await Promise.all([window.api.portfolio.get(v), window.api.history.stats(v)])
+      if (venueRef.current !== v) return
+      setPortfolio(p)
+      setHistStats(h)
+      setPortfolioError('')
+      // Venue-authoritative and fetched in the same portfolio snapshot, avoiding
+      // a duplicate authenticated open-orders request every 15 seconds.
+      setRestingOrders(p.openOrders ?? [])
+    } catch (err) {
+      // The engine already serves the last good snapshot on a blip, so a rejection here means there is none.
+      if (venueRef.current === v) setPortfolioError(String(err).replace(/^Error: Error invoking remote method '[^']+': /, ''))
+    }
     const other = s.executionMode === 'live' ? 'paper' : 'live'
     window.api.portfolio
       .get(v, other)
@@ -112,6 +120,7 @@ export default function App() {
     setRestingOrders([])
     setOtherPortfolio(null)
     setOtherError('')
+    setPortfolioError('')
   }, [venue])
 
   // The pane follows the execution mode by default; the operator can flip it to look at the other ledger.
@@ -511,7 +520,12 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="muted">{accountView !== mode && otherError ? `${accountView === 'live' ? 'Real account' : 'Paper ledger'} unavailable: ${otherError}` : 'Loading...'}</div>
+            <div className="muted">{(() => {
+              const err = accountView !== mode ? otherError : portfolioError
+              if (!err) return 'Loading...'
+              const keyHint = accountView === 'live' && /credential|not configured|api key|PEM|private key/i.test(err) ? ' Check the venue keys in Settings.' : ''
+              return `${accountView === 'live' ? 'Real account' : 'Paper ledger'} unavailable: ${err}${keyHint}`
+            })()}</div>
           )}
         </aside>
 

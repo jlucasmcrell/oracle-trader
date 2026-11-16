@@ -38,10 +38,27 @@ const DEFAULTS: AppConfig = {
   riskLimits: { maxStakePerBet: 0, maxOpenPositions: 0 }
 }
 
+const SECRET_FIELDS = [
+  'kalshiApiKeyId',
+  'kalshiPrivateKey',
+  'kalshiDemoApiKeyId',
+  'kalshiDemoPrivateKey',
+  'polymarketUsApiKeyId',
+  'polymarketUsPrivateKey'
+] as const
+type SecretField = (typeof SECRET_FIELDS)[number]
+
 /** Persists settings to userData/config.json, encrypting the API key when possible. */
 export class ConfigStore {
   private path: string
   private data: AppConfig = { ...DEFAULTS }
+  /**
+   * Secrets this Windows account cannot decrypt (saved by another account, e.g. after a profile move). In memory
+   * they read as '' so every caller sees "no key"; the old ciphertext handed to the venue as a PEM failed every
+   * request and left the live portfolio on "Loading..." forever (2026-11-16). On disk the ciphertext is kept
+   * until the field is set again, so a transient decrypt failure still never destroys the credential.
+   */
+  private undecryptable = new Map<SecretField, string>()
 
   constructor() {
     this.path = join(app.getPath('userData'), 'config.json')
@@ -61,23 +78,23 @@ export class ConfigStore {
           riskLimits: { ...DEFAULTS.riskLimits, ...(parsed.riskLimits ?? {}) }
         }
         this.normalize()
-        if (this.data.kalshiApiKeyId) {
-          this.data.kalshiApiKeyId = this.decrypt(this.data.kalshiApiKeyId)
+        this.undecryptable.clear()
+        for (const field of SECRET_FIELDS) {
+          const stored = this.data[field]
+          if (!stored) continue
+          const plain = this.decrypt(stored)
+          if (plain.startsWith('enc:')) {
+            this.undecryptable.set(field, stored)
+            this.data[field] = ''
+          } else {
+            this.data[field] = plain
+          }
         }
-        if (this.data.kalshiPrivateKey) {
-          this.data.kalshiPrivateKey = this.decrypt(this.data.kalshiPrivateKey)
-        }
-        if (this.data.kalshiDemoApiKeyId) {
-          this.data.kalshiDemoApiKeyId = this.decrypt(this.data.kalshiDemoApiKeyId)
-        }
-        if (this.data.kalshiDemoPrivateKey) {
-          this.data.kalshiDemoPrivateKey = this.decrypt(this.data.kalshiDemoPrivateKey)
-        }
-        if (this.data.polymarketUsApiKeyId) {
-          this.data.polymarketUsApiKeyId = this.decrypt(this.data.polymarketUsApiKeyId)
-        }
-        if (this.data.polymarketUsPrivateKey) {
-          this.data.polymarketUsPrivateKey = this.decrypt(this.data.polymarketUsPrivateKey)
+        if (this.undecryptable.size) {
+          console.warn(
+            `[config] cannot decrypt ${[...this.undecryptable.keys()].join(', ')} on this Windows account ` +
+              '(saved by another account?). Treating as not set; re-enter them in Settings.'
+          )
         }
       }
     } catch (err) {
@@ -88,23 +105,10 @@ export class ConfigStore {
   save(): void {
     try {
       const toWrite: AppConfig = { ...this.data }
-      if (toWrite.kalshiApiKeyId) {
-        toWrite.kalshiApiKeyId = this.encrypt(toWrite.kalshiApiKeyId)
-      }
-      if (toWrite.kalshiPrivateKey) {
-        toWrite.kalshiPrivateKey = this.encrypt(toWrite.kalshiPrivateKey)
-      }
-      if (toWrite.kalshiDemoApiKeyId) {
-        toWrite.kalshiDemoApiKeyId = this.encrypt(toWrite.kalshiDemoApiKeyId)
-      }
-      if (toWrite.kalshiDemoPrivateKey) {
-        toWrite.kalshiDemoPrivateKey = this.encrypt(toWrite.kalshiDemoPrivateKey)
-      }
-      if (toWrite.polymarketUsApiKeyId) {
-        toWrite.polymarketUsApiKeyId = this.encrypt(toWrite.polymarketUsApiKeyId)
-      }
-      if (toWrite.polymarketUsPrivateKey) {
-        toWrite.polymarketUsPrivateKey = this.encrypt(toWrite.polymarketUsPrivateKey)
+      for (const field of SECRET_FIELDS) {
+        const kept = this.undecryptable.get(field)
+        if (toWrite[field]) toWrite[field] = this.encrypt(toWrite[field])
+        else if (kept) toWrite[field] = kept
       }
       writeFileAtomic(this.path, JSON.stringify(toWrite, null, 2))
     } catch (err) {
@@ -117,6 +121,9 @@ export class ConfigStore {
   }
 
   update(patch: Partial<AppConfig>): AppConfig {
+    // A new non-empty value replaces the undecryptable ciphertext for good. An empty one (e.g. saving the key ID
+    // alone) leaves it on disk: clearing a field must not silently destroy the only copy of a key.
+    for (const field of SECRET_FIELDS) if (patch[field]) this.undecryptable.delete(field)
     this.data = { ...this.data, ...patch }
     this.normalize()
     this.save()
