@@ -153,3 +153,12 @@ nothing at the 11-13 read. Each was found by slicing the 10-14..11-10 fills, so 
 
 It also prints the cohort by coin and weekends alone. A slice whose band sits wholly on one side at a later read
 is a reason to register it as a rule with its own cohort, not to switch it on.
+
+## Amendment 2026-11-22 07:24Z — weekends back to x2
+
+Operator: yes to dropping weekend lead-lag to x2. Nov 21-22 (weekend, x4): 27 fills, 30% won, -$19.31; every first gap
+on BTC/ETH/SOL/HYPE graded at one contract lost too (33 gaps, 21% won, -20.1c/contract, against +5.0c and +10.1c on the
+previous weekends) while BTC traded a 9.7% range (55.4k-60.7k) on Nov 21. Settings, build (2026-11-16) and execution
+(signal to venue ack about 120 ms, fills at the signal price) matched the winning weekends, so no execution change was
+found. `ladderMaxNotch['kalshi-leadlag']` is 2, `leadLagMaxContractsPerOrder` 2, weekdays unchanged at 1 contract, and
+the ladder stage was re-based at x2. The reads are unchanged.
