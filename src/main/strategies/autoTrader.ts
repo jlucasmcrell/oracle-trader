@@ -4789,7 +4789,13 @@ export class AutoTrader {
       leadLagOneEntryPerMarket: this.config.leadLagOneEntryPerMarket ?? true,
       leadLagNoTradeCoins: this.config.leadLagNoTradeCoins ?? [],
       leadLagWeekendNoTradeCoins: this.config.leadLagWeekendNoTradeCoins,
-      leadLagWeekdayContracts: this.config.leadLagWeekdayContracts ? Math.max(1, Math.min(AutoTrader.LEADLAG_HARD_MAX_CONTRACTS, this.config.leadLagWeekdayContracts)) : undefined
+      leadLagWeekdayContracts: this.config.leadLagWeekdayContracts ? Math.max(1, Math.min(AutoTrader.LEADLAG_HARD_MAX_CONTRACTS, this.config.leadLagWeekdayContracts)) : undefined,
+      // Streak sizer (2026-11-22). Off unless set; the caps are bounded to the ladder's own maximum (x4).
+      leadLagStreakSizing: this.config.leadLagStreakSizing ?? false,
+      leadLagStreakRun: Math.max(1, Math.min(10, Math.floor(this.config.leadLagStreakRun ?? 3))),
+      leadLagStreakWeekendMax: Math.max(1, Math.min(4, Math.floor(this.config.leadLagStreakWeekendMax ?? 4))),
+      leadLagStreakWeekdayMax: Math.max(1, Math.min(4, Math.floor(this.config.leadLagStreakWeekdayMax ?? 2))),
+      alertWebhookUrl: this.config.alertWebhookUrl || undefined
     }
   }
 

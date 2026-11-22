@@ -162,3 +162,14 @@ previous weekends) while BTC traded a 9.7% range (55.4k-60.7k) on Nov 21. Settin
 (signal to venue ack about 120 ms, fills at the signal price) matched the winning weekends, so no execution change was
 found. `ladderMaxNotch['kalshi-leadlag']` is 2, `leadLagMaxContractsPerOrder` 2, weekdays unchanged at 1 contract, and
 the ladder stage was re-based at x2. The reads are unchanged.
+
+## Amendment 2026-11-22 07:34Z — streak sizer live
+
+Operator: "If we are winning during a few hours or half a day one day - we need to double the trade size that day,
+as soon as we know. Same for losing." `leadLagStreakSizing` is on (src/main/strategies/leadLagStreak.ts): every first
+gap per ticker and side that clears fees on BTC/ETH/SOL/HYPE/ZEC is graded at one contract at the scanned price, a
+settled 15-minute window nets into one win or loss, and three windows in a row double or halve the level (1/2/4).
+Weekends trade at the level, weekdays at half (at least 1, at most 2). It started at x2, so the first sizes equal the
+x2 set at 07:24Z. The ladder's stops, the loss limits and the window caps still apply; the ladder's per-order size is
+now only the fallback for unproven coins. Backtest over 1,148 first gaps from 2026-10-14 (chosen after seeing the
+data): flat x2 +$9.44, this rule +$52.04 at the same average size, ahead in both halves and at N=2 and N=4.

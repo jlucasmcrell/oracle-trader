@@ -25,6 +25,11 @@ import { kalshiTakerFeeCentsFor } from '../util/kalshiFee'
 import { PolyClobWs } from '../services/polyClobWs'
 import { LEADLAG_WEDGE_MS, scanSlotVerdict } from './scanSlot'
 import { etDay } from '../util/etDay'
+import { sendAlert } from '../util/alert'
+import {
+  dropStale, dueWindows, gradeWindow, loadStreakState, observeGap, streakContracts, STREAK_DEFAULT_RUN,
+  type StreakConfig, type StreakState
+} from './leadLagStreak'
 
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2'
 const POLY_GAMMA_API = 'https://gamma-api.polymarket.com'
@@ -48,7 +53,9 @@ export function kalshiTakerFeeCents(p: number): number {
   return kalshiTakerFeeCentsFor(p, 1)
 }
 
-export interface LeadLagConfig {
+export interface LeadLagConfig extends StreakConfig {
+  /** Discord/ntfy webhook for size changes made by the streak sizer. */
+  alertWebhookUrl?: string
   leadLagEnabled: boolean
   leadLagLiveEnabled: boolean
   leadLagMinDislocationCents: number // default 4.0c
@@ -182,6 +189,8 @@ export interface LeadLagStatus {
   note: string
   /** Dislocations found on the last cycle (before the once-a-minute recording throttle). */
   foundLast: number
+  /** Streak sizer: level and current runs, when it is on. */
+  streak?: { level: number; winRun: number; lossRun: number; weekendContracts: number; weekdayContracts: number; pendingWindows: number }
 }
 
 interface LeadLagState {
@@ -202,6 +211,8 @@ interface LeadLagState {
     directions: { YES: string[]; NO: string[] }
     blocked: boolean
   }
+  /** Streak sizer (leadLagStreak.ts): level, runs and the gaps of windows not yet graded. */
+  streak?: StreakState
 }
 
 interface PolyQuote {
@@ -500,6 +511,8 @@ export class LeadLagEngine {
   private lastKalshiFailLogAt = 0
   private lastErrorLogAt = 0
   private foundLast = 0
+  /** Streak sizer state; persisted in `state.streak` by persist(). */
+  private streak: StreakState = loadStreakState(undefined)
 
   constructor(
     private readonly path: string,
@@ -510,6 +523,7 @@ export class LeadLagEngine {
     try {
       if (existsSync(path)) {
         this.state = { ...this.state, ...(JSON.parse(readFileSync(path, 'utf8')) as Partial<LeadLagState>) }
+        this.streak = loadStreakState(this.state.streak)
         const w = this.state.window
         // Legacy files contain no recoverable reservations. Observe until the
         // next window on upgrade rather than grant an already-spent budget.
@@ -544,12 +558,53 @@ export class LeadLagEngine {
       lastDislocation: this.lastDislocation,
       lastScanAt: this.state.lastScanAt,
       note: this.note,
-      foundLast: this.foundLast
+      foundLast: this.foundLast,
+      streak: cfg.leadLagStreakSizing ? {
+        level: this.streak.level, winRun: this.streak.winRun, lossRun: this.streak.lossRun,
+        weekendContracts: streakContracts(this.streak.level, true, cfg), weekdayContracts: streakContracts(this.streak.level, false, cfg),
+        pendingWindows: new Set(this.streak.pending.map((g) => g.close)).size
+      } : undefined
+    }
+  }
+
+  /**
+   * Grade every settled window the streak sizer is holding, oldest first, from Kalshi's public market endpoint. A
+   * window whose results are not all in yet stops the pass (runs must be counted in order); one that never settles is
+   * dropped after STREAK_GIVE_UP_MS so it cannot stall the rest.
+   */
+  private async gradeStreak(cfg: LeadLagConfig, now: number): Promise<void> {
+    const at = (ms: number): string => new Date(ms).toISOString().slice(11, 16) + 'Z'
+    for (const c of dropStale(this.streak, now)) this.log(`[leadlag] streak: window closing ${at(c)} dropped, Kalshi results never arrived`)
+    for (const close of dueWindows(this.streak, now)) {
+      const tickers = [...new Set(this.streak.pending.filter((g) => g.close === close).map((g) => g.ticker))]
+      const results = new Map<string, 'yes' | 'no'>()
+      for (const t of tickers) {
+        try {
+          const r = await fetch(`${KALSHI_API}/markets/${encodeURIComponent(t)}`, { signal: AbortSignal.timeout(6000) })
+          if (!r.ok) continue
+          const m = ((await r.json()) as { market?: { result?: string } }).market
+          if (m?.result === 'yes' || m?.result === 'no') results.set(t, m.result)
+        } catch {
+          // not settled or unreachable: retried next scan
+        }
+      }
+      const g = gradeWindow(this.streak, close, results, cfg.leadLagStreakRun ?? STREAK_DEFAULT_RUN)
+      if (!g.graded || !g.window) break
+      const wk = streakContracts(this.streak.level, true, cfg)
+      const wd = streakContracts(this.streak.level, false, cfg)
+      this.log(`[leadlag] streak: window closing ${at(close)} ${g.window.win ? 'won' : 'lost'} ${g.window.netCents >= 0 ? '+' : ''}${g.window.netCents}c over ${g.window.gaps} gap(s) | run W${this.streak.winRun}/L${this.streak.lossRun} | level x${this.streak.level} (weekend ${wk}, weekday ${wd})`)
+      if (g.change) {
+        this.streak.changedAt = now
+        const msg = `${g.change.why}: size level x${g.change.from} -> x${g.change.to}. Weekends now ${wk} contract(s) per order, weekdays ${wd}.`
+        this.log(`[leadlag] streak: ${msg}`)
+        if (cfg.alertWebhookUrl) void sendAlert(cfg.alertWebhookUrl, `Oracle Trader — lead-lag size x${g.change.from} -> x${g.change.to}`, msg)
+      }
     }
   }
 
   private persist(): boolean {
     try {
+      this.state.streak = this.streak
       this.state.window = {
         epoch: this.windowEpoch, fills: [...this.windowFills], spend: this.windowSpend,
         directions: { YES: [...this.windowDir.YES], NO: [...this.windowDir.NO] }, blocked: this.windowBlocked
@@ -1031,6 +1086,9 @@ export class LeadLagEngine {
             polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
+          if (cfg.leadLagStreakSizing && d.clearsFees && cfg.leadLagProvenCoins.includes(pair.coin)) {
+            observeGap(this.streak, { ticker, side: 'yes', cost: kYesAsk, coin: pair.coin, close: windowEndMs })
+          }
           if (this.worthNoting(d, now)) {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi ask ${(kYesAsk * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
@@ -1067,6 +1125,9 @@ export class LeadLagEngine {
             polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
+          if (cfg.leadLagStreakSizing && d.clearsFees && cfg.leadLagProvenCoins.includes(pair.coin)) {
+            observeGap(this.streak, { ticker, side: 'no', cost: noCost, coin: pair.coin, close: windowEndMs })
+          }
           if (this.worthNoting(d, now)) {
             this.recordDislocation(d)
             this.log(`[leadlag] DISLOCATION ${pair.coin} 15m: CLOB ${(poly.mid * 100).toFixed(1)}c vs Kalshi bid ${(kYesBid * 100).toFixed(1)}c (+${gapCents}c, net ${netCents}c after fee)`)
@@ -1081,6 +1142,16 @@ export class LeadLagEngine {
           }
         }
       }))
+
+      // Streak sizer: grade the windows that have settled since the last pass. Contained: a grading failure must
+      // never cost the scan, and a superseded pass must not move the level on a stale view.
+      if (cfg.leadLagStreakSizing && this.runGen === gen) {
+        try {
+          await this.gradeStreak(cfg, now)
+        } catch (e) {
+          this.log('[leadlag] streak grading failed (contained): ' + (e instanceof Error ? e.message : String(e)))
+        }
+      }
 
       const day = new Date(now).toISOString().slice(0, 10)
       const tally = ((this.state.legFailByDay ??= {})[day] ??= { cycles: 0, failed: 0 })
@@ -1148,7 +1219,11 @@ export class LeadLagEngine {
       // Micro size for a coin the ladder has not judged (round 93): round 91 gave five untested coins the
       // size BTC/ETH earned, which is the opposite of the ladder's own rule.
       // Weekdays trade at a reduced size when the operator sets one (2026-11-10).
-      const count = !weekend && cfg.leadLagWeekdayContracts ? Math.min(sweepSizeFor(d.underlying, cfg), cfg.leadLagWeekdayContracts) : sweepSizeFor(d.underlying, cfg)
+      // Streak sizing (operator, 2026-11-22): when on, a proven coin's size comes from the streak level, which moves
+      // within hours; the ladder's per-order size is then only the fallback for unproven coins. Its stops still apply.
+      const count = cfg.leadLagStreakSizing && cfg.leadLagProvenCoins.includes(d.underlying)
+        ? streakContracts(this.streak.level, weekend, cfg)
+        : !weekend && cfg.leadLagWeekdayContracts ? Math.min(sweepSizeFor(d.underlying, cfg), cfg.leadLagWeekdayContracts) : sweepSizeFor(d.underlying, cfg)
       // Kalshi quotes everything on the YES leg: buying NO crosses the YES bid.
       const limit = side === 'YES' ? Math.min(0.99, +(yesRef + 0.01).toFixed(2)) : Math.max(0.01, +(yesRef - 0.01).toFixed(2))
       const legCost = side === 'YES' ? limit : 1 - limit

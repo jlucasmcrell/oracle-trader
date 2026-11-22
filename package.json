@@ -40,7 +40,8 @@
     "gate:btc": "node scripts/btc-gate.mjs",
     "quoter:gate": "node scripts/quoter-gate.mjs",
     "quoter:shadow": "node scripts/quoter-shadow-gate.mjs",
-    "sgo:report": "node scripts/sgo-anchor-report.mjs"
+    "sgo:report": "node scripts/sgo-anchor-report.mjs",
+    "test:leadlag-streak": "node scripts/tests/run.cjs scripts/tests/leadlag-streak.test.ts"
   },
   "dependencies": {
     "@stoqey/ib": "1.6.9",

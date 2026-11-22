@@ -292,6 +292,17 @@ export interface AutoTraderConfig {
   leadLagWeekendNoTradeCoins?: string[]
   /** Lead-lag contracts per sweep on New York weekdays (reduced-size weekday testing). */
   leadLagWeekdayContracts?: number
+  /**
+   * Lead-lag streak sizer (operator, 2026-11-22; src/main/strategies/leadLagStreak.ts): three settled 15-minute
+   * windows in a row the same way double or halve the size level (1/2/4). Weekends trade at the level, weekdays at half.
+   */
+  leadLagStreakSizing?: boolean
+  /** Windows in a row per level step (default 3). */
+  leadLagStreakRun?: number
+  /** Weekend contracts at the top level (default 4). */
+  leadLagStreakWeekendMax?: number
+  /** Weekday contracts at the top level (default 2). */
+  leadLagStreakWeekdayMax?: number
   /** Ladder size ceiling per arm, below MAX_NOTCH (lead-lag held at x2 by the same registration until its read). */
   ladderMaxNotch?: Record<string, number>
   // ---- settlement-source convergence (experimental) ----
