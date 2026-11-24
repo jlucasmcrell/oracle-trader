@@ -183,8 +183,7 @@ function startTask(name) {
   return ps(`Start-ScheduledTask -TaskName '${name}'; 'started'`).trim()
 }
 // The app's task was OracleTrader-App on ASTRAL; on BEAST it is registered as "Oracle - Trader app".
-// Reviving through a name that does not exist stops electron and then starts nothing, so the revive
-// uses whichever of the two is registered on this machine.
+// Only the task-status report uses this name now; the app-down revive launches electron directly (see below).
 function taskExists(name) {
   try {
     execFileSync('schtasks', ['/Query', '/TN', name], { timeout: 30_000, stdio: 'ignore' })
@@ -692,7 +691,15 @@ if (!DRY) {
       state.revived['app'] = now
       // Only this checkout's electron: BEAST runs other Electron apps.
       const exe = path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe')
-      const r = ps(`Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe}' } | Stop-Process -Force; Start-Sleep -Seconds 3; Start-ScheduledTask -TaskName '${APP_TASK}'; 'restarted'`).trim()
+      // Launched directly, not through the app's scheduled task, which only runs `electron.exe .` in the repo. After
+      // the 2026-11-16 profile move that task still belongs to the old account, so Start-ScheduledTask was refused
+      // ("Access is denied") on every tick and the app stayed down for 46 hours (Nov 22-24) with this finding open.
+      // Win32_Process.Create, not Start-Process: the new process is parented to the WMI host, outside the caller's
+      // process tree and job object, so it outlives whatever started it. (On 2026-11-24 an app started from a Claude
+      // Code shell died at 13:42Z when the Claude desktop app updated and took its process tree down with it.) It
+      // still opens in the calling user's session, and a non-zero ReturnValue (9 = path not found) is reported as a
+      // failure instead of "restarted".
+      const r = ps(`$exe = '${exe}'; Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Stop-Process -Force; Start-Sleep -Seconds 3; $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '"' + $exe + '" .'; CurrentDirectory = '${REPO}' }; if ($r.ReturnValue -ne 0) { "ERR Win32_Process.Create returned $($r.ReturnValue)" } else { "restarted (direct launch, pid $($r.ProcessId))" }`).trim()
       f.evidence += ` | ${r}`
     }
   }
