@@ -12,20 +12,30 @@ $ErrorActionPreference = 'Stop'
 $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
 $gui = @('electron.exe')
 
+# A copy of the output goes to data\hide-task-windows.log, readable without admin rights.
+$logFile = Join-Path (Split-Path -Parent $PSScriptRoot) 'data\hide-task-windows.log'
+function Say($msg) { Write-Host $msg; Add-Content -Path $logFile -Value $msg }
+Say "--- $(Get-Date -Format o)  elevated: $(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))"
+
 $tasks = @(Get-ScheduledTask | Where-Object { $_.TaskName -like 'Oracle*' })
-if (-not $tasks.Count) { throw 'No Oracle* scheduled tasks are visible. Run this from an elevated PowerShell.' }
+if (-not $tasks.Count) { Say 'No Oracle* scheduled tasks are visible. Run this from an elevated PowerShell.'; exit 1 }
+$failed = 0
 foreach ($t in $tasks) {
+ try {
   $changed = $false
   $actions = foreach ($a in $t.Actions) {
     $exe = $a.Execute.Trim('"')
     if ((Split-Path $exe -Leaf) -in $gui -or (Split-Path $exe -Leaf) -ieq 'conhost.exe') { $a; continue }
     $changed = $true
-    New-ScheduledTaskAction -Execute $conhost -Argument ("--headless `"$exe`" " + $a.Arguments).TrimEnd() -WorkingDirectory $a.WorkingDirectory
+    # -WorkingDirectory only when the task has one: an empty value is rejected (the IB Gateway task has none).
+    $spec = @{ Execute = $conhost; Argument = ("--headless `"$exe`" " + $a.Arguments).TrimEnd() }
+    if ($a.WorkingDirectory) { $spec.WorkingDirectory = $a.WorkingDirectory }
+    New-ScheduledTaskAction @spec
   }
-  if (-not $changed) { Write-Host "  unchanged  $($t.TaskName)"; continue }
+  if (-not $changed) { Say "  unchanged  $($t.TaskName)"; continue }
   $wasRunning = $t.State -eq 'Running'
   Set-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -Action $actions | Out-Null
-  Write-Host "  hidden     $($t.TaskName)"
+  Say "  hidden     $($t.TaskName)"
   if ($wasRunning -and $RestartRunning) {
     Stop-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath
     # A recorder started some other way is not stopped by the task, and its recorder lock would make the new
@@ -37,6 +47,11 @@ foreach ($t in $tasks) {
     }
     Start-Sleep -Seconds 2
     Start-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath
-    Write-Host "             restarted without a window"
+    Say "             restarted without a window"
   }
+ } catch {
+  $failed++
+  Say "  FAILED     $($t.TaskName): $($_.Exception.Message)"
+ }
 }
+Say "done, $failed failed"
