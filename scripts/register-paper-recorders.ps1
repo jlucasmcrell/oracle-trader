@@ -4,7 +4,8 @@
 $repo = Split-Path -Parent $PSScriptRoot
 $node = (Get-Command node.exe).Source
 foreach ($p in @(@('OracleTrader-LateGame', 'scripts\lategame-shadow.mjs'), @('OracleTrader-NewMarkets', 'scripts\newmarket-shadow.mjs'))) {
-  $action = New-ScheduledTaskAction -Execute $node -Argument ('"' + $p[1] + '"') -WorkingDirectory $repo
+  # Through conhost --headless so the recorder runs with no terminal window (scripts/hide-task-windows.ps1).
+  $action = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\conhost.exe') -Argument ('--headless "' + $node + '" "' + $p[1] + '"') -WorkingDirectory $repo
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
   $trigger.Delay = 'PT1M'
   $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden

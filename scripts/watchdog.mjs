@@ -42,7 +42,7 @@ function running() {
 const startScript = (key) => {
   const p = PROCS[key]
   const outDir = join(REPO, p.outDir); mkdirSync(outDir, { recursive: true })
-  const child = spawn('node', [p.script], { cwd: REPO, detached: true, stdio: ['ignore', 'ignore', 'ignore'] })
+  const child = spawn('node', [p.script], { cwd: REPO, detached: true, stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true })
   child.unref()
   return child.pid
 }
