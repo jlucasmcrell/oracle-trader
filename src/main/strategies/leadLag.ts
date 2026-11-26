@@ -133,6 +133,26 @@ export function entryFilter(
   return { ok: true }
 }
 
+/**
+ * Does this gap count toward the streak sizer? Only a gap the sweep would actually take on its own terms: it clears
+ * the fee, its coin is proven AND traded today, it is under the gap cap, and its Polymarket quote is fresh. Until
+ * 2026-11-26 every fee-clearing gap on a proven coin counted, so weekday ETH (recorded, not traded) and capped gaps
+ * graded windows no order was ever placed in: on Nov 25-26 most graded windows held no trade, and two such losses
+ * in a row stood one window from halving the size. The window and direction caps are left out on purpose: they
+ * depend on what else was filled, and the gap itself was still one the strategy would take.
+ */
+export function streakCountsGap(
+  d: Pick<LeadLagDislocation, 'kalshiTicker' | 'dislocationCents' | 'clearsFees' | 'polyAt'> & { underlying: string },
+  cfg: Pick<LeadLagConfig, 'leadLagStreakSizing' | 'leadLagProvenCoins' | 'leadLagMaxDislocationCents' | 'leadLagNoTradeCoins' | 'leadLagWeekendNoTradeCoins'>,
+  weekend: boolean,
+  now: number
+): boolean {
+  if (!cfg.leadLagStreakSizing || !d.clearsFees || !cfg.leadLagProvenCoins.includes(d.underlying)) return false
+  if (d.polyAt !== undefined && now - d.polyAt > LEADLAG_MAX_QUOTE_AGE_MS) return false
+  // An empty fill map: "one entry per market" is about orders already placed, not about the gap.
+  return entryFilter(d, new Map(), cfg, weekend).ok
+}
+
 /** The weekday switch: may lead-lag trade live at `now`? */
 export function leadLagDayOpen(cfg: Pick<LeadLagConfig, 'leadLagWeekdays'>, now: number): boolean {
   return cfg.leadLagWeekdays !== false || etDay(now).weekend
@@ -1086,7 +1106,7 @@ export class LeadLagEngine {
             polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
-          if (cfg.leadLagStreakSizing && d.clearsFees && cfg.leadLagProvenCoins.includes(pair.coin)) {
+          if (streakCountsGap(d, cfg, etDay(now).weekend, Date.now())) {
             observeGap(this.streak, { ticker, side: 'yes', cost: kYesAsk, coin: pair.coin, close: windowEndMs })
           }
           if (this.worthNoting(d, now)) {
@@ -1125,7 +1145,7 @@ export class LeadLagEngine {
             polyAt: poly.at
           }
           if (d.clearsFees) this.appendCadenceRow(d, sample60, cfg.pollIntervalMs)
-          if (cfg.leadLagStreakSizing && d.clearsFees && cfg.leadLagProvenCoins.includes(pair.coin)) {
+          if (streakCountsGap(d, cfg, etDay(now).weekend, Date.now())) {
             observeGap(this.streak, { ticker, side: 'no', cost: noCost, coin: pair.coin, close: windowEndMs })
           }
           if (this.worthNoting(d, now)) {

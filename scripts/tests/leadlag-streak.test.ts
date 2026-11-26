@@ -8,6 +8,7 @@ import {
   dropStale, dueWindows, gradeWindow, loadStreakState, newStreakState, observeGap, streakContracts,
   STREAK_GIVE_UP_MS, STREAK_SETTLE_DELAY_MS, windowNetCents
 } from '../../src/main/strategies/leadLagStreak'
+import { LEADLAG_MAX_QUOTE_AGE_MS, streakCountsGap } from '../../src/main/strategies/leadLag'
 
 let passed = 0
 const test = (name: string, fn: () => void): void => { fn(); passed++; console.log(`ok - ${name}`) }
@@ -125,6 +126,25 @@ test('a corrupt or missing persisted state starts fresh at x2', () => {
   assert.equal(s.level, 4)
   assert.equal(s.lossRun, 0)
   assert.equal(s.pending.length, 1)
+})
+
+test('only gaps the sweep would take are graded', () => {
+  const cfg = {
+    leadLagStreakSizing: true, leadLagProvenCoins: ['BTC', 'ETH', 'SOL'], leadLagMaxDislocationCents: 12,
+    leadLagNoTradeCoins: ['ETH', 'XRP'], leadLagWeekendNoTradeCoins: ['XRP']
+  }
+  const now = T0
+  const g = (over: Partial<{ underlying: string; dislocationCents: number; clearsFees: boolean; polyAt: number }> = {}) =>
+    ({ kalshiTicker: 'KXBTC15M-W0', underlying: 'BTC', dislocationCents: 7, clearsFees: true, polyAt: now - 100, ...over })
+  assert.equal(streakCountsGap(g(), cfg, false, now), true, 'a plain BTC gap counts')
+  assert.equal(streakCountsGap(g({ dislocationCents: 16.5 }), cfg, false, now), false, 'at or above the 12c cap: not traded, not graded')
+  assert.equal(streakCountsGap(g({ dislocationCents: 11.9 }), cfg, false, now), true)
+  assert.equal(streakCountsGap(g({ underlying: 'ETH' }), cfg, false, now), false, 'weekday ETH is recorded, not traded')
+  assert.equal(streakCountsGap(g({ underlying: 'ETH' }), cfg, true, now), true, 'weekend ETH is traded')
+  assert.equal(streakCountsGap(g({ underlying: 'XRP' }), cfg, true, now), false, 'unproven coin')
+  assert.equal(streakCountsGap(g({ clearsFees: false }), cfg, false, now), false)
+  assert.equal(streakCountsGap(g({ polyAt: now - LEADLAG_MAX_QUOTE_AGE_MS - 1 }), cfg, false, now), false, 'stale quote is skipped by the sweep')
+  assert.equal(streakCountsGap(g(), { ...cfg, leadLagStreakSizing: false }, false, now), false, 'sizer off')
 })
 
 console.log(`\n${passed} passed`)
